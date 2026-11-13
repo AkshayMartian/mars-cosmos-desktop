@@ -10,6 +10,7 @@ import { Login } from './screens/Login'
 import { Placeholder } from './screens/Placeholder'
 import { Returns } from './screens/Returns'
 import { Products } from './screens/Products'
+import { Stickers } from './screens/Stickers'
 import { Stock } from './screens/Stock'
 import { StockIn } from './screens/StockIn'
 import { StockOut } from './screens/StockOut'
@@ -28,7 +29,8 @@ const SCREENS: Partial<Record<MenuId, (p: ScreenProps) => ReactElement>> = {
   alterations: (p) => <Alterations user={p.user} />,
   returns: () => <Returns />,
   products: (p) => <Products user={p.user} intent={p.intent} />,
-  stockin: (p) => <StockIn canAddProduct={p.user.role === 'owner' || p.user.role === 'manager'} onNewProduct={() => p.go('products', 'new')} />,
+  stickers: (p) => <Stickers intent={p.intent} />,
+  stockin: (p) => <StockIn canAddProduct={p.user.role === 'owner' || p.user.role === 'manager'} onNewProduct={() => p.go('products', 'new')} onStickers={(id) => p.go('stickers', 'purchase:' + id)} />,
   customers: (p) => <Customers user={p.user} />,
   dayend: () => <DayEnd />,
   stockout: (p) => <StockOut user={p.user} />,

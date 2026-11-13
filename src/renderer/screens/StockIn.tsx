@@ -8,9 +8,8 @@ const today = (): string => {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
-const STICKERS_SOON = 'Sticker printing arrives with the printing milestone. Your stock is already saved.'
 
-export function StockIn({ onNewProduct, canAddProduct }: { onNewProduct: () => void; canAddProduct: boolean }) {
+export function StockIn({ onNewProduct, canAddProduct, onStickers }: { onNewProduct: () => void; canAddProduct: boolean; onStickers: (purchaseId: string) => void }) {
   const [suppliers, setSuppliers] = useState<SupplierDto[]>([])
   const [supplierId, setSupplierId] = useState('')
   const [billNo, setBillNo] = useState('')
@@ -136,7 +135,7 @@ export function StockIn({ onNewProduct, canAddProduct }: { onNewProduct: () => v
             {recent.length ? recent.map((p) => (
               <div key={p.id} className="row" style={{ justifyContent: 'space-between' }}>
                 <span>{p.supplier ?? 'No supplier'} · {p.billNo ?? '—'}<br /><span className="sub">{fmtDay(p.at)} · {p.qty} pcs</span></span>
-                <button className="btn sm" onClick={() => setMsg({ ok: true, text: STICKERS_SOON })}>Stickers</button>
+                <button className="btn sm" onClick={() => onStickers(p.id)}>Stickers</button>
               </div>
             )) : <div className="hint">None yet.</div>}
           </div>

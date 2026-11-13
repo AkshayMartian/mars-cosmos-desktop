@@ -12,7 +12,7 @@ Start here to review any module. Each module has one note (copy of [_module-temp
 | [Bills](bills/bills.md) | **done** | Bill list, reprint, WhatsApp, cancel bill |
 | [Alterations](alterations/alterations.md) | **done** | Tailor jobs, tags, slips, charges, tailors |
 | [Products](products/products.md) | **done** | Catalogue, size × colour, barcodes, photos, import |
-| [Print stickers](stickers/stickers.md) | pending | Label printing |
+| [Print stickers](stickers/stickers.md) | **done** (labels) | Barcode labels; receipt printing pending |
 | [Stock in](stock-in/stock-in.md) | **done** | Purchases and suppliers |
 | [Stock out](stock-out/stock-out.md) | **done** | Supplier return, damage, dispatch |
 | [Stock](stock/stock.md) | **done** | Levels, history, adjust, stock count |

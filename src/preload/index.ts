@@ -3,6 +3,7 @@ import type { AppInfo, LoginResult, StaffPublic } from '@shared/types'
 import type { CloseDayResult, DayEndSummary } from '@shared/dayend'
 import type { CelebrationDto, CustomerListRow, CustomerProfile, CustomerSaveInput } from '@shared/customers'
 import type { AltConfig, AltContext, AltJobDto, AltList, DeliverInput, DeliverResult, GarmentChoice, NewAlterationInput, TailorDto, TailorInput } from '@shared/alterations'
+import type { StickerContext, StickerItem, StickerPrintResult } from '@shared/stickers'
 import type { BillDetail, BillListRow, BillPeriod, CancelInput } from '@shared/bills'
 import type { BillForReturn, CreditNoteDto, ReturnBillRow, ReturnInput, ReturnResult } from '@shared/returns'
 import type { AdjustInput, ApprovalInput, ApproverDto, CountDto, MoveFullRow, StockOutInput } from '@shared/stockops'
@@ -69,6 +70,14 @@ const api = {
     deliver: (input: DeliverInput) => call<DeliverResult>('alt:deliver', input),
     saveTailor: (input: TailorInput) => call<TailorDto[]>('alt:saveTailor', input),
     saveConfig: (cfg: AltConfig) => call<AltConfig>('alt:saveConfig', cfg)
+  },
+  stickers: {
+    context: () => call<StickerContext>('stickers:context'),
+    items: (ids: string[]) => call<StickerItem[]>('stickers:items', ids),
+    lastPurchase: (purchaseId?: string) => call<StickerItem[]>('stickers:lastPurchase', purchaseId),
+    printers: () => call<string[]>('stickers:printers'),
+    savePrefs: (p: { size: string; printer: string }) => call<StickerContext>('stickers:savePrefs', p),
+    print: (lines: { variantId: string; qty: number }[]) => call<StickerPrintResult>('stickers:print', lines)
   },
   bills: {
     list: (period: BillPeriod, q = '') => call<BillListRow[]>('bills:list', period, q),

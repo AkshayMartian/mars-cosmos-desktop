@@ -5,7 +5,7 @@
 - **What it does:** records stock that arrives from a supplier. Pick the supplier, type the supplier's bill number and date, scan or search the items, set quantity and cost for each, and save. Stock goes up, each item's **cost** is updated, and the purchase is kept. Suppliers can be added on the spot.
 - **Screen:** `StockIn` (`src/renderer/screens/StockIn.tsx`) with an *Add supplier* dialog.
 - **Who can use it:** Owner, Manager, Store staff. (Cashier: no.) **+ New product** is shown to Owner/Manager only.
-- **Status:** **done** (2026-11-12). Not included: printing stickers for the received pieces (the **Stickers** buttons show a message until the printing milestone).
+- **Status:** **done** (2026-11-12). Not included: printing stickers for the received pieces (the **Stickers** button next to each recent purchase opens Print stickers with it loaded).
 - **Code:** screen `src/renderer/screens/StockIn.tsx` · service `src/main/services/stock.ts` (`stockIn`, `createSupplier`, `listSuppliers`, `recentPurchases`, `searchVariants`, `addMove`) · shapes `src/shared/catalogue.ts` · tests `src/main/services/services.test.ts` (stock in group).
 
 ## 2. Screen controls

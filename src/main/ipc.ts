@@ -11,6 +11,8 @@ import { commitImport } from './services/importer'
 import * as alterations from './services/alterations'
 import { appInfo, mySalesToday } from './services/settings'
 import * as returns from './services/returns'
+import * as stickers from './services/stickers'
+import { listPrinters, printStickers } from './print'
 import * as stock from './services/stock'
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string }
@@ -75,6 +77,12 @@ export function registerIpc(): void {
   h('alt:deliver', alterations.deliverAlteration)
   h('alt:saveTailor', alterations.saveTailor)
   h('alt:saveConfig', alterations.saveAlterationConfig)
+  h('stickers:context', stickers.stickerContext)
+  h('stickers:items', stickers.stickerItems)
+  h('stickers:lastPurchase', stickers.lastPurchaseItems)
+  h('stickers:printers', listPrinters)
+  h('stickers:savePrefs', stickers.saveStickerPrefs)
+  h('stickers:print', printStickers)
   h('bills:list', bills.listBills)
   h('bills:detail', bills.billDetail)
   h('bills:cancel', bills.cancelBill)

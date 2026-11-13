@@ -53,7 +53,7 @@ export const MENU: { id: MenuId; label: string; key?: string; roles: Role[]; gro
  * Menu items switched on right now. The others stay defined in MENU above but are hidden until their
  * milestone is ready: add an id here to show it (and register its screen in renderer/App.tsx).
  */
-export const ENABLED: MenuId[] = ['billing', 'bills', 'returns', 'alterations', 'products', 'stockin', 'stockout', 'stock', 'customers', 'dayend']
+export const ENABLED: MenuId[] = ['billing', 'bills', 'returns', 'alterations', 'products', 'stickers', 'stockin', 'stockout', 'stock', 'customers', 'dayend']
 
 export const menuFor = (role: Role) => MENU.filter((m) => ENABLED.includes(m.id) && m.roles.includes(role))
 
