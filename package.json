@@ -1,0 +1,42 @@
+{
+  "name": "mars-pos",
+  "version": "0.1.0",
+  "description": "MARS POS - offline-first point of sale for clothing and accessory shops",
+  "private": true,
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "template": "tsx scripts/make-import-template.ts"
+  },
+  "dependencies": {
+    "@fontsource/figtree": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "better-sqlite3": "^13.1.1",
+    "electron": "^45.3.1",
+    "exceljs": "^4.4.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "electron-builder": "^26.18.0",
+    "electron-vite": "^6.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0"
+  },
+  "allowScripts": {
+    "better-sqlite3@13.1.1": true,
+    "electron-winstaller@5.4.0": true,
+    "electron@45.3.1": true
+  }
+}
