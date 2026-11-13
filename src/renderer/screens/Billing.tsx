@@ -4,15 +4,21 @@ import { formatRupees, toPaise } from '@shared/money'
 import { sizesText } from '@shared/customers'
 import { receiptText, whatsappText } from '@shared/receipt'
 import type { BillDto, BillingContext, CustomerDto, HeldBillDto, PayMode, SellableVariant } from '@shared/billing'
+import type { CreditNoteDto } from '@shared/returns'
+import type { AltContext, AltJobDto } from '@shared/alterations'
+import { AltFields, altFormError, billAlteration, emptyAltForm, TagModal, type AltForm } from './AlterationForm'
 import type { StaffPublic } from '@shared/types'
 import { fmtDate, Modal, useMsg } from '../ui'
 
 interface CartLine { v: SellableVariant; qty: number; disc: string }
+/** A tailoring job asked for on a cart line (made when the bill is saved). */
+interface AltDraft { form: AltForm; mode: 'bill' | 'pickup' }
 type Dlg =
   | { t: 'pay' }
   | { t: 'approval'; reasons: string[]; error?: string }
   | { t: 'held' }
   | { t: 'customer' }
+  | { t: 'alt'; variantId: string }
   | { t: 'receipt'; bill: BillDto }
   | null
 
@@ -28,9 +34,12 @@ export function Billing({ user }: { user: StaffPublic }) {
   const [customer, setCustomer] = useState<CustomerDto | null>(null)
   const [miss, setMiss] = useState(false)
   const [billDisc, setBillDisc] = useState('')
-  const [salesBy, setSalesBy] = useState(user.id)
+  const [salesBy, setSalesBy] = useState('')
   const [dlg, setDlg] = useState<Dlg>(null)
   const [heldCount, setHeldCount] = useState(0)
+  const [notes, setNotes] = useState<CreditNoteDto[]>([])
+  const [altCtx, setAltCtx] = useState<AltContext | null>(null)
+  const [alts, setAlts] = useState<Record<string, AltDraft>>({})
   const approval = useRef<{ staffId: string; pin: string } | undefined>(undefined)
   const scanRef = useRef<HTMLInputElement>(null)
   const mobileRef = useRef<HTMLInputElement>(null)
@@ -39,6 +48,16 @@ export function Billing({ user }: { user: StaffPublic }) {
   const loadCtx = useCallback(() => run(() => window.api.billing.context()).then((c) => c && setCtx(c)), [run])
   const loadHeld = useCallback(() => window.api.billing.held().then((h) => setHeldCount(h.length), () => undefined), [])
   useEffect(() => { void loadCtx(); void loadHeld() }, [loadCtx, loadHeld])
+
+  useEffect(() => { void window.api.alterations.context().then(setAltCtx, () => undefined) }, [])
+
+  // credit notes the customer can still spend (a note stops working after its expiry date)
+  useEffect(() => {
+    if (!customer) return setNotes([])
+    let stale = false
+    void window.api.returns.creditNotes(customer.id).then((n) => { if (!stale) setNotes(n) }, () => setNotes([]))
+    return () => { stale = true }
+  }, [customer])
 
   // live search while typing (Enter does its own lookup so a fast scanner never races this)
   useEffect(() => {
@@ -61,9 +80,18 @@ export function Billing({ user }: { user: StaffPublic }) {
   }, [cart])
 
   const scheme = ctx?.gstScheme ?? 'regular'
+  // alteration charges added to this bill are service lines after the items (GST % from the Alterations rules)
+  const charges = useMemo(() => cart.filter((l) => alts[l.v.id] && alts[l.v.id]!.mode === 'bill' && toPaise(alts[l.v.id]!.form.charge) > 0).map((l) => ({ v: l.v, price: toPaise(alts[l.v.id]!.form.charge) })), [cart, alts])
   const totals = useMemo(
-    () => calc(scheme, cart.map((l) => ({ variantId: l.v.id, qty: l.qty, price: l.v.price, disc: toPaise(l.disc), gst: l.v.gst })), toPaise(billDisc)),
-    [scheme, cart, billDisc]
+    () => calc(
+      scheme,
+      [
+        ...cart.map((l) => ({ variantId: l.v.id, qty: l.qty, price: l.v.price, disc: toPaise(l.disc), gst: l.v.gst })),
+        ...charges.map((c) => ({ variantId: '__alt' + c.v.id, qty: 1, price: c.price, gst: { mode: 'fixed' as const, rate: altCtx?.cfg.rate ?? 18 } }))
+      ],
+      toPaise(billDisc)
+    ),
+    [scheme, cart, charges, billDisc, altCtx]
   )
 
   /* ----- cart ----- */
@@ -86,10 +114,14 @@ export function Billing({ user }: { user: StaffPublic }) {
     setCart((c) => c.map((x, j) => (j === i ? { ...x, qty: next } : x)))
   }
   const setLineDisc = (i: number, v: string) => setCart((c) => c.map((l, j) => (j === i ? { ...l, disc: v } : l)))
-  const remove = (i: number) => setCart((c) => c.filter((_, j) => j !== i))
+  const remove = (i: number) => {
+    const id = cart[i]?.v.id
+    if (id) setAlts((a) => { const { [id]: _gone, ...rest } = a; return rest })
+    setCart((c) => c.filter((_, j) => j !== i))
+  }
 
   function clearBill() {
-    setCart([]); setQ(''); setResults([]); setMobile(''); setCustomer(null); setMiss(false); setBillDisc(''); setSalesBy(user.id)
+    setCart([]); setAlts({}); setQ(''); setResults([]); setMobile(''); setCustomer(null); setMiss(false); setBillDisc(''); setSalesBy('')
     approval.current = undefined
     setMsg(null)
     scanRef.current?.focus()
@@ -110,6 +142,13 @@ export function Billing({ user }: { user: StaffPublic }) {
     }
   }
 
+  function openAlt(variantId: string) {
+    if (!customer) return setMsg({ ok: false, text: 'Add the customer mobile first. The tag and the ready message need it.' })
+    if (!altCtx) return setMsg({ ok: false, text: 'Alterations are still loading. Try again.' })
+    setMsg(null)
+    setDlg({ t: 'alt', variantId })
+  }
+
   /* ----- customer ----- */
   async function findCustomer(number = mobile) {
     const c = await run(() => window.api.customers.find(number))
@@ -126,16 +165,24 @@ export function Billing({ user }: { user: StaffPublic }) {
 
   function startPay() {
     if (!cart.length || !ctx?.session) return
+    if (!customer) return setMsg({ ok: false, text: 'Enter the customer mobile and press Find. The customer is required.' })
+    if (!salesBy) return setMsg({ ok: false, text: 'Choose the salesperson. It is required.' })
+    setMsg(null)
     const reasons = approvalReasons()
     if (reasons.length && !approval.current) return setDlg({ t: 'approval', reasons })
     setDlg({ t: 'pay' })
   }
 
-  async function saveBill(payments: { mode: PayMode; amount: number }[]) {
+  async function saveBill(payments: { mode: PayMode; amount: number }[], creditAmount = 0) {
+    // spend the notes that expire first
+    let rest = creditAmount
+    const creditNotes: { id: string; amount: number }[] = []
+    for (const n of notes) { if (rest <= 0) break; const a = Math.min(n.balance, rest); creditNotes.push({ id: n.id, amount: a }); rest -= a }
     try {
       const bill = await window.api.billing.create({
         lines: cart.map((l) => ({ variantId: l.v.id, qty: l.qty, disc: toPaise(l.disc) })),
-        customerId: customer?.id ?? null, billDisc: toPaise(billDisc), salesBy, payments, approval: approval.current
+        customerId: customer?.id ?? null, billDisc: toPaise(billDisc), salesBy, payments, creditNotes, approval: approval.current,
+        alterations: Object.entries(alts).map(([vid, a]) => billAlteration(vid, a.form, a.mode))
       })
       setMsg(null); announceSale(); setDlg({ t: 'receipt', bill })
     } catch (e) {
@@ -150,7 +197,8 @@ export function Billing({ user }: { user: StaffPublic }) {
   async function hold() {
     if (!cart.length) return setMsg({ ok: false, text: 'Nothing to hold.' })
     const ok = await attempt(() => window.api.billing.hold({ lines: cart.map((l) => ({ variantId: l.v.id, qty: l.qty, disc: toPaise(l.disc) })), customerId: customer?.id ?? null }))
-    if (ok) { clearBill(); void loadHeld(); setMsg({ ok: true, text: 'Bill held. Find it under "Held".' }) }
+    const hadAlts = Object.keys(alts).length > 0
+    if (ok) { clearBill(); void loadHeld(); setMsg({ ok: true, text: hadAlts ? 'Bill held. The alteration requests are not kept: add them again after resuming.' : 'Bill held. Find it under "Held".' }) }
   }
 
   async function resume(h: HeldBillDto) {
@@ -223,7 +271,7 @@ export function Billing({ user }: { user: StaffPublic }) {
               <table>
                 <thead><tr><th>Item</th><th>Qty</th><th className="r">Price</th><th className="r">Discount ₹</th><th className="r">GST</th><th className="r">Total</th><th /></tr></thead>
                 <tbody>
-                  {totals.lines.map((l, i) => {
+                  {totals.lines.slice(0, cart.length).map((l, i) => {
                     const line = cart[i]!
                     return (
                       <tr key={line.v.id}>
@@ -233,6 +281,11 @@ export function Billing({ user }: { user: StaffPublic }) {
                             <div>
                               <b>{line.v.name}</b>
                               <div className="sub">{line.v.colour} · {line.v.size} · <span className="mono">{line.v.barcode}</span> · {line.v.stock} in stock</div>
+                              <div style={{ marginTop: 4 }}>
+                                {alts[line.v.id]
+                                  ? <button className="chip good" style={{ border: 0, cursor: 'pointer' }} onClick={() => openAlt(line.v.id)}>✂ Alteration: {alts[line.v.id]!.form.work.join(', ')}</button>
+                                  : <button className="btn sm" onClick={() => openAlt(line.v.id)}>✂ Alteration</button>}
+                              </div>
                             </div>
                           </div>
                         </td>
@@ -242,6 +295,15 @@ export function Billing({ user }: { user: StaffPublic }) {
                         <td className="r num">{l.rate}%</td>
                         <td className="r num"><b>{formatRupees(l.net)}</b></td>
                         <td><button className="btn sm" aria-label="Remove" onClick={() => remove(i)}>✕</button></td>
+                      </tr>
+                    )
+                  })}
+                  {charges.map((c, k) => {
+                    const l = totals.lines[cart.length + k]!
+                    return (
+                      <tr key={'alt' + c.v.id}>
+                        <td><b>Alteration charge</b><div className="sub">for {c.v.label}</div></td><td className="num">1</td>
+                        <td className="r num">{formatRupees(c.price)}</td><td /><td className="r num">{l.rate}%</td><td className="r num"><b>{formatRupees(l.net)}</b></td><td />
                       </tr>
                     )
                   })}
@@ -255,7 +317,7 @@ export function Billing({ user }: { user: StaffPublic }) {
           <div className="panel">
             <div className="row">
               <div className="f" style={{ flex: 1 }}>
-                <label htmlFor="custMobile">Customer mobile (F4)</label>
+                <label htmlFor="custMobile">Customer mobile (F4) *</label>
                 <input id="custMobile" ref={mobileRef} inputMode="numeric" maxLength={10} placeholder="10-digit mobile" value={mobile}
                   onChange={(e) => {
                     const digits = e.target.value.replace(/\D/g, '')
@@ -271,17 +333,18 @@ export function Billing({ user }: { user: StaffPublic }) {
                 <b>{customer.name}</b>
                 {sizesText(customer.sizes) && <span className="sub" aria-label="Usual sizes">{sizesText(customer.sizes)}</span>}
                 {customer.gstin && <span className="sub">GSTIN {customer.gstin} (business bill)</span>}
-                <div><button className="btn sm" onClick={() => { setCustomer(null); setMobile(''); setMiss(false) }}>Change customer</button></div>
+                <div><button className="btn sm" onClick={() => { setCustomer(null); setMobile(''); setMiss(false); setAlts({}) }}>Change customer</button></div>
               </div>
             ) : miss ? (
               <div className="cust"><span>No customer with this number.</span><div><button className="btn sm p" onClick={() => setDlg({ t: 'customer' })}>Add customer</button></div></div>
-            ) : <div className="hint">Walk-in bill if left empty.</div>}
+            ) : <div className="hint">Required. Enter the 10-digit mobile and press Find.</div>}
           </div>
 
           <div className="panel">
             <div className="f">
-              <label htmlFor="salesBy">Salesperson (for commission)</label>
-              <select id="salesBy" value={salesBy} onChange={(e) => setSalesBy(e.target.value)}>
+              <label htmlFor="salesBy">Salesperson (for commission) *</label>
+              <select id="salesBy" required value={salesBy} onChange={(e) => setSalesBy(e.target.value)}>
+                <option value="">Choose salesperson…</option>
                 {ctx?.salespeople.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </div>
@@ -301,11 +364,19 @@ export function Billing({ user }: { user: StaffPublic }) {
       </div>
 
       {ctx && !ctx.session && <OpeningModal onStarted={() => void loadCtx()} />}
-      {dlg?.t === 'pay' && ctx && <PayModal grand={totals.grand} error={msg && !msg.ok ? msg.text : undefined} onBack={() => { setMsg(null); setDlg(null) }} onSave={saveBill} />}
+      {dlg?.t === 'pay' && ctx && <PayModal grand={totals.grand} creditBalance={notes.reduce((a, n) => a + n.balance, 0)} error={msg && !msg.ok ? msg.text : undefined} onBack={() => { setMsg(null); setDlg(null) }} onSave={saveBill} />}
       {dlg?.t === 'approval' && ctx && (
         <ApprovalModal reasons={dlg.reasons} error={dlg.error} approvers={ctx.approvers}
           onCancel={() => setDlg(null)} onApprove={(a) => { approval.current = a; setDlg({ t: 'pay' }) }} />
       )}
+      {dlg?.t === 'alt' && altCtx && customer && (() => {
+        const line = cart.find((l) => l.v.id === dlg.variantId)
+        if (!line) return null
+        return <AltCartModal ctx={altCtx} label={line.v.label} customerName={customer.name} draft={alts[line.v.id]}
+          onClose={() => setDlg(null)}
+          onSave={(d) => { setAlts((a) => ({ ...a, [line.v.id]: d })); setDlg(null) }}
+          onRemove={() => { setAlts((a) => { const { [line.v.id]: _gone, ...rest } = a; return rest }); setDlg(null) }} />
+      })()}
       {dlg?.t === 'held' && <HeldModal onClose={() => setDlg(null)} onResume={(h) => void resume(h)} />}
       {dlg?.t === 'customer' && <CustomerModal mobile={mobile} onClose={() => setDlg(null)} onSaved={(c) => { setCustomer(c); setMobile(c.mobile); setMiss(false); setDlg(null) }} />}
       {dlg?.t === 'receipt' && ctx && <ReceiptModal bill={dlg.bill} ctx={ctx} onNew={() => { setDlg(null); clearBill(); void loadCtx(); void loadHeld() }} />}
@@ -354,17 +425,19 @@ export function ApprovalModal({ reasons, error, approvers, onCancel, onApprove }
 
 const MODES: { k: PayMode; label: string }[] = [{ k: 'cash', label: 'Cash' }, { k: 'upi', label: 'UPI' }, { k: 'card', label: 'Card' }]
 
-function PayModal({ grand, error, onBack, onSave }: { grand: number; error?: string; onBack: () => void; onSave: (p: { mode: PayMode; amount: number }[]) => Promise<void> }) {
+function PayModal({ grand, creditBalance, error, onBack, onSave }: { grand: number; creditBalance: number; error?: string; onBack: () => void; onSave: (p: { mode: PayMode; amount: number }[], credit: number) => Promise<void> }) {
   const [amt, setAmt] = useState<Record<PayMode, string>>({ cash: String(grand / 100), upi: '', card: '' })
   const [recv, setRecv] = useState('')
   const [busy, setBusy] = useState(false)
-  const paid = MODES.reduce((a, m) => a + toPaise(amt[m.k]), 0)
+  const [cn, setCn] = useState('')
+  const paid = MODES.reduce((a, m) => a + toPaise(amt[m.k]), 0) + toPaise(cn)
   const left = grand - paid
   const change = toPaise(recv) - toPaise(amt.cash)
-  const full = (k: PayMode) => setAmt({ ...amt, [k]: String(Math.max(0, grand - MODES.filter((m) => m.k !== k).reduce((a, m) => a + toPaise(amt[m.k]), 0)) / 100) })
+  const full = (k: PayMode) => setAmt({ ...amt, [k]: String(Math.max(0, grand - toPaise(cn) - MODES.filter((m) => m.k !== k).reduce((a, m) => a + toPaise(amt[m.k]), 0)) / 100) })
+  const fullCn = () => setCn(String(Math.max(0, Math.min(creditBalance, grand - MODES.reduce((a, m) => a + toPaise(amt[m.k]), 0))) / 100))
   const save = async () => {
     setBusy(true)
-    await onSave(MODES.filter((m) => toPaise(amt[m.k]) > 0).map((m) => ({ mode: m.k, amount: toPaise(amt[m.k]) })))
+    await onSave(MODES.filter((m) => toPaise(amt[m.k]) > 0).map((m) => ({ mode: m.k, amount: toPaise(amt[m.k]) })), toPaise(cn))
     setBusy(false) // only matters when saving failed and this dialog stays open
   }
   return (
@@ -378,6 +451,13 @@ function PayModal({ grand, error, onBack, onSave }: { grand: number; error?: str
               <td><button className="btn sm" onClick={() => full(m.k)}>Full</button></td>
             </tr>
           ))}
+          {creditBalance > 0 && (
+            <tr>
+              <td><b>Credit note</b><div className="sub">balance {formatRupees(creditBalance)}</div></td>
+              <td><input type="number" min="0" aria-label="Credit note amount" value={cn} onChange={(e) => setCn(e.target.value)} /></td>
+              <td><button className="btn sm" onClick={fullCn}>Full</button></td>
+            </tr>
+          )}
         </tbody></table>
       </div>
       {toPaise(amt.cash) > 0 && (
@@ -411,7 +491,7 @@ function HeldModal({ onClose, onResume }: { onClose: () => void; onResume: (h: H
   )
 }
 
-function CustomerModal({ mobile, onClose, onSaved }: { mobile: string; onClose: () => void; onSaved: (c: CustomerDto) => void }) {
+export function CustomerModal({ mobile, onClose, onSaved }: { mobile: string; onClose: () => void; onSaved: (c: CustomerDto) => void }) {
   const [f, setF] = useState({ mobile, name: '', wa: false, offers: false })
   const { run, node } = useMsg()
   const save = async () => { const c = await run(() => window.api.customers.create({ mobile: f.mobile, name: f.name, waConsent: f.wa, offersConsent: f.offers })); if (c) onSaved(c) }
@@ -433,7 +513,14 @@ function CustomerModal({ mobile, onClose, onSaved }: { mobile: string; onClose: 
   )
 }
 
-function ReceiptModal({ bill, ctx, onNew }: { bill: BillDto; ctx: BillingContext; onNew: () => void }) {
+export function ReceiptModal({ bill, ctx, onNew }: { bill: BillDto; ctx: BillingContext; onNew: () => void }) {
+  const [tags, setTags] = useState<{ jobs: AltJobDto[]; actx: AltContext } | null>(null)
+  async function showTags() {
+    try {
+      const [jobs, actx] = await Promise.all([window.api.alterations.byBill(bill.id), window.api.alterations.context()])
+      setTags({ jobs, actx })
+    } catch { /* the receipt stays open */ }
+  }
   const mobile = bill.customer?.mobile
   const wa = mobile ? `https://wa.me/91${mobile}?text=${encodeURIComponent(whatsappText(bill, ctx.shop))}` : null
   return (
@@ -443,8 +530,33 @@ function ReceiptModal({ bill, ctx, onNew }: { bill: BillDto; ctx: BillingContext
       <div className="hint">Printing to the receipt printer arrives with the printing milestone. The bill is saved.</div>
       <div className="mfoot">
         {wa ? <a className="btn" href={wa} target="_blank" rel="noopener noreferrer">Send on WhatsApp</a> : <button className="btn" disabled title="Add the customer's mobile on the bill to send it on WhatsApp">Send on WhatsApp</button>}
+        {bill.alterations?.length ? <button className="btn" onClick={() => void showTags()}>Print tailor tag</button> : null}
         <button className="btn p" autoFocus onClick={onNew}>New bill</button>
       </div>
+      {tags && <TagModal jobs={tags.jobs} ctx={tags.actx} onClose={() => setTags(null)} />}
+    </Modal>
+  )
+}
+
+function AltCartModal({ ctx, label, customerName, draft, onClose, onSave, onRemove }: {
+  ctx: AltContext; label: string; customerName: string; draft?: AltDraft; onClose: () => void; onSave: (d: AltDraft) => void; onRemove: () => void
+}) {
+  const [form, setForm] = useState<AltForm>(draft?.form ?? emptyAltForm(ctx))
+  const [mode, setMode] = useState<'bill' | 'pickup'>(draft?.mode ?? 'bill')
+  const [err, setErr] = useState('')
+  const save = () => { const e = altFormError(form); if (e) return setErr(e); onSave({ form, mode }) }
+  return (
+    <Modal title="Alteration" wide onClose={onClose}>
+      <div className="sub">{label} · {customerName}</div>
+      <AltFields ctx={ctx} value={form} onChange={setForm} />
+      {(
+        <div className="f"><label>Charge</label>
+          <label className="radio-card"><input type="radio" name="alm" checked={mode === 'bill'} onChange={() => setMode('bill')} /><span><b>Add to this bill</b><br /><span className="sub">Customer pays now with the clothes ({ctx.cfg.rate}% GST included)</span></span></label>
+          <label className="radio-card"><input type="radio" name="alm" checked={mode === 'pickup'} onChange={() => setMode('pickup')} /><span><b>Collect at pickup</b><br /><span className="sub">Paid when the customer takes the garment</span></span></label></div>
+      )}
+      <div className="hint">After the bill is saved, a job number (ALT-xxxx) is made and the tailor tag can be printed.</div>
+      <div className="err" role="alert">{err}</div>
+      <div className="mfoot">{draft && <button className="btn danger" onClick={onRemove}>Remove alteration</button>}<button className="btn" onClick={onClose}>Cancel</button><button className="btn p" onClick={save}>Save alteration</button></div>
     </Modal>
   )
 }

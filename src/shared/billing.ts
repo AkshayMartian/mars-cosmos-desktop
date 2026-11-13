@@ -1,5 +1,6 @@
 import type { CustomerSizes } from './customers'
 import type { Paise } from './money'
+import type { BillAlteration } from './alterations'
 import type { GstRule, GstScheme, Role } from './types'
 
 /** Data shapes for billing that cross the IPC boundary. Money is always paise. */
@@ -67,6 +68,10 @@ export interface NewBillInput {
   /** who gets the commission; defaults to the person billing */
   salesBy: string | null
   payments: { mode: PayMode; amount: Paise }[]
+  /** credit notes of this customer used as part payment; each is checked for owner, balance and expiry */
+  creditNotes?: { id: string; amount: Paise }[]
+  /** tailoring jobs for garments on this bill (needs a customer); a charge marked 'bill' becomes a line on the bill */
+  alterations?: BillAlteration[]
   /** needed when the discount is above the user's limit or an item is out of stock */
   approval?: { staffId: string; pin: string }
 }
@@ -88,6 +93,8 @@ export interface BillDto {
   roundOff: Paise
   grand: Paise
   payments: { mode: string; amount: Paise }[]
+  /** alteration jobs made with this bill (printed on the receipt) */
+  alterations?: { id: string; no: string; work: string[]; dueAt: string }[]
 }
 
 export interface HeldBillDto {

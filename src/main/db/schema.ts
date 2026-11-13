@@ -180,5 +180,13 @@ UPDATE customers SET sizes = json_object(
   'shoe',    COALESCE((SELECT cs.size FROM customer_sizes cs JOIN categories k ON k.id=cs.category_id WHERE cs.customer_id=customers.id AND lower(k.name) IN ('shoes','shoe','footwear') LIMIT 1), trim(size_shoe), '')
 ) WHERE deleted_at IS NULL;
 `
+  },
+  {
+    // The GST rate of an alteration charge is kept on the job when it is made (not read later from the category), so a
+    // later change of the rate never alters old jobs.
+    version: 5,
+    sql: /* sql */ `
+ALTER TABLE alterations ADD COLUMN gst_rate INTEGER NOT NULL DEFAULT 18;
+`
   }
 ]

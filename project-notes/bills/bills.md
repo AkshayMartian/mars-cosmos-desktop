@@ -1,43 +1,99 @@
 # Bills
 
-> **Status: pending.** Not started. This page records what is planned so the next task can start from it. Fill in the full module template ([`_module-template.md`](../_module-template.md)) when building.
+## 1. Summary
 
-## 1. Summary (planned)
+- **What it does:** lists every bill (sales, returns, cancelled ones), searchable by bill number, customer mobile or name, for Today / Last 7 days / All (latest 80). Click a bill to see its items, payments and who billed. From there: **Reprint** (duplicate receipt), **Send on WhatsApp**, and **Cancel bill** (today's bills only).
+- **Screens:** `Bills` (`src/renderer/screens/Bills.tsx`) with dialogs: duplicate receipt, cancel (reason), manager approval.
+- **Who can use it:** Owner, Manager, Cashier. Cancelling needs the `can_cancel` permission (owner and manager have it by default) or a manager's approval PIN.
+- **Status:** **done** (2026-11-13). Not included: printing the reprint (printing milestone).
+- **Code:** screen `src/renderer/screens/Bills.tsx` · service `src/main/services/bills.ts` (+ `getBill` in `billing.ts`) · shapes `src/shared/bills.ts` · receipt `src/shared/receipt.ts` · tests `src/main/services/bills.test.ts`.
 
-- **What it will do:** list every bill (search by bill number, mobile or name; Today / Last 7 days / All), show one bill in detail (lines, payments, who billed), **reprint**, **send on WhatsApp**, and **cancel a bill** (today's bills only).
-- **Screen:** `Bills` (menu item exists but hidden: `ENABLED` in `src/shared/types.ts`). Design reference: the approved prototype's *Bills* screen.
-- **Who can use it:** Owner, Manager, Cashier. Cancelling needs the `can_cancel` permission (owner and manager have it) or a manager's approval.
-- **Code (to create):** `src/renderer/screens/Bills.tsx`, `services/billing.ts` additions (`listBills`, `cancelBill`), tests.
+## 2. Screen controls
 
-## 2. What already exists for it
+| Control | Type | What it does |
+|---|---|---|
+| *Bill number, mobile or name* | text (auto-focus) | Filters the list as you type |
+| *Period* | dropdown | Today / Last 7 days / All |
+| Bill row | click | Opens the bill on the right (status chip: Paid, Cancelled, Return) |
+| **Reprint** | button | Shows the receipt marked "DUPLICATE" |
+| **Send on WhatsApp** | button | Opens WhatsApp with the bill text; disabled without a customer mobile and for return bills |
+| **Cancel bill** | button (only when allowed) | Opens the reason dialog |
+| Cancel dialog | dialog | *Reason* (required), **Keep**, **Cancel bill**; asks for a manager's PIN when the user may not cancel alone |
+| Hint under the buttons | text | Says why a bill cannot be cancelled (old day, items already returned, exchange sale) |
 
-- Tables `bills`, `bill_lines`, `payments`, `stock_moves`, `audit_log`, and `getBill(id)` (`billing:bill`) which returns one bill with lines and payments.
-- `bills.status` (`completed` / `cancelled`), `cancel_reason`, `cancelled_by`, and stock move type `cancel` are already in the schema.
-- Receipt text (`shared/receipt.ts`) supports a "duplicate" copy.
+## 3. Flows
 
-## 3. Planned rules (from the prototype review)
+**Open the list / filter** → `window.api.bills.list(period, q)` → `bills:list` → `listBills` → reads `bills`, `customers`, `payments`.
 
-- Cancel only **today's** bills of the **open day**; reason is required; bills stay in the list marked Cancelled.
-- Cancelling puts the stock back (`stock_moves` type `cancel`, positive qty) and removes the sale from the day's cash.
-- **Review items to fix, not copy:** the prototype did not restore a credit note used as payment and did not reverse cash/UPI; coins and alterations linked to the bill must be reversed too.
-- Never edit or delete a bill row (rule 5): cancelling only changes `status` and adds the reason and who.
-- Older bills are not cancelled; they go through **Returns**.
+**Open a bill** → `window.api.bills.detail(id)` → `bills:detail` → `billDetail` → reads `bills`, `bill_lines`, `payments`, `staff`.
 
-## 4. Planned APIs (names only)
+**Cancel** → reason typed → approval PIN if needed → `window.api.bills.cancel(input)` → `bills:cancel` → `cancelBill` → writes `bills`, `stock_moves`, `credit_notes`, `audit_log`.
 
-`bills:list(period, q)`, `bills:get(id)` (exists as `billing:bill`), `bills:cancel(id, reason, approval?)`, reprint (needs printing).
+## 4. APIs
 
-## 5. Open questions
+### `window.api.bills.list(period, q)` · channel `bills:list`
 
-- Should a cancelled bill's number be reused? (Plan: no; gap-free numbering means a cancelled bill keeps its number.)
-- Can a manager cancel yesterday's bill with a reason? (Plan: no; use a return.)
+- **Called from:** Bills screen · **Allowed roles:** owner, manager, cashier
+- **Request:** `period` = `'today' | '7' | 'all'`; `q` text (bill number part, mobile part or name part, may be empty).
+- **Response:** `[{ id, no, type:'sale'|'return', status:'completed'|'cancelled', at, customerName|null, grand, modes:['cash','upi'] }]` newest first, max 80.
+- **Errors:** "Unknown period." · not logged in / role not allowed.
+- **Tables read:** `bills`, `customers`, `payments`.
 
-## 6. Done when
+### `window.api.bills.detail(id)` · channel `bills:detail`
 
-Screen, `listBills`/`cancelBill`, tests (cancel restores stock and cash, refuses old bills, needs reason, role/approval rules), schema notes (none expected), this page completed, README status changed to **done**.
+- **Called from:** Bills screen, clicking a row · **Allowed roles:** owner, manager, cashier
+- **Response:** `{ bill: BillDto, cancelReason|null, cancelledBy|null, cancellable, cancelHint|null, needsApproval }`
+- **Errors:** "Bill not found."
+- **Tables read:** `bills`, `bill_lines`, `payments`, `customers`, `staff`, `day_sessions`.
 
-## Changelog
+### `window.api.bills.cancel(input)` · channel `bills:cancel`
+
+- **Called from:** Bills screen, *Cancel bill* · **Allowed roles:** owner, manager, cashier (cashier needs approval unless granted `can_cancel`)
+- **Request:**
+
+| field | type | required | validation |
+|---|---|---|---|
+| billId | string | yes | a completed sale bill of today's open day |
+| reason | string | yes | not empty |
+| approval | `{staffId, pin}` | when the user may not cancel alone | active owner or manager with the right PIN (5 wrong PINs lock that approver) |
+
+- **Response:** the updated `BillDetail`.
+- **Errors:** "Type a reason for cancelling." · "Only bills of today's open day can be cancelled. Use Return / exchange for older bills." · "This bill is already cancelled." · "A return bill cannot be cancelled." · "Some items of this bill were already returned…" · "This bill is the new-items side of an exchange…" · "A manager or owner must approve this." / "That PIN is not correct…"
+- **Side effects:** audit action `bill_cancel` (bill, reason, approver, credit note restored).
+- **Steps inside:** refusal checks → approval check (before the transaction) → `bills.status='cancelled'`, reason, approver → `cancel` stock moves (+qty for every line) → credit notes used as payment get their balance back.
+- **Example:** cashier cancels `C1/2026-27/0003` with the manager's PIN: stock +1, bill listed as Cancelled, Day end expected cash drops by the cash taken.
+
+## 5. Database
+
+- `bills` (`status`, `cancel_reason`, `cancelled_by`), `stock_moves` (type `cancel`), `credit_notes.balance`, `payments`, `day_sessions` (open session decides what is "today's"). A bill row is never deleted.
+- List query: `bills LEFT JOIN customers` with `at >= start of today / 7 days ago`, `no/mobile/name LIKE %q%`, `ORDER BY at DESC LIMIT 80`.
+
+## 6. Business rules
+
+- Only **sale** bills of the **currently open day** can be cancelled; older bills go through Return / exchange.
+- Not cancellable when any item was already returned, or when the bill is the sale side of an exchange (it was paid with returned goods).
+- A cancelled bill disappears from Day end cash, "My sales today", customer totals and (later) reports, because they count only completed bills. Its number is kept (gap-free numbering).
+- A credit note used as payment gets its balance back (it may already be past its expiry; the shop decides).
+- **Alterations:** jobs of the bill that are still *received* are cancelled with it; once a job is with the tailor, ready or delivered the bill cannot be cancelled. The alteration charge line is a service, so cancelling puts no stock back for it.
+- Coins are not built yet; when they are, cancelling must reverse them too.
+
+## 7. Test cases
+
+| Test | Expected result | Pass / fail | Date tested |
+|---|---|---|---|
+| List order and filters (number, mobile, name, period) | newest first, filters work | pass | 2026-11-13 |
+| Payment modes and customer shown | cash + upi, name | pass | 2026-11-13 |
+| Store staff | refused | pass | 2026-11-13 |
+| Cancel needs reason | refused with message | pass | 2026-11-13 |
+| Cancel restores stock, cash, sales chip | stock +1, drawer and chip drop, listed Cancelled | pass | 2026-11-13 |
+| Cashier approval | refused, wrong PIN refused, right PIN recorded | pass | 2026-11-13 |
+| Old day's bill | refused, points to Return / exchange | pass | 2026-11-13 |
+| Returned bill / return bill | refused | pass | 2026-11-13 |
+| Credit note used as payment | balance restored | pass | 2026-11-13 |
+
+## 8. Changelog
 
 | Date | Change | Commit |
 |---|---|---|
 | 2026-11-13 | Placeholder note created | n/a (no git) |
+| 2026-11-13 | Bills list, detail, reprint, WhatsApp, cancel; tests | uncommitted |

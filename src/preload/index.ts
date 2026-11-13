@@ -2,6 +2,9 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type { AppInfo, LoginResult, StaffPublic } from '@shared/types'
 import type { CloseDayResult, DayEndSummary } from '@shared/dayend'
 import type { CelebrationDto, CustomerListRow, CustomerProfile, CustomerSaveInput } from '@shared/customers'
+import type { AltConfig, AltContext, AltJobDto, AltList, DeliverInput, DeliverResult, GarmentChoice, NewAlterationInput, TailorDto, TailorInput } from '@shared/alterations'
+import type { BillDetail, BillListRow, BillPeriod, CancelInput } from '@shared/bills'
+import type { BillForReturn, CreditNoteDto, ReturnBillRow, ReturnInput, ReturnResult } from '@shared/returns'
 import type { AdjustInput, ApprovalInput, ApproverDto, CountDto, MoveFullRow, StockOutInput } from '@shared/stockops'
 import type {
   BillDto, BillingContext, CustomerDto, HeldBillDto, HeldPayload, NewBillInput, NewCustomerInput, SellableVariant
@@ -54,6 +57,29 @@ const api = {
     hold: (payload: HeldPayload) => call<void>('billing:hold', payload),
     held: () => call<HeldBillDto[]>('billing:held'),
     resume: (id: string) => call<HeldPayload>('billing:resume', id)
+  },
+  alterations: {
+    list: (q = '') => call<AltList>('alt:list', q),
+    byBill: (billId: string) => call<AltJobDto[]>('alt:byBill', billId),
+    context: () => call<AltContext>('alt:context'),
+    customer: (mobile: string) => call<{ id: string; name: string; mobile: string } | null>('alt:customer', mobile),
+    garments: (customerId: string) => call<GarmentChoice[]>('alt:garments', customerId),
+    create: (input: NewAlterationInput) => call<AltJobDto>('alt:create', input),
+    advance: (id: string) => call<AltJobDto>('alt:advance', id),
+    deliver: (input: DeliverInput) => call<DeliverResult>('alt:deliver', input),
+    saveTailor: (input: TailorInput) => call<TailorDto[]>('alt:saveTailor', input),
+    saveConfig: (cfg: AltConfig) => call<AltConfig>('alt:saveConfig', cfg)
+  },
+  bills: {
+    list: (period: BillPeriod, q = '') => call<BillListRow[]>('bills:list', period, q),
+    detail: (id: string) => call<BillDetail>('bills:detail', id),
+    cancel: (input: CancelInput) => call<BillDetail>('bills:cancel', input)
+  },
+  returns: {
+    find: (q: string) => call<ReturnBillRow[]>('returns:find', q),
+    bill: (id: string) => call<BillForReturn>('returns:bill', id),
+    do: (input: ReturnInput) => call<ReturnResult>('returns:do', input),
+    creditNotes: (customerId: string) => call<CreditNoteDto[]>('returns:creditNotes', customerId)
   },
   day: {
     summary: () => call<DayEndSummary>('day:summary'),

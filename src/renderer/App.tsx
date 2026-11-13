@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react'
 import { formatRupees } from '@shared/money'
 import { homeFor, menuFor, type AppInfo, type MenuId, type StaffPublic } from '@shared/types'
+import { Alterations } from './screens/Alterations'
+import { Bills } from './screens/Bills'
 import { Billing } from './screens/Billing'
 import { Customers } from './screens/Customers'
 import { DayEnd } from './screens/DayEnd'
 import { Login } from './screens/Login'
 import { Placeholder } from './screens/Placeholder'
+import { Returns } from './screens/Returns'
 import { Products } from './screens/Products'
 import { Stock } from './screens/Stock'
 import { StockIn } from './screens/StockIn'
@@ -21,6 +24,9 @@ interface ScreenProps {
 
 const SCREENS: Partial<Record<MenuId, (p: ScreenProps) => ReactElement>> = {
   billing: (p) => <Billing user={p.user} />,
+  bills: (p) => <Bills user={p.user} />,
+  alterations: (p) => <Alterations user={p.user} />,
+  returns: () => <Returns />,
   products: (p) => <Products user={p.user} intent={p.intent} />,
   stockin: (p) => <StockIn canAddProduct={p.user.role === 'owner' || p.user.role === 'manager'} onNewProduct={() => p.go('products', 'new')} />,
   customers: (p) => <Customers user={p.user} />,

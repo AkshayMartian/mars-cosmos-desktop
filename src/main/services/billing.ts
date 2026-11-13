@@ -5,7 +5,10 @@ import { fyOf, localDate } from '@shared/dates'
 import { variantLabel } from '@shared/catalogue'
 import type { BillDto, BillingContext, HeldBillDto, HeldPayload, NewBillInput, SellableVariant, ShopInfo } from '@shared/billing'
 import type { GstScheme } from '@shared/types'
+import type { Paise } from '@shared/money'
+import type { PayMode } from '@shared/billing'
 import { audit } from './auth'
+import { alterationConfig, checkJobInput, ensureServiceVariant, insertJob } from './altcore'
 import { checkApprover } from './approval'
 import { requireRole, type Actor } from './session'
 import { getSetting } from './settings'
@@ -111,7 +114,7 @@ function approvalReasons(actor: Actor, maxPct: number, discountPct: number): str
 
 /* ---------- the bill ---------- */
 
-function nextBillNo(): string {
+export function nextBillNo(): string {
   const fy = fyOf()
   const r = getDb()
     .prepare('INSERT INTO bill_counters (counter,fy,next) VALUES (?,?,2) ON CONFLICT(counter,fy) DO UPDATE SET next=next+1 RETURNING next')
@@ -123,12 +126,27 @@ function nextBillNo(): string {
  * Everything below is recomputed here from the database (prices, GST, stock): the screen only says
  * what was scanned, how much discount, and how it was paid. One transaction: bill, lines, payments, stock.
  */
-export function createBill(input: NewBillInput): BillDto {
+export interface BillInternals {
+  /**
+   * Exchange: given the bill total, says how much of it is covered by the returned goods (a credit_note payment
+   * with no note behind it) and how the rest is paid. Replaces `input.payments`.
+   */
+  settle?: (grand: Paise) => { credit: Paise; payments: { mode: PayMode; amount: Paise }[] }
+  /** extra service lines (an alteration charge collected at pickup): GST-inclusive price and the GST % kept on the job */
+  services?: { price: Paise; rate: number }[]
+}
+
+const SERVICE = '__service'
+
+export function createBill(input: NewBillInput, internals: BillInternals = {}): BillDto {
   const actor = requireRole(...SELLERS)
   const db = getDb()
   const session = openSessionRow()
   if (!session) throw new Error('Start the day first: enter the opening cash.')
-  if (!input.lines.length) throw new Error('Add at least one item.')
+  const cfg = alterationConfig()
+  const alts = input.alterations ?? []
+  const services = [...alts.filter((a) => a.mode === 'bill' && a.charge > 0).map((a) => ({ price: a.charge, rate: cfg.rate })), ...(internals.services ?? [])]
+  if (!input.lines.length && !services.length) throw new Error('Add at least one item.')
 
   const want = new Map<string, { qty: number; disc: number }>()
   for (const l of input.lines) {
@@ -138,6 +156,15 @@ export function createBill(input: NewBillInput): BillDto {
     want.set(l.variantId, { qty: w.qty + l.qty, disc: w.disc + l.disc })
   }
   if (!Number.isInteger(input.billDisc) || input.billDisc < 0) throw new Error('Discount cannot be negative.')
+  if (alts.length) {
+    if (!input.customerId) throw new Error('Add the customer first: the tailor tag and the ready message need their mobile.')
+    if (new Set(alts.map((a) => a.variantId)).size !== alts.length) throw new Error('Only one alteration per item on a bill.')
+    for (const a of alts) {
+      if (!want.has(a.variantId)) throw new Error('An alteration is for an item that is not on this bill.')
+      if (!['bill', 'pickup'].includes(a.mode)) throw new Error('Choose how the alteration charge is paid.')
+      checkJobInput(a)
+    }
+  }
 
   const items = new Map(sellableByIds([...want.keys()]).map((v) => [v.id, v]))
   const scheme = getSetting<GstScheme>('gst_scheme', 'regular')
@@ -152,6 +179,7 @@ export function createBill(input: NewBillInput): BillDto {
     if (have < w.qty) throw new Error(`Only ${have} of ${v.label} in stock.`)
     calcLines.push({ variantId: id, qty: w.qty, price: v.price, disc: w.disc, gst: v.gst })
   }
+  for (const sv of services) calcLines.push({ variantId: SERVICE, qty: 1, price: sv.price, gst: { mode: 'fixed', rate: sv.rate } })
   const c = calc(scheme, calcLines, input.billDisc)
 
   if (input.customerId && !db.prepare('SELECT 1 FROM customers WHERE id=? AND deleted_at IS NULL').get(input.customerId)) throw new Error('Customer not found.')
@@ -162,15 +190,35 @@ export function createBill(input: NewBillInput): BillDto {
   const reasons = approvalReasons(actor, maxPct, discountPct)
   const approvedBy = reasons.length ? checkApprover(input.approval) : null
 
-  let paid = 0
-  for (const p of input.payments) {
+  const at = new Date().toISOString()
+  let payments = input.payments
+  let exchangeCredit = 0
+  if (internals.settle) {
+    const s = internals.settle(c.grand)
+    payments = s.payments
+    exchangeCredit = s.credit
+  }
+  let paid = exchangeCredit
+  for (const p of payments) {
     if (!['cash', 'upi', 'card'].includes(p.mode) || !Number.isInteger(p.amount) || p.amount <= 0) throw new Error('Check the payment amounts.')
     paid += p.amount
+  }
+  // Credit notes: owner, balance and expiry are checked here (a note stops working after its expiry date).
+  const notes = (input.creditNotes ?? []).filter((n) => n.amount > 0)
+  if (notes.length) {
+    if (!input.customerId) throw new Error('A credit note can only be used when the customer is on the bill.')
+    if (new Set(notes.map((n) => n.id)).size !== notes.length) throw new Error('Check the credit note amounts.')
+    for (const n of notes) {
+      const cn = db.prepare('SELECT customer_id AS cust,balance,expires_at AS exp FROM credit_notes WHERE id=?').get(n.id) as { cust: string | null; balance: number; exp: string } | undefined
+      if (!cn || cn.cust !== input.customerId) throw new Error('That credit note does not belong to this customer.')
+      if (cn.exp < at) throw new Error(`This credit note expired on ${new Date(cn.exp).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}.`)
+      if (!Number.isInteger(n.amount) || n.amount > cn.balance) throw new Error('The credit note amount is more than its balance.')
+      paid += n.amount
+    }
   }
   if (paid !== c.grand) throw new Error('The payments must add up to the bill total.')
 
   const id = randomUUID()
-  const at = new Date().toISOString()
   let no = ''
   db.transaction(() => {
     no = nextBillNo()
@@ -184,13 +232,30 @@ export function createBill(input: NewBillInput): BillDto {
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     )
     for (const l of c.lines) {
+      if (l.variantId === SERVICE) {
+        const sv = ensureServiceVariant()
+        insLine.run(id, sv.variantId, 'Alteration charge', '—', 'Service', sv.hsn, 1, l.price, l.price, (l.disc ?? 0) + l.share, l.taxable, l.rate, l.cgst, l.sgst, l.net)
+        continue // a service: no stock
+      }
       const v = items.get(l.variantId)!
       const hsn = (db.prepare('SELECT c.hsn FROM variants v JOIN products p ON p.id=v.product_id JOIN categories c ON c.id=p.category_id WHERE v.id=?').get(l.variantId) as { hsn: string }).hsn
       insLine.run(id, l.variantId, v.name, v.size, v.colour, hsn, l.qty, v.mrp, v.price, (l.disc ?? 0) + l.share, l.taxable, l.rate, l.cgst, l.sgst, l.net)
       addMove({ variantId: l.variantId, qty: -l.qty, type: 'sale', ref: no, staffId: actor.id, at })
     }
     const insPay = db.prepare('INSERT INTO payments (bill_id,mode,amount) VALUES (?,?,?)')
-    for (const p of input.payments) insPay.run(id, p.mode, p.amount)
+    for (const p of payments) insPay.run(id, p.mode, p.amount)
+    if (exchangeCredit > 0) db.prepare("INSERT INTO payments (bill_id,mode,amount) VALUES (?,'credit_note',?)").run(id, exchangeCredit)
+    for (const n of notes) {
+      db.prepare("INSERT INTO payments (bill_id,mode,amount,credit_note_id) VALUES (?,'credit_note',?,?)").run(id, n.amount, n.id)
+      db.prepare('UPDATE credit_notes SET balance=balance-? WHERE id=?').run(n.amount, n.id)
+    }
+    for (const a of alts) {
+      const job = insertJob({
+        billId: id, customerId: input.customerId!, variantId: a.variantId, item: items.get(a.variantId)!.label, work: a.work, notes: a.notes.trim(), tailorId: a.tailorId,
+        dueAt: a.dueAt, charge: a.charge, chargeMode: a.charge > 0 ? a.mode : 'free', paid: a.charge === 0 || a.mode === 'bill', gstRate: cfg.rate, staffId: actor.id
+      })
+      audit(actor.id, 'alteration_new', { no: job.no, bill: no })
+    }
     if (approvedBy) audit(actor.id, 'approve', { bill: no, approvedBy, reasons })
   })()
   return getBill(id)
@@ -205,14 +270,15 @@ export function getBill(id: string): BillDto {
               s.name AS staffName,c.name AS cName,c.mobile AS cMobile,c.gstin AS cGstin
        FROM bills b JOIN staff s ON s.id=b.staff_id LEFT JOIN customers c ON c.id=b.customer_id WHERE b.id=?`
     )
-    .get(id) as (Omit<BillDto, 'customer' | 'lines' | 'payments'> & { cName: string | null; cMobile: string | null; cGstin: string | null }) | undefined
+    .get(id) as (Omit<BillDto, 'customer' | 'lines' | 'payments' | 'alterations'> & { cName: string | null; cMobile: string | null; cGstin: string | null }) | undefined
   if (!b) throw new Error('Bill not found.')
   const { cName, cMobile, cGstin, ...rest } = b
   return {
     ...rest,
     customer: cName ? { name: cName, mobile: cMobile, gstin: cGstin } : null,
     lines: db.prepare('SELECT name,colour,size,qty,price,gst_rate AS rate,total,hsn FROM bill_lines WHERE bill_id=? ORDER BY id').all(id) as BillDto['lines'],
-    payments: db.prepare('SELECT mode,amount FROM payments WHERE bill_id=? ORDER BY id').all(id) as BillDto['payments']
+    payments: db.prepare('SELECT mode,amount FROM payments WHERE bill_id=? ORDER BY id').all(id) as BillDto['payments'],
+    alterations: (db.prepare('SELECT id,no,work,due_at AS dueAt FROM alterations WHERE bill_id=? ORDER BY rowid').all(id) as { id: string; no: string; work: string; dueAt: string }[]).map((a) => ({ ...a, work: a.work.split(', ') }))
   }
 }
 

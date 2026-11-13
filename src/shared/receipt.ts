@@ -15,7 +15,7 @@ export function receiptText(b: BillDto, shop: ShopInfo, scheme: GstScheme, copy 
   if (shop.address) out.push(center(shop.address))
   if (shop.phone) out.push(center('Ph ' + shop.phone))
   if (scheme === 'regular' && shop.gstin) out.push(center('GSTIN ' + shop.gstin))
-  out.push(center(scheme === 'regular' ? 'TAX INVOICE' : scheme === 'composition' ? 'BILL OF SUPPLY' : 'BILL'), line)
+  out.push(center(b.type === 'return' ? 'RETURN / CREDIT NOTE' : scheme === 'regular' ? 'TAX INVOICE' : scheme === 'composition' ? 'BILL OF SUPPLY' : 'BILL'), line)
   out.push(lr('Bill ' + b.no, ''))
   out.push(lr(new Date(b.at).toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }), b.staffName))
   if (b.customer) out.push(lr(b.customer.name, b.customer.mobile ?? ''))
@@ -23,7 +23,7 @@ export function receiptText(b: BillDto, shop: ShopInfo, scheme: GstScheme, copy 
   out.push(line)
   for (const l of b.lines) {
     out.push(`${l.name} ${l.colour} ${l.size}`.slice(0, W))
-    out.push(lr(`  ${l.qty} x ${formatPlain(l.price)}${scheme === 'regular' ? '  ' + l.rate + '%' : ''}`, formatPlain(l.price * l.qty)))
+    out.push(lr(`  ${l.qty} x ${formatPlain(l.price)}${scheme === 'regular' ? '  ' + l.rate + '%' : ''}`, formatPlain(b.type === 'return' ? l.total : l.price * l.qty)))
   }
   out.push(line)
   if (b.discount) out.push(lr('Discount', formatPlain(-b.discount)))
@@ -33,6 +33,11 @@ export function receiptText(b: BillDto, shop: ShopInfo, scheme: GstScheme, copy 
   out.push(line)
   for (const p of b.payments) out.push(lr('Paid ' + p.mode.replace('_', ' ').toUpperCase(), formatPlain(p.amount)))
   out.push(line)
+  if (b.alterations?.length) {
+    out.push('ALTERATION')
+    for (const a of b.alterations) out.push(`${a.no}  ${a.work.join(', ')}`, `  Ready: ${new Date(a.dueAt).toLocaleString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}`)
+    out.push(line)
+  }
   if (shop.policy) out.push(shop.policy, '')
   if (shop.footer) out.push(center(shop.footer))
   return out.join('\n')

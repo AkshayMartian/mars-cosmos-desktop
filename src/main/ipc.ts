@@ -4,10 +4,13 @@ import { changePin, listActiveStaff, login, logout } from './services/auth'
 import { listApprovers } from './services/approval'
 import { addExpense, closeDay, daySummary } from './services/dayend'
 import * as billing from './services/billing'
+import * as bills from './services/bills'
 import * as cat from './services/catalogue'
 import { celebrationsToday, createCustomer, deleteCustomer, findCustomerByMobile, getCustomer, listCustomers, saveCustomer } from './services/customers'
 import { commitImport } from './services/importer'
+import * as alterations from './services/alterations'
 import { appInfo, mySalesToday } from './services/settings'
+import * as returns from './services/returns'
 import * as stock from './services/stock'
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string }
@@ -57,11 +60,28 @@ export function registerIpc(): void {
   h('billing:variants', billing.sellableByIds)
   h('billing:photo', cat.variantPhoto)
   h('billing:openDay', billing.openDay)
-  h('billing:create', billing.createBill)
+  h('billing:create', (i: Parameters<typeof billing.createBill>[0]) => billing.createBill(i)) // one argument only: the internals parameter is for the main process
   h('billing:bill', billing.getBill)
   h('billing:hold', billing.holdBill)
   h('billing:held', billing.listHeld)
   h('billing:resume', billing.resumeHeld)
+  h('alt:list', alterations.listAlterations)
+  h('alt:byBill', alterations.jobsByBill)
+  h('alt:context', alterations.alterationContext)
+  h('alt:customer', alterations.findAltCustomer)
+  h('alt:garments', alterations.customerGarments)
+  h('alt:create', alterations.createAlteration)
+  h('alt:advance', alterations.advanceAlteration)
+  h('alt:deliver', alterations.deliverAlteration)
+  h('alt:saveTailor', alterations.saveTailor)
+  h('alt:saveConfig', alterations.saveAlterationConfig)
+  h('bills:list', bills.listBills)
+  h('bills:detail', bills.billDetail)
+  h('bills:cancel', bills.cancelBill)
+  h('returns:find', returns.findBillsForReturn)
+  h('returns:bill', returns.getBillForReturn)
+  h('returns:do', returns.doReturn)
+  h('returns:creditNotes', returns.usableCreditNotes)
   h('day:summary', daySummary)
   h('day:addExpense', addExpense)
   h('day:close', closeDay)

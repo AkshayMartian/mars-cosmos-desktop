@@ -5,7 +5,7 @@
 - **What it does:** the counter screen. Staff scan or search items, set quantities and discounts, find or add the customer, choose the salesperson, take payment (cash / UPI / card, split allowed) and save the bill. The main process **recomputes all prices, GST and totals**, numbers the bill, takes the stock down and stores everything in one transaction. Also: **start the day** (opening cash), **hold / resume** bills, **manager approval** for big discounts, receipt text and a WhatsApp link.
 - **Screens:** `Billing` (`src/renderer/screens/Billing.tsx`) with dialogs: Start the day, Manager approval, Payment, Held bills, Add customer, Receipt.
 - **Who can use it:** Owner, Manager, Cashier. Store staff cannot (menu hidden and the service refuses).
-- **Status:** **done** for Phase 1 scope (2026-11-12). Not included: printing the receipt, coins, credit-note payment, alteration line, cancelling a bill, returns (separate modules).
+- **Status:** **done** for Phase 1 scope (2026-11-12). Not included: printing the receipt, coins (credit-note payment is now on the payment dialog and alteration jobs are made from the cart line: see the Returns and Alterations notes; cancelling a bill is the Bills module).
 - **Code:** screen `src/renderer/screens/Billing.tsx` · service `src/main/services/billing.ts` (+ `customers.ts` for the two customer calls, `approval.ts`) · maths `src/shared/calc.ts` · receipt `src/shared/receipt.ts` · shapes `src/shared/billing.ts` · tests `src/main/services/billing.test.ts`, `src/shared/calc.test.ts`.
 
 ## 2. Screen controls
