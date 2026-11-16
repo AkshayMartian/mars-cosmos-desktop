@@ -12,14 +12,14 @@ Start here to review any module. Each module has one note (copy of [_module-temp
 | [Bills](bills/bills.md) | **done** | Bill list, reprint, WhatsApp, cancel bill |
 | [Alterations](alterations/alterations.md) | **done** | Tailor jobs, tags, slips, charges, tailors |
 | [Products](products/products.md) | **done** | Catalogue, size × colour, barcodes, photos, import |
-| [Print stickers](stickers/stickers.md) | **done** (labels) | Barcode labels; receipt printing pending |
+| [Print stickers](stickers/stickers.md) | **done** (labels) | Barcode labels (receipts and tags print too, see Settings) |
 | [Stock in](stock-in/stock-in.md) | **done** | Purchases and suppliers |
 | [Stock out](stock-out/stock-out.md) | **done** | Supplier return, damage, dispatch |
 | [Stock](stock/stock.md) | **done** | Levels, history, adjust, stock count |
 | [Customers](customers/customers.md) | **done** | Profiles, consent, birthdays |
 | [Reports](reports/reports.md) | pending | Sales, GST, dead stock, commission |
 | [Day end](day-end/day-end.md) | **done** | Cash reconciliation, expenses, close and backup |
-| [Settings](settings/settings.md) | pending | Shop, GST, receipt, printers, staff |
+| [Settings](settings/settings.md) | **done** | Shop, GST, receipt, printers, staff, backup |
 | [Backup](backup/backup.md) | partial | Automatic backup on day close |
 | [Installer](installer/installer.md) | pending | Windows .exe |
 

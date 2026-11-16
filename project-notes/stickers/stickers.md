@@ -1,13 +1,13 @@
 # Print stickers
 
-> Receipt printing and the cash drawer are still pending (printing milestone). This page covers **barcode labels**, which are done. Open question **Q-4** (printer models) is answered in part: labels go through the **Windows driver** of any installed printer (for example the TSC TE244), so no printer language (TSPL/ZPL) is needed.
+> Receipts, tags and slips also print through the Windows driver now (see settings.md for the `print:*` calls). This page covers **barcode labels**.
 
 ## 1. Summary
 
 - **What it does:** prints a barcode label for each piece. Staff scan or search an item, set how many stickers, see the label preview and press **Print N stickers**.
 - **Screens:** `Print stickers` (`src/renderer/screens/Stickers.tsx`): search box, list with a stickers count per item, preview, **Print N sticker(s)**, **Clear list**, **Last purchase**, and (owner, manager) **Change** for *Label settings*. Stock in's **Stickers** button next to each recent purchase opens this screen with that purchase loaded.
 - **Who can use it:** Owner, Manager, Store staff. Only Owner and Manager change the label size and printer.
-- **Status:** **done** for labels (2026-11-13). Not done: the Products screen's *Print stickers* buttons still show a message; receipt printing and cash drawer (printing milestone); Code-128 for brand barcodes (our own EAN-13 barcodes only).
+- **Status:** **done** (2026-11-13). The Products screen's *Print stickers* buttons still show a message. Test sticker is in Settings → Printers.
 - **Code:** screen `Stickers.tsx` · services `src/main/services/stickers.ts` (data, checks, settings) and `src/main/print.ts` (the actual print, Electron) · label drawing and EAN-13 bars `src/shared/stickers.ts` · tests `src/main/services/stickers.test.ts`.
 
 ## 2. Screen controls

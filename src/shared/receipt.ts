@@ -2,12 +2,13 @@ import type { BillDto, ShopInfo } from './billing'
 import { formatPlain, formatRupees } from './money'
 import type { GstScheme } from './types'
 
-const W = 36 // characters per line on an 80 mm receipt (the printing milestone reuses this text)
-
-const center = (s: string): string => ' '.repeat(Math.max(0, Math.floor((W - s.length) / 2))) + s
-const lr = (l: string, r: string): string => l + ' '.repeat(Math.max(1, W - l.length - r.length)) + r
+/** Characters per line: 36 on an 80 mm receipt, 32 on 58 mm. */
+export const receiptWidth = (shop: { width?: string }): number => (shop.width === '58 mm' ? 32 : 36)
 
 export function receiptText(b: BillDto, shop: ShopInfo, scheme: GstScheme, copy = false): string {
+  const W = receiptWidth(shop)
+  const center = (s: string): string => ' '.repeat(Math.max(0, Math.floor((W - s.length) / 2))) + s
+  const lr = (l: string, r: string): string => l + ' '.repeat(Math.max(1, W - l.length - r.length)) + r
   const line = '-'.repeat(W)
   const out: string[] = []
   if (copy) out.push(center('** DUPLICATE **'))
@@ -40,6 +41,7 @@ export function receiptText(b: BillDto, shop: ShopInfo, scheme: GstScheme, copy 
   }
   if (shop.policy) out.push(shop.policy, '')
   if (shop.footer) out.push(center(shop.footer))
+  if (shop.review && b.type !== 'return') out.push('', center('Review us:'), shop.review)
   return out.join('\n')
 }
 

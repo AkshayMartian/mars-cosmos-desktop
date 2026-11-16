@@ -16,6 +16,7 @@ const SVC = "EXISTS (SELECT 1 FROM variants v JOIN products p ON p.id=v.product_
 
 const receiptSettings = () => getSetting<{ returnDays?: number; creditNoteDays?: number }>('receipt', {})
 const windowDays = (): number => receiptSettings().returnDays ?? 7
+export const returnWindowDays = windowDays
 const creditNoteDays = (): number => receiptSettings().creditNoteDays ?? 90
 
 /** Bills that can be returned against: a bill number (whole or the last digits) or the customer's mobile. */

@@ -515,6 +515,7 @@ export function CustomerModal({ mobile, onClose, onSaved }: { mobile: string; on
 
 export function ReceiptModal({ bill, ctx, onNew }: { bill: BillDto; ctx: BillingContext; onNew: () => void }) {
   const [tags, setTags] = useState<{ jobs: AltJobDto[]; actx: AltContext } | null>(null)
+  const { run: runP, node: printMsg } = useMsg()
   async function showTags() {
     try {
       const [jobs, actx] = await Promise.all([window.api.alterations.byBill(bill.id), window.api.alterations.context()])
@@ -527,9 +528,10 @@ export function ReceiptModal({ bill, ctx, onNew }: { bill: BillDto; ctx: Billing
     <Modal title="Receipt" wide onClose={onNew}>
       <div className="banner good">Bill {bill.no} saved · {formatRupees(bill.grand)}</div>
       <div className="receipt" aria-label="Receipt">{receiptText(bill, ctx.shop, ctx.gstScheme)}</div>
-      <div className="hint">Printing to the receipt printer arrives with the printing milestone. The bill is saved.</div>
+      {printMsg}
       <div className="mfoot">
         {wa ? <a className="btn" href={wa} target="_blank" rel="noopener noreferrer">Send on WhatsApp</a> : <button className="btn" disabled title="Add the customer's mobile on the bill to send it on WhatsApp">Send on WhatsApp</button>}
+        <button className="btn" onClick={() => void runP(() => window.api.print.receipt(bill.id), 'Sent to the receipt printer.')}>Print receipt</button>
         {bill.alterations?.length ? <button className="btn" onClick={() => void showTags()}>Print tailor tag</button> : null}
         <button className="btn p" autoFocus onClick={onNew}>New bill</button>
       </div>

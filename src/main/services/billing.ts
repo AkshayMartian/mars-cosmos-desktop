@@ -12,6 +12,7 @@ import { alterationConfig, checkJobInput, ensureServiceVariant, insertJob } from
 import { checkApprover } from './approval'
 import { requireRole, type Actor } from './session'
 import { getSetting } from './settings'
+import { receiptText, receiptWidth } from '@shared/receipt'
 import { addMove, stockOf } from './stock'
 
 const SELLERS = ['owner', 'manager', 'cashier'] as const
@@ -68,7 +69,11 @@ export function sellableByIds(ids: string[]): SellableVariant[] {
 
 const SHOP_DEFAULTS: ShopInfo = { name: 'Your Shop', address: '', phone: '', gstin: '', policy: 'Exchange within 7 days with this bill. No cash refund on sale items.', footer: 'Thank you! Visit again.' }
 
-const shopInfo = (): ShopInfo => ({ ...SHOP_DEFAULTS, ...getSetting<Partial<ShopInfo>>('shop', {}) })
+const shopInfo = (): ShopInfo => {
+  const r = getSetting<{ width?: ShopInfo['width']; review?: string; footer?: string; policy?: string }>('receipt', {})
+  const shop = { ...SHOP_DEFAULTS, ...getSetting<Partial<ShopInfo>>('shop', {}) }
+  return { ...shop, footer: r.footer ?? shop.footer, policy: r.policy ?? shop.policy, width: r.width === '58 mm' ? '58 mm' : '80 mm', review: r.review ?? '' }
+}
 const counterCode = (): string => getSetting('counter', 'C1')
 
 export function openSessionRow(): { id: string; opening: number; openedAt: string } | undefined {
@@ -280,6 +285,12 @@ export function getBill(id: string): BillDto {
     payments: db.prepare('SELECT mode,amount FROM payments WHERE bill_id=? ORDER BY id').all(id) as BillDto['payments'],
     alterations: (db.prepare('SELECT id,no,work,due_at AS dueAt FROM alterations WHERE bill_id=? ORDER BY rowid').all(id) as { id: string; no: string; work: string; dueAt: string }[]).map((a) => ({ ...a, work: a.work.split(', ') }))
   }
+}
+
+/** The receipt exactly as the screen shows it, for the main process to print. */
+export function receiptTextFor(billId: string, copy = false): { text: string; width: number } {
+  const shop = shopInfo()
+  return { text: receiptText(getBill(billId), shop, getSetting<GstScheme>('gst_scheme', 'regular'), copy), width: receiptWidth(shop) }
 }
 
 /* ---------- held bills ---------- */

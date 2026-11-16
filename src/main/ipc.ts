@@ -12,7 +12,9 @@ import * as alterations from './services/alterations'
 import { appInfo, mySalesToday } from './services/settings'
 import * as returns from './services/returns'
 import * as stickers from './services/stickers'
-import { listPrinters, printStickers } from './print'
+import * as admin from './services/admin'
+import { listPrinters, openDrawer, printAlteration, printReceipt, printStickers, testReceipt, testSticker } from './print'
+import { restoreFromFile, restoreListed } from './restore'
 import * as stock from './services/stock'
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string }
@@ -77,6 +79,25 @@ export function registerIpc(): void {
   h('alt:deliver', alterations.deliverAlteration)
   h('alt:saveTailor', alterations.saveTailor)
   h('alt:saveConfig', alterations.saveAlterationConfig)
+  h('settings:get', admin.getAllSettings)
+  h('settings:saveShop', admin.saveShop)
+  h('settings:saveGst', admin.saveGst)
+  h('settings:saveReceipt', admin.saveReceipt)
+  h('settings:savePrinters', admin.savePrinters)
+  h('settings:saveCoins', admin.saveCoins)
+  h('settings:staff', admin.listStaffAdmin)
+  h('settings:saveStaff', admin.saveStaff)
+  h('settings:setPin', admin.setStaffPin)
+  h('settings:backups', admin.backupInfo)
+  h('settings:saveBackupFolder', admin.saveBackupFolder)
+  h('settings:backupNow', admin.backupNow)
+  h('settings:restore', restoreListed)
+  h('settings:restoreFromFile', restoreFromFile)
+  h('print:receipt', printReceipt)
+  h('print:alteration', printAlteration)
+  h('print:testReceipt', testReceipt)
+  h('print:testSticker', testSticker)
+  h('print:openDrawer', openDrawer)
   h('stickers:context', stickers.stickerContext)
   h('stickers:items', stickers.stickerItems)
   h('stickers:lastPurchase', stickers.lastPurchaseItems)

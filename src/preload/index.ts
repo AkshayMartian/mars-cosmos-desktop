@@ -3,6 +3,8 @@ import type { AppInfo, LoginResult, StaffPublic } from '@shared/types'
 import type { CloseDayResult, DayEndSummary } from '@shared/dayend'
 import type { CelebrationDto, CustomerListRow, CustomerProfile, CustomerSaveInput } from '@shared/customers'
 import type { AltConfig, AltContext, AltJobDto, AltList, DeliverInput, DeliverResult, GarmentChoice, NewAlterationInput, TailorDto, TailorInput } from '@shared/alterations'
+import type { AllSettings, BackupInfo, CoinSettings, PrinterSettings, ReceiptSettings, ShopSettings, StaffAdminRow, StaffSaveInput } from '@shared/settings'
+import type { GstScheme } from '@shared/types'
 import type { StickerContext, StickerItem, StickerPrintResult } from '@shared/stickers'
 import type { BillDetail, BillListRow, BillPeriod, CancelInput } from '@shared/bills'
 import type { BillForReturn, CreditNoteDto, ReturnBillRow, ReturnInput, ReturnResult } from '@shared/returns'
@@ -70,6 +72,29 @@ const api = {
     deliver: (input: DeliverInput) => call<DeliverResult>('alt:deliver', input),
     saveTailor: (input: TailorInput) => call<TailorDto[]>('alt:saveTailor', input),
     saveConfig: (cfg: AltConfig) => call<AltConfig>('alt:saveConfig', cfg)
+  },
+  settings: {
+    get: () => call<AllSettings>('settings:get'),
+    saveShop: (v: ShopSettings) => call<ShopSettings>('settings:saveShop', v),
+    saveGst: (v: GstScheme) => call<GstScheme>('settings:saveGst', v),
+    saveReceipt: (v: ReceiptSettings) => call<ReceiptSettings>('settings:saveReceipt', v),
+    savePrinters: (v: PrinterSettings) => call<PrinterSettings>('settings:savePrinters', v),
+    saveCoins: (v: CoinSettings) => call<CoinSettings>('settings:saveCoins', v),
+    staff: () => call<StaffAdminRow[]>('settings:staff'),
+    saveStaff: (v: StaffSaveInput) => call<StaffAdminRow[]>('settings:saveStaff', v),
+    setPin: (id: string, pin: string) => call<void>('settings:setPin', id, pin),
+    backups: () => call<BackupInfo>('settings:backups'),
+    saveBackupFolder: (f: string) => call<BackupInfo>('settings:saveBackupFolder', f),
+    backupNow: () => call<BackupInfo>('settings:backupNow'),
+    restore: (file: string) => call<{ restarting: true }>('settings:restore', file),
+    restoreFromFile: () => call<{ restarting: true } | null>('settings:restoreFromFile')
+  },
+  print: {
+    receipt: (billId: string, copy = false) => call<void>('print:receipt', billId, copy),
+    alteration: (jobId: string, which: 'tag' | 'slip') => call<void>('print:alteration', jobId, which),
+    testReceipt: () => call<void>('print:testReceipt'),
+    testSticker: () => call<void>('print:testSticker'),
+    openDrawer: () => call<void>('print:openDrawer')
   },
   stickers: {
     context: () => call<StickerContext>('stickers:context'),

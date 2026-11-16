@@ -224,6 +224,7 @@ export function Returns() {
 }
 
 function DoneModal({ r, ctx, onClose }: { r: ReturnResult; ctx: BillingContext; onClose: () => void }) {
+  const { run: runP, node: printMsg } = useMsg()
   const lines: string[] = []
   if (r.creditNote) lines.push(`Credit note ${formatRupees(r.creditNote.amount)} issued, valid till ${fmtDay(r.creditNote.expiresAt)}.`)
   if (r.cashRefund) lines.push(`Refund ${formatRupees(r.cashRefund)} in cash from the drawer.`)
@@ -235,8 +236,11 @@ function DoneModal({ r, ctx, onClose }: { r: ReturnResult; ctx: BillingContext; 
         <div className="receipt" style={{ flex: 1 }} aria-label="Return receipt">{receiptText(r.returnBill, ctx.shop, ctx.gstScheme)}</div>
         {r.saleBill && <div className="receipt" style={{ flex: 1 }} aria-label="Exchange receipt">{receiptText(r.saleBill, ctx.shop, ctx.gstScheme)}</div>}
       </div>
-      <div className="hint">Printing arrives with the printing milestone. Everything is saved.</div>
-      <div className="mfoot"><button className="btn p" autoFocus onClick={onClose}>Done</button></div>
+      {printMsg}
+      <div className="mfoot">
+        <button className="btn" onClick={() => void runP(async () => { await window.api.print.receipt(r.returnBill.id); if (r.saleBill) await window.api.print.receipt(r.saleBill.id) }, 'Sent to the receipt printer.')}>Print receipt{r.saleBill ? 's' : ''}</button>
+        <button className="btn p" autoFocus onClick={onClose}>Done</button>
+      </div>
     </Modal>
   )
 }

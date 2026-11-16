@@ -3,6 +3,15 @@ import { MIGRATIONS } from './schema'
 import { seedIfEmpty } from './seed'
 
 let db: Database.Database | null = null
+let dbFile = ''
+
+export const getDbFile = (): string => dbFile
+
+/** Closes the database (used before a restore replaces the file). */
+export function closeDb(): void {
+  db?.close()
+  db = null
+}
 
 export function getDb(): Database.Database {
   if (!db) throw new Error('Database not opened')
@@ -12,6 +21,7 @@ export function getDb(): Database.Database {
 /** file = path to the .db file, or ':memory:' for tests. */
 export function openDb(file: string): Database.Database {
   db = new Database(file)
+  dbFile = file
   db.pragma('journal_mode = WAL')
   db.pragma('foreign_keys = ON')
   migrate(db)

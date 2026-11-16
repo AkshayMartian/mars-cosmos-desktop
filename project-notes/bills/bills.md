@@ -5,7 +5,7 @@
 - **What it does:** lists every bill (sales, returns, cancelled ones), searchable by bill number, customer mobile or name, for Today / Last 7 days / All (latest 80). Click a bill to see its items, payments and who billed. From there: **Reprint** (duplicate receipt), **Send on WhatsApp**, and **Cancel bill** (today's bills only).
 - **Screens:** `Bills` (`src/renderer/screens/Bills.tsx`) with dialogs: duplicate receipt, cancel (reason), manager approval.
 - **Who can use it:** Owner, Manager, Cashier. Cancelling needs the `can_cancel` permission (owner and manager have it by default) or a manager's approval PIN.
-- **Status:** **done** (2026-11-13). Not included: printing the reprint (printing milestone).
+- **Status:** **done** (2026-11-13). The reprint prints to the receipt printer (**Print** in the duplicate receipt).
 - **Code:** screen `src/renderer/screens/Bills.tsx` · service `src/main/services/bills.ts` (+ `getBill` in `billing.ts`) · shapes `src/shared/bills.ts` · receipt `src/shared/receipt.ts` · tests `src/main/services/bills.test.ts`.
 
 ## 2. Screen controls

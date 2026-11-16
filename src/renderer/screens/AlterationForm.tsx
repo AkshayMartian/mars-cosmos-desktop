@@ -1,6 +1,6 @@
 import { toPaise } from '@shared/money'
 import { ALT_WORKS, altDue, tagLines, slipText, type AltContext, type AltJobDto, type BillAlteration } from '@shared/alterations'
-import { Modal } from '../ui'
+import { Modal, useMsg } from '../ui'
 
 /** The form fields shared by the Billing cart-line dialog and the Alterations "New alteration" dialog. */
 export interface AltForm {
@@ -69,6 +69,7 @@ export function AltFields({ ctx, value, onChange }: { ctx: AltContext; value: Al
 
 /** The tailor tag for the garment and the slip for the customer. Printing arrives with the printing milestone. */
 export function TagModal({ jobs, ctx, onClose }: { jobs: AltJobDto[]; ctx: AltContext; onClose: () => void }) {
+  const { run, node } = useMsg()
   const where = ctx.cfg.tagPrinter === 'sticker' ? 'sticker printer' : 'receipt printer'
   return (
     <Modal title={jobs.length > 1 ? 'Tailor tags' : 'Tailor tag'} wide onClose={onClose}>
@@ -85,11 +86,16 @@ export function TagModal({ jobs, ctx, onClose }: { jobs: AltJobDto[]; ctx: AltCo
               </div>
               <div className="sub"><b>Slip for the customer</b></div>
               <div className="receipt" style={{ maxWidth: 300 }}>{slipText(a, ctx.shop)}</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn sm" onClick={() => void run(() => window.api.print.alteration(a.id, 'tag'), 'Tag sent to the printer.')}>Print tag</button>
+                <button className="btn sm" onClick={() => void run(() => window.api.print.alteration(a.id, 'slip'), 'Slip sent to the printer.')}>Print slip</button>
+              </div>
             </div>
           )
         })}
       </div>
-      <div className="hint">The tag goes to the {where} (Alterations → Tailors). Printing arrives with the printing milestone.</div>
+      <div className="hint">The tag goes to the {where} (Settings → Alterations).</div>
+      {node}
       <div className="mfoot"><button className="btn p" autoFocus onClick={onClose}>Close</button></div>
     </Modal>
   )

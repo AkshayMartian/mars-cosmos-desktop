@@ -7,7 +7,7 @@
 - **What it does:** tracks tailoring jobs from a bill (or a customer's own garment): *received → with tailor → ready → delivered* (or cancelled with its bill). Each job gets a number `ALT-0001`, a **tailor tag** for the garment, a **slip** for the customer, a ready-by time, a tailor and an optional charge: **added to the bill**, **collected at pickup**, or free. Marking a job ready offers a **WhatsApp** message to the customer.
 - **Screens:** `Alterations` (`src/renderer/screens/Alterations.tsx`): tiles, search, tabs, job table, dialogs *New alteration*, *Tailor tag*, *Tell the customer*, *Collect alteration charge*, *Tailors and rules*. In Billing (`Billing.tsx`): the **✂ Alteration** button on each cart line and its dialog; the receipt has **Print tailor tag**. Shared form `AlterationForm.tsx`.
 - **Who can use it:** Owner, Manager, Cashier, Store staff. Store staff can move jobs and print tags but not take money (the cashier collects a charge) and cannot open Billing. Only Owner and Manager manage tailors and rules.
-- **Status:** **done** (2026-11-13). Not included: printing the tag and slip (printing milestone), the "to pay tailor" report (Reports module), cancelling a single job on its own.
+- **Status:** **done** (2026-11-13). Tag and slip print from the tag dialog (sticker or receipt printer as set in Settings → Alterations). Not included: the "to pay tailor" report (Reports module), cancelling a single job on its own.
 - **Code:** screens above · services `src/main/services/alterations.ts` (+ `altcore.ts` helpers used by Billing, `billing.ts` `createBill`) · shapes and text `src/shared/alterations.ts` · tests `src/main/services/alterations.test.ts`.
 
 ## 2. Screen controls

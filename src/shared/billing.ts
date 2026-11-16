@@ -26,6 +26,9 @@ export interface ShopInfo {
   gstin: string
   policy: string
   footer: string
+  /** paper width and review link from Settings → Receipt */
+  width?: '80 mm' | '58 mm'
+  review?: string
 }
 
 export interface BillingContext {

@@ -5,7 +5,7 @@
 - **What it does:** a customer brings goods back. Staff find the bill (bill number, last digits of it, or the customer's mobile), choose which items and how many come back, optionally add **new items** (exchange), and settle: the customer pays the difference, or is owed money back as a **credit note** or **cash from the drawer**. Credit notes can then be used as part payment on Billing.
 - **Screens:** `Return / exchange` (`src/renderer/screens/Returns.tsx`), plus a *Credit note* row in Billing's payment dialog (`src/renderer/screens/Billing.tsx`).
 - **Who can use it:** Owner, Manager, Cashier. A bill older than the return window needs a manager's PIN unless the user is a manager or owner.
-- **Status:** **done** (2026-11-13). Not included: printing (printing milestone), coins on returns (coins module not built), cancelling a bill, a Bills list screen.
+- **Status:** **done** (2026-11-13). Receipts print from the done dialog. Not included: coins on returns (coins module not built), cancelling a bill, a Bills list screen.
 - **Code:** screen `src/renderer/screens/Returns.tsx` · service `src/main/services/returns.ts` (+ `createBill` in `billing.ts`, which now accepts credit notes and an exchange settle hook) · shapes and the split rule `src/shared/returns.ts` · receipt wording `src/shared/receipt.ts` · tests `src/main/services/returns.test.ts`.
 
 ## 2. Screen controls
@@ -69,7 +69,7 @@
 
 - **Response:** `{ returnBill: BillDto, saleBill: BillDto|null, creditNote: {amount, expiresAt}|null, cashRefund, customerPaid }`
 - **Errors:** "Start the day first: enter the opening cash." · "Choose at least one item to return." · "Only n of … can still be returned." · "A manager or owner must approve this." / "That PIN is not correct…" · "… is out of stock." · "A credit note needs a customer on the bill. Refund in cash…" (everything is rolled back).
-- **Side effects:** audit action `return` (who, bills, amounts, approver and bill age when approved). Printing arrives later.
+- **Side effects:** audit action `return` (who, bills, amounts, approver and bill age when approved). Receipts print from the done dialog.
 - **Steps inside:** check day open → check bill and quantities → approval if needed (before the transaction so wrong PINs are counted) → compute each line's share → insert return bill (negative amounts, `orig_bill_id`) → lines, `returned_qty`, `sale_return` stock moves → if new items: `createBill` with a settle hook (returned value pays first, the rest by `payMode`) → payments on the return bill → credit note or negative cash payment for what is still owed.
 - **Example:** shirt sold at ₹1,499, returned for a ₹899 polo, customer asks for a credit note → return bill `C1/2026-27/0002` grand −1,499; sale bill `…/0003` grand 899 paid by credit_note 899; credit note ₹600 valid 90 days.
 

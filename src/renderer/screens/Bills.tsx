@@ -25,6 +25,7 @@ export function Bills(_props: { user: StaffPublic }) {
   const [reason, setReason] = useState('')
   const approval = useRef<{ staffId: string; pin: string } | undefined>(undefined)
   const { run, setMsg, node } = useMsg()
+  const { run: runP, node: printMsg } = useMsg()
 
   const load = useCallback(() => {
     void run(() => window.api.bills.list(period, q)).then((r) => r && setRows(r))
@@ -116,8 +117,8 @@ export function Bills(_props: { user: StaffPublic }) {
       {dlg?.t === 'receipt' && b && ctx && (
         <Modal title={`${b.type === 'return' ? 'Return receipt' : 'Receipt'} (duplicate)`} wide onClose={() => setDlg(null)}>
           <div className="receipt" aria-label="Receipt">{receiptText(b, ctx.shop, ctx.gstScheme, true)}</div>
-          <div className="hint">Printing to the receipt printer arrives with the printing milestone.</div>
-          <div className="mfoot"><button className="btn p" autoFocus onClick={() => setDlg(null)}>Close</button></div>
+          {printMsg}
+          <div className="mfoot"><button className="btn" onClick={() => void runP(() => window.api.print.receipt(b.id, true), 'Sent to the receipt printer.')}>Print</button><button className="btn p" autoFocus onClick={() => setDlg(null)}>Close</button></div>
         </Modal>
       )}
       {dlg?.t === 'cancel' && b && (

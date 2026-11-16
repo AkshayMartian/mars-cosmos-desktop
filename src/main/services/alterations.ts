@@ -32,6 +32,11 @@ function loadJob(id: string): AltJobDto {
   return toJob(r)
 }
 
+export function getAltJob(id: string): AltJobDto {
+  requireRole(...ALL4)
+  return loadJob(id)
+}
+
 const sameDay = (iso: string): boolean => new Date(iso).toDateString() === new Date().toDateString()
 
 function kpisOf(jobs: AltJobDto[]): AltKpis {

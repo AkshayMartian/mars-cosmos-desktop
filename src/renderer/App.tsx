@@ -10,6 +10,7 @@ import { Login } from './screens/Login'
 import { Placeholder } from './screens/Placeholder'
 import { Returns } from './screens/Returns'
 import { Products } from './screens/Products'
+import { Settings } from './screens/Settings'
 import { Stickers } from './screens/Stickers'
 import { Stock } from './screens/Stock'
 import { StockIn } from './screens/StockIn'
@@ -29,6 +30,7 @@ const SCREENS: Partial<Record<MenuId, (p: ScreenProps) => ReactElement>> = {
   alterations: (p) => <Alterations user={p.user} />,
   returns: () => <Returns />,
   products: (p) => <Products user={p.user} intent={p.intent} />,
+  settings: () => <Settings />,
   stickers: (p) => <Stickers intent={p.intent} />,
   stockin: (p) => <StockIn canAddProduct={p.user.role === 'owner' || p.user.role === 'manager'} onNewProduct={() => p.go('products', 'new')} onStickers={(id) => p.go('stickers', 'purchase:' + id)} />,
   customers: (p) => <Customers user={p.user} />,
@@ -51,7 +53,12 @@ export function App() {
   const [sales, setSales] = useState(0)
   const lastActive = useRef(Date.now())
 
-  useEffect(() => { void window.api.app.info().then(setInfo) }, [])
+  useEffect(() => {
+    const f = () => void window.api.app.info().then(setInfo)
+    f()
+    window.addEventListener('mars:settings-saved', f) // the shop name in the top bar follows Settings
+    return () => window.removeEventListener('mars:settings-saved', f)
+  }, [])
   // "My sales today" chip: refreshed on login, on every screen change, with the clock and right after a bill is saved.
   const [salesTick, setSalesTick] = useState(0)
   useEffect(() => { if (user) void window.api.app.mySales().then(setSales, () => undefined) }, [user, view, clock, salesTick])
