@@ -8,6 +8,7 @@ import { Customers } from './screens/Customers'
 import { DayEnd } from './screens/DayEnd'
 import { Login } from './screens/Login'
 import { Placeholder } from './screens/Placeholder'
+import { Reports } from './screens/Reports'
 import { Returns } from './screens/Returns'
 import { Products } from './screens/Products'
 import { Settings } from './screens/Settings'
@@ -30,6 +31,7 @@ const SCREENS: Partial<Record<MenuId, (p: ScreenProps) => ReactElement>> = {
   alterations: (p) => <Alterations user={p.user} />,
   returns: () => <Returns />,
   products: (p) => <Products user={p.user} intent={p.intent} />,
+  reports: () => <Reports />,
   settings: () => <Settings />,
   stickers: (p) => <Stickers intent={p.intent} />,
   stockin: (p) => <StockIn canAddProduct={p.user.role === 'owner' || p.user.role === 'manager'} onNewProduct={() => p.go('products', 'new')} onStickers={(id) => p.go('stickers', 'purchase:' + id)} />,

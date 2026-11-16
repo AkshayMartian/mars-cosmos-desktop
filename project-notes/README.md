@@ -17,7 +17,7 @@ Start here to review any module. Each module has one note (copy of [_module-temp
 | [Stock out](stock-out/stock-out.md) | **done** | Supplier return, damage, dispatch |
 | [Stock](stock/stock.md) | **done** | Levels, history, adjust, stock count |
 | [Customers](customers/customers.md) | **done** | Profiles, consent, birthdays |
-| [Reports](reports/reports.md) | pending | Sales, GST, dead stock, commission |
+| [Reports](reports/reports.md) | **done** | Sales, GST, dead stock, commission, Excel and PDF |
 | [Day end](day-end/day-end.md) | **done** | Cash reconciliation, expenses, close and backup |
 | [Settings](settings/settings.md) | **done** | Shop, GST, receipt, printers, staff, backup |
 | [Backup](backup/backup.md) | partial | Automatic backup on day close |

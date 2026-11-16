@@ -3,6 +3,7 @@ import type { AppInfo, LoginResult, StaffPublic } from '@shared/types'
 import type { CloseDayResult, DayEndSummary } from '@shared/dayend'
 import type { CelebrationDto, CustomerListRow, CustomerProfile, CustomerSaveInput } from '@shared/customers'
 import type { AltConfig, AltContext, AltJobDto, AltList, DeliverInput, DeliverResult, GarmentChoice, NewAlterationInput, TailorDto, TailorInput } from '@shared/alterations'
+import type { ReportDto, ReportPeriod, ReportTab } from '@shared/reports'
 import type { AllSettings, BackupInfo, CoinSettings, PrinterSettings, ReceiptSettings, ShopSettings, StaffAdminRow, StaffSaveInput } from '@shared/settings'
 import type { GstScheme } from '@shared/types'
 import type { StickerContext, StickerItem, StickerPrintResult } from '@shared/stickers'
@@ -72,6 +73,11 @@ const api = {
     deliver: (input: DeliverInput) => call<DeliverResult>('alt:deliver', input),
     saveTailor: (input: TailorInput) => call<TailorDto[]>('alt:saveTailor', input),
     saveConfig: (cfg: AltConfig) => call<AltConfig>('alt:saveConfig', cfg)
+  },
+  reports: {
+    get: (tab: ReportTab, period: ReportPeriod, deadDays = 30) => call<ReportDto>('reports:get', tab, period, deadDays),
+    exportExcel: (tab: ReportTab, period: ReportPeriod, deadDays = 30) => call<string | null>('reports:exportExcel', tab, period, deadDays),
+    exportPdf: (tab: ReportTab, period: ReportPeriod, deadDays = 30) => call<string | null>('reports:exportPdf', tab, period, deadDays)
   },
   settings: {
     get: () => call<AllSettings>('settings:get'),

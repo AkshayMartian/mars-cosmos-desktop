@@ -13,6 +13,8 @@ import { appInfo, mySalesToday } from './services/settings'
 import * as returns from './services/returns'
 import * as stickers from './services/stickers'
 import * as admin from './services/admin'
+import * as reports from './services/reports'
+import { exportExcel, exportPdf } from './reportExport'
 import { listPrinters, openDrawer, printAlteration, printReceipt, printStickers, testReceipt, testSticker } from './print'
 import { restoreFromFile, restoreListed } from './restore'
 import * as stock from './services/stock'
@@ -79,6 +81,9 @@ export function registerIpc(): void {
   h('alt:deliver', alterations.deliverAlteration)
   h('alt:saveTailor', alterations.saveTailor)
   h('alt:saveConfig', alterations.saveAlterationConfig)
+  h('reports:get', reports.getReport)
+  h('reports:exportExcel', exportExcel)
+  h('reports:exportPdf', exportPdf)
   h('settings:get', admin.getAllSettings)
   h('settings:saveShop', admin.saveShop)
   h('settings:saveGst', admin.saveGst)
