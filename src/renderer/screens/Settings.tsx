@@ -81,7 +81,7 @@ function ReceiptTab({ all, onSaved }: { all: AllSettings; onSaved: (r: AllSettin
       {node}
       <div className="f"><label htmlFor="r-f">Footer line</label><input id="r-f" value={f.footer} onChange={(e) => setF({ ...f, footer: e.target.value })} /></div>
       <div className="f"><label htmlFor="r-p">Return policy text</label><input id="r-p" value={f.policy} onChange={(e) => setF({ ...f, policy: e.target.value })} /></div>
-      <div className="f"><label htmlFor="r-l">Google review link (printed as QR)</label><input id="r-l" value={f.review} onChange={(e) => setF({ ...f, review: e.target.value })} /></div>
+      <div className="f"><label htmlFor="r-l">Google review link (printed on the receipt)</label><input id="r-l" value={f.review} onChange={(e) => setF({ ...f, review: e.target.value })} /></div>
       <div className="row">
         <div className="f"><label htmlFor="r-d">Return window (days)</label><input id="r-d" type="number" min="0" value={f.returnDays} onChange={(e) => setF({ ...f, returnDays: e.target.value })} /></div>
         <div className="f"><label htmlFor="r-c">Credit note valid (days)</label><input id="r-c" type="number" min="1" value={f.creditNoteDays} onChange={(e) => setF({ ...f, creditNoteDays: e.target.value })} /></div>
@@ -163,7 +163,7 @@ function CoinsTab({ all, onSaved }: { all: AllSettings; onSaved: (c: AllSettings
         <div className="f"><label htmlFor="co-e">Expire after (months)</label><input id="co-e" type="number" min="1" value={f.expiryMonths} onChange={(e) => setF({ ...f, expiryMonths: e.target.value })} /></div>
         <div className="f"><label htmlFor="co-m">Max use per bill (%)</label><input id="co-m" type="number" min="0" max="100" value={f.maxPct} onChange={(e) => setF({ ...f, maxPct: e.target.value })} /></div>
       </div>
-      <div className="hint">Ask the CA how coins show on the GST bill before turning them on at the shop. The coins module itself is not built yet: these values are saved and used when it is.</div>
+      <div className="hint">Customers earn coins on every bill and spend them on a later bill as a discount before GST. Ask the CA how coins show on the GST bill before turning them on at the shop.</div>
       <div><button className="btn p" onClick={() => void save()}>Save</button></div>
     </>
   )

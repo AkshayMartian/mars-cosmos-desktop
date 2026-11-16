@@ -123,7 +123,7 @@ INSERT INTO backups (at,file,size_bytes) VALUES (?,?,?);
 - **Closing never fails because of the backup**: the day closes first, the backup is attempted, and the result says if it failed.
 - **Backups:** `mars-YYYY-MM-DD.db`; a second backup the same day adds the time (`mars-2026-11-12-180509.db`), then a counter if even that exists; **newest 30 kept**, older files and their `backups` rows deleted. Folder: `backup_folder` setting, else `%APPDATA%\mars-pos\backups` (same disk; K-06). Photos are not included (K-05).
 - Held bills stay held across days.
-- Not built: printing the slip, re-opening a closed day (Q-8), per-payment-mode totals on screen.
+- Not built: re-opening a closed day (Q-8), per-payment-mode totals on screen. The slip prints from the **Print day-end slip** button after closing.
 
 ## 7. Test cases
 
@@ -149,3 +149,4 @@ INSERT INTO backups (at,file,size_bytes) VALUES (?,?,?);
 | 2026-11-12 | Day end screen: figures, expenses, counted cash, close day with confirmation | n/a (no git) |
 | 2026-11-12 | Close day runs a real database backup (`backup.ts`); backup name collision in the same second fixed | n/a |
 | 2026-11-16 | Print day-end slip after closing (`print:dayEnd`) | uncommitted |
+| 2026-11-16 | Found by running the app: the result message after closing (short/over, backup path or failure) was wiped by the screen reloading; it now stays | uncommitted |

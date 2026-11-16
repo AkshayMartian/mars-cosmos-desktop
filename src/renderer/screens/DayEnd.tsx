@@ -33,10 +33,10 @@ export function DayEnd() {
     if (!r) return
     setCounted(''); setClosedId(r.sessionId)
     const how = r.diff === 0 ? 'The cash matches.' : r.diff < 0 ? `Cash is short by ${formatRupees(-r.diff)}.` : `Cash is over by ${formatRupees(r.diff)}.`
+    await load() // first: reloading clears the message, so the result is shown after it
     setMsg(r.backup.ok
       ? { ok: true, text: `Day closed. Expected ${formatRupees(r.expected)}, counted ${formatRupees(r.counted)}. ${how} Backup saved to ${r.backup.file}` }
       : { ok: false, text: `Day closed. Expected ${formatRupees(r.expected)}, counted ${formatRupees(r.counted)}. ${how} The backup could NOT be made: ${r.backup.error}` })
-    await load()
   }
 
   if (!s) return <>{node}</>

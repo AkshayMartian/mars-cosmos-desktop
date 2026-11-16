@@ -46,7 +46,7 @@ DELETE FROM backups WHERE id=?;
 - **Names:** `mars-YYYY-MM-DD.db`; later the same day `-HHMMSS`, then `-N`. Never overwrites.
 - **Retention:** newest 30.
 - **A failed backup never blocks closing the day** (D-20).
-- **Restore is not built.** To restore by hand: close the app, copy a backup over the database file, start the app.
+- **Restore** is in Settings → Backup (a listed backup or a file you choose): a safety copy is taken, the file is swapped and the app restarts. Tried in the real app on 2026-11-16: bills and stock went back to the backup. The list of backups shown afterwards is the one stored inside the restored file, so newer copies (and the safety copy) are not listed; use "Restore from backup file…" to pick them.
 
 ## 7. Test cases
 

@@ -80,3 +80,4 @@ No new table. Writes `settings` keys `shop` (name, phone, address, gstin, state)
 | 2026-11-16 | Printing (receipt, tag, slip, test, drawer), receipt width and review link, restore from backup | uncommitted |
 | 2026-11-16 | Light / dark theme button in the top bar: Auto (dark 7 pm to 7 am by the PC clock), Light, Dark. Saved on each PC (browser storage), not in the database | uncommitted |
 | 2026-11-16 | First-run setup wizard for the owner (shop, GST, printers; skippable) and `settings:finishSetup` | uncommitted |
+| 2026-11-16 | Found by running the app: the setup wizard vanished after step 1 (saving the shop name counted as set up); it now stays until Finish or Skip. Coins tab and Receipt tab wording corrected | uncommitted |

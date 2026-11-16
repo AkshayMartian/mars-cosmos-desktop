@@ -5,7 +5,7 @@
 - **What it does:** a customer brings goods back. Staff find the bill (bill number, last digits of it, or the customer's mobile), choose which items and how many come back, optionally add **new items** (exchange), and settle: the customer pays the difference, or is owed money back as a **credit note** or **cash from the drawer**. Credit notes can then be used as part payment on Billing.
 - **Screens:** `Return / exchange` (`src/renderer/screens/Returns.tsx`), plus a *Credit note* row in Billing's payment dialog (`src/renderer/screens/Billing.tsx`).
 - **Who can use it:** Owner, Manager, Cashier. A bill older than the return window needs a manager's PIN unless the user is a manager or owner.
-- **Status:** **done** (2026-11-13). Receipts print from the done dialog. Not included: coins on returns (coins module not built), cancelling a bill, a Bills list screen.
+- **Status:** **done** (2026-11-13). Receipts print from the done dialog. Coins earned on the value returned are taken back (see Coins). Cancelling a bill and the Bills list are in the Bills module.
 - **Code:** screen `src/renderer/screens/Returns.tsx` · service `src/main/services/returns.ts` (+ `createBill` in `billing.ts`, which now accepts credit notes and an exchange settle hook) · shapes and the split rule `src/shared/returns.ts` · receipt wording `src/shared/receipt.ts` · tests `src/main/services/returns.test.ts`.
 
 ## 2. Screen controls

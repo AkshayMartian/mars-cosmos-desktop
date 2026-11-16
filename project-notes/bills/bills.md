@@ -75,7 +75,7 @@
 - A cancelled bill disappears from Day end cash, "My sales today", customer totals and (later) reports, because they count only completed bills. Its number is kept (gap-free numbering).
 - A credit note used as payment gets its balance back (it may already be past its expiry; the shop decides).
 - **Alterations:** jobs of the bill that are still *received* are cancelled with it; once a job is with the tailor, ready or delivered the bill cannot be cancelled. The alteration charge line is a service, so cancelling puts no stock back for it.
-- Coins are not built yet; when they are, cancelling must reverse them too.
+- Cancelling gives back the coins the bill used and takes back the coins it earned (see Coins).
 
 ## 7. Test cases
 

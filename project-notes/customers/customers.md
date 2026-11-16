@@ -128,7 +128,7 @@ Schema: see README section 7. `customers.sizes` (migration 4) holds the JSON. Th
 - **GSTIN**: format and state code are checked, the final check character is not (D-22). Only needed for business customers.
 - **Delete anonymises**: old bills stay and show "Deleted customer"; personal data is wiped.
 - **Visits / spent** are computed from completed bills (returns will subtract once Returns exists).
-- Not built: coins balance, credit notes, alterations chip.
+- Not built: alterations chip. The profile shows the coin balance and the unused credit note balance.
 
 ## 7. Test cases
 

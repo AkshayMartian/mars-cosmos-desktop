@@ -65,6 +65,9 @@ export function App() {
   }, [])
   // a fresh look after every login: the backup warning and the setup flag change while the app stays open
   useEffect(() => { if (user) void window.api.app.info().then(setInfo) }, [user])
+  // The wizard stays until the owner finishes it: saving the shop name in step 1 already makes the shop count as set up.
+  const [wizard, setWizard] = useState(false)
+  useEffect(() => { if (user?.role === 'owner' && info && !info.setupDone) setWizard(true); if (!user) setWizard(false) }, [user, info])
   // "My sales today" chip: refreshed on login, on every screen change, with the clock and right after a bill is saved.
   const [salesTick, setSalesTick] = useState(0)
   useEffect(() => { if (user) void window.api.app.mySales().then(setSales, () => undefined) }, [user, view, clock, salesTick])
@@ -147,8 +150,8 @@ export function App() {
               </div>
             )}
             {/* key = remount on switch so each screen reloads fresh data */}
-            {user.role === 'owner' && info && !info.setupDone
-              ? <Setup onDone={() => { void window.api.app.info().then(setInfo); go(homeFor(user.role)) }} />
+            {wizard
+              ? <Setup onDone={() => { setWizard(false); void window.api.app.info().then(setInfo); go(homeFor(user.role)) }} />
               : Screen ? <Screen key={view} user={user} go={go} intent={intent} /> : <Placeholder title={items.find((m) => m.id === view)?.label ?? ''} />}
           </main>
         </div>

@@ -36,6 +36,7 @@ export function Billing({ user }: { user: StaffPublic }) {
   const [miss, setMiss] = useState(false)
   const [billDisc, setBillDisc] = useState('')
   const [coinsUse, setCoinsUse] = useState('')
+  const [skipOpen, setSkipOpen] = useState(false) // "Not now" on the Start the day prompt
   const [salesBy, setSalesBy] = useState('')
   const [dlg, setDlg] = useState<Dlg>(null)
   const [heldCount, setHeldCount] = useState(0)
@@ -377,7 +378,8 @@ export function Billing({ user }: { user: StaffPublic }) {
         </div>
       </div>
 
-      {ctx && !ctx.session && <OpeningModal onStarted={() => void loadCtx()} />}
+      {ctx && !ctx.session && !skipOpen && <OpeningModal onStarted={() => void loadCtx()} onSkip={() => setSkipOpen(true)} />}
+      {ctx && !ctx.session && skipOpen && <div className="banner bad" role="alert">The day has not been started, so bills cannot be saved. <button className="btn sm" onClick={() => setSkipOpen(false)}>Start the day</button></div>}
       {dlg?.t === 'pay' && ctx && <PayModal grand={totals.grand} creditBalance={notes.reduce((a, n) => a + n.balance, 0)} error={msg && !msg.ok ? msg.text : undefined} onBack={() => { setMsg(null); setDlg(null) }} onSave={saveBill} />}
       {dlg?.t === 'approval' && ctx && (
         <ApprovalModal reasons={dlg.reasons} error={dlg.error} approvers={ctx.approvers}
@@ -401,17 +403,17 @@ export function Billing({ user }: { user: StaffPublic }) {
 /* ---------- dialogs ---------- */
 
 /** Shared by Billing (first bill of the day) and Day end ("Open the day"). */
-export function OpeningModal({ onStarted }: { onStarted: () => void }) {
+export function OpeningModal({ onStarted, onSkip }: { onStarted: () => void; onSkip?: () => void }) {
   const [cash, setCash] = useState('2000')
   const { attempt, node } = useMsg()
   const start = async () => { if (await attempt(() => window.api.billing.openDay(toPaise(cash)))) onStarted() }
   return (
-    <Modal title="Start the day" onClose={() => undefined}>
+    <Modal title="Start the day" onClose={() => onSkip?.()}>
       <p style={{ margin: 0 }}>Count the cash in the drawer before the first bill.</p>
       {node}
       <div className="f"><label htmlFor="oc">Opening cash ₹</label>
         <input id="oc" type="number" min="0" className="big" autoFocus value={cash} onChange={(e) => setCash(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void start()} /></div>
-      <div className="mfoot"><button className="btn p" onClick={() => void start()}>Start day</button></div>
+      <div className="mfoot">{onSkip && <button className="btn" onClick={onSkip}>Not now</button>}<button className="btn p" onClick={() => void start()}>Start day</button></div>
     </Modal>
   )
 }
