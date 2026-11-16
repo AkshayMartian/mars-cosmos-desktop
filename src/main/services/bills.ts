@@ -5,6 +5,7 @@ import { checkApprover, isManager } from './approval'
 import { getBill, openSessionRow } from './billing'
 import { requireRole } from './session'
 import { addMove } from './stock'
+import { reverseForCancel } from './coins'
 
 const WHO = ['owner', 'manager', 'cashier'] as const
 
@@ -99,7 +100,8 @@ export function cancelBill(input: CancelInput): BillDetail {
     for (const l of lines) addMove({ variantId: l.v, qty: l.qty, type: 'cancel', ref: b.no, reason, staffId: actor.id, at })
     const cn = db.prepare("SELECT credit_note_id AS id,amount FROM payments WHERE bill_id=? AND mode='credit_note' AND credit_note_id IS NOT NULL").all(input.billId) as { id: string; amount: number }[]
     for (const p of cn) db.prepare('UPDATE credit_notes SET balance=balance+? WHERE id=?').run(p.amount, p.id)
-    audit(actor.id, 'bill_cancel', { bill: b.no, reason, approvedBy, creditNoteRestored: cn.reduce((a, p) => a + p.amount, 0) })
+    const coins = reverseForCancel(input.billId, at)
+    audit(actor.id, 'bill_cancel', { bill: b.no, reason, approvedBy, creditNoteRestored: cn.reduce((a, p) => a + p.amount, 0), coinsGivenBack: coins.back, coinsTakenBack: coins.taken })
   })()
   return billDetail(input.billId)
 }

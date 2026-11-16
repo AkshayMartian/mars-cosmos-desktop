@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { getDb } from '../db'
 import type { CloseDayResult, DayEndSummary } from '@shared/dayend'
+import { formatPlain } from '@shared/money'
 import { audit } from './auth'
 import { runBackup } from './backup'
 import { openSessionRow } from './billing'
@@ -71,5 +72,29 @@ export function closeDay(countedCash: number): CloseDayResult {
     backup = { ok: false, error: e instanceof Error ? e.message : 'The backup failed.' }
     audit(actor.id, 'backup_failed', { error: backup.error })
   }
-  return { expected, counted: countedCash, diff, backup }
+  return { sessionId: s.id, expected, counted: countedCash, diff, backup }
+}
+
+/** The day-end slip for a closed day, as plain text for the receipt printer. */
+export function daySlip(sessionId: string, width = 36): string {
+  requireRole(...WHO)
+  const d = getDb()
+    .prepare(`SELECT d.date,d.counter,d.opening_cash AS opening,d.expected_cash AS expected,d.counted_cash AS counted,d.diff,d.closed_at AS closedAt,
+                     COALESCE(o.name,'') AS openedBy,COALESCE(c.name,'') AS closedBy
+              FROM day_sessions d LEFT JOIN staff o ON o.id=d.opened_by LEFT JOIN staff c ON c.id=d.closed_by WHERE d.id=? AND d.status='closed'`)
+    .get(sessionId) as { date: string; counter: string; opening: number; expected: number; counted: number; diff: number; closedAt: string; openedBy: string; closedBy: string } | undefined
+  if (!d) throw new Error('That day is not closed yet.')
+  const t = totals(sessionId, d.opening)
+  const shop = (getDb().prepare("SELECT value FROM settings WHERE key='shop'").get() as { value: string } | undefined)
+  const name = (shop ? (JSON.parse(shop.value) as { name?: string }).name : '') || 'Your Shop'
+  const lr = (l: string, r: string): string => l + ' '.repeat(Math.max(1, width - l.length - r.length)) + r
+  const mid = (s: string): string => ' '.repeat(Math.max(0, Math.floor((width - s.length) / 2))) + s
+  const line = '-'.repeat(width)
+  const out = [mid(name.toUpperCase()), mid('DAY END'), line, lr('Date', d.date), lr('Counter', d.counter), lr('Opened by', d.openedBy), lr('Closed by', d.closedBy), line,
+    lr('Opening cash', formatPlain(d.opening)), lr('Cash sales', formatPlain(t.cashIn)), lr('Cash refunds', formatPlain(-t.cashOut))]
+  for (const e of t.expenses) out.push(lr(`Expense: ${e.note}`.slice(0, width - 10), formatPlain(-e.amount)))
+  out.push(line, lr('Expected cash', formatPlain(d.expected)), lr('Counted cash', formatPlain(d.counted)),
+    lr(d.diff === 0 ? 'Cash matches' : d.diff < 0 ? 'SHORT' : 'OVER', formatPlain(Math.abs(d.diff))), line, lr('Bills', String(t.salesCount)),
+    mid(new Date(d.closedAt).toLocaleString('en-IN')))
+  return out.join('\n')
 }

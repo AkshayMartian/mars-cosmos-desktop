@@ -38,7 +38,7 @@ export function Settings() {
 
 /* ---------- shop ---------- */
 
-function ShopTab({ all, onSaved }: { all: AllSettings; onSaved: (s: AllSettings['shop']) => void }) {
+export function ShopTab({ all, onSaved }: { all: AllSettings; onSaved: (s: AllSettings['shop']) => void }) {
   const [f, setF] = useState(all.shop)
   const { run, node } = useMsg()
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value })
@@ -55,7 +55,7 @@ function ShopTab({ all, onSaved }: { all: AllSettings; onSaved: (s: AllSettings[
 
 /* ---------- GST ---------- */
 
-function GstTab({ value, onSaved }: { value: GstScheme; onSaved: (g: GstScheme) => void }) {
+export function GstTab({ value, onSaved }: { value: GstScheme; onSaved: (g: GstScheme) => void }) {
   const { run, node } = useMsg()
   return (
     <>
@@ -95,7 +95,7 @@ function ReceiptTab({ all, onSaved }: { all: AllSettings; onSaved: (r: AllSettin
 
 /* ---------- printers ---------- */
 
-function PrintersTab({ all, onSaved }: { all: AllSettings; onSaved: (p: AllSettings['printers']) => void }) {
+export function PrintersTab({ all, onSaved }: { all: AllSettings; onSaved: (p: AllSettings['printers']) => void }) {
   const [receipt, setReceipt] = useState(all.printers.receipt)
   const [drawer, setDrawer] = useState(all.printers.drawer)
   const [sticker, setSticker] = useState('')

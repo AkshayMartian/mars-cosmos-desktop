@@ -2,6 +2,7 @@ import type { CustomerSizes } from './customers'
 import type { Paise } from './money'
 import type { BillAlteration } from './alterations'
 import type { GstRule, GstScheme, Role } from './types'
+import type { CoinSettings } from './settings'
 
 /** Data shapes for billing that cross the IPC boundary. Money is always paise. */
 
@@ -42,6 +43,8 @@ export interface BillingContext {
   maxDiscountPct: number
   actorRole: Role
   shop: ShopInfo
+  /** coin rules from Settings → Coins */
+  coins: CoinSettings
 }
 
 export interface CustomerDto {
@@ -53,6 +56,8 @@ export interface CustomerDto {
   sizes: CustomerSizes
   waConsent: boolean
   offersConsent: boolean
+  /** coins the customer can spend now (expired ones already dropped) */
+  coins: number
 }
 
 export interface NewCustomerInput {
@@ -68,6 +73,8 @@ export interface NewBillInput {
   lines: { variantId: string; qty: number; /** line discount, paise */ disc: Paise }[]
   customerId: string | null
   billDisc: Paise
+  /** coins the customer spends on this bill (needs a customer; checked against balance and the max % of the bill) */
+  coinsUsed?: number
   /** who gets the commission; defaults to the person billing */
   salesBy: string | null
   payments: { mode: PayMode; amount: Paise }[]
@@ -95,6 +102,11 @@ export interface BillDto {
   sgst: Paise
   roundOff: Paise
   grand: Paise
+  /** coins spent on this bill, their value, coins earned and the customer's balance now */
+  coinsUsed?: number
+  coinValue?: Paise
+  coinsEarned?: number
+  coinBalance?: number
   payments: { mode: string; amount: Paise }[]
   /** alteration jobs made with this bill (printed on the receipt) */
   alterations?: { id: string; no: string; work: string[]; dueAt: string }[]

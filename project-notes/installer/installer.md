@@ -36,3 +36,4 @@
 |---|---|---|
 | 2026-11-12 | Removed the `postinstall` native rebuild (not needed; fixes "no Python" error) | n/a (no git) |
 | 2026-11-13 | Placeholder note created | n/a |
+| 2026-11-16 | `npm run dist` builds `distMARS POS Setup 0.1.0.exe` (electron-builder, NSIS, per-user). Electron moved to devDependencies; native rebuild off (prebuilt better-sqlite3). Not yet installed on a clean PC; unsigned; default icon | uncommitted |

@@ -81,7 +81,8 @@ describe('excel import', () => {
     expect(p.goodPieces).toBe(11)
 
     const r = commitImport(p.token)
-    expect(r).toEqual({ products: 1, items: 2, pieces: 11 })
+    expect(r).toMatchObject({ products: 1, items: 2, pieces: 11 })
+    expect(r.variantIds).toHaveLength(2)
     const prod = listProducts('Formal')[0]!
     expect(prod).toMatchObject({ name: 'Formal Shirt', stock: 11, sizes: ['40', '42'] })
     expect(stockLevels('Formal').map((s) => s.qty)).toEqual([6, 5])
@@ -155,6 +156,8 @@ describe('excel import', () => {
     const g = await xlsx('from-examples.xlsx', ['Product', 'Brand', 'Category', 'Size', 'Colour', 'MRP', 'Sale price', 'Cost', 'Qty'], filled)
     const pv = await previewFile(g)
     expect(pv.rows.map((r) => r.error)).toEqual([null, null, null, null])
-    expect(commitImport(pv.token)).toEqual({ products: 2, items: 4, pieces: 18 })
+    const done = commitImport(pv.token)
+    expect(done).toMatchObject({ products: 2, items: 4, pieces: 18 })
+    expect(done.variantIds).toHaveLength(4) // so labels can be printed for exactly these
   })
 })

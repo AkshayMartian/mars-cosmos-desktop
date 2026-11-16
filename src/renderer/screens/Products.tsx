@@ -9,19 +9,23 @@ import { EditProduct, NewProduct } from './ProductForm'
 
 type Mode = { k: 'list' } | { k: 'new' } | { k: 'edit'; id: string }
 
-export function Products({ user, intent }: { user: StaffPublic; intent?: string }) {
+export function Products({ user, intent, onStickers }: { user: StaffPublic; intent?: string; onStickers: (variantIds: string[]) => void }) {
   const canEdit = user.role === 'owner' || user.role === 'manager'
   // intent 'new' = sent here by "+ New product" on Stock in: open the Add product form straight away
   const [mode, setMode] = useState<Mode>(intent === 'new' && canEdit ? { k: 'new' } : { k: 'list' })
   const [notice, setNotice] = useState<string | null>(null) // shown on the list after Save / Archive
-  const back = (text?: string) => { setNotice(text ?? null); setMode({ k: 'list' }) }
+  // `stickers` = the items to print labels for: leave this screen for Print stickers with them in the list
+  const back = (text?: string, stickers?: string[]) => {
+    if (stickers?.length) return onStickers(stickers)
+    setNotice(text ?? null); setMode({ k: 'list' })
+  }
 
   if (mode.k === 'new') return <NewProduct onDone={back} />
   if (mode.k === 'edit') return <EditProduct id={mode.id} canEdit={canEdit} onDone={back} />
-  return <ProductList canEdit={canEdit} notice={notice} onNew={() => setMode({ k: 'new' })} onOpen={(id) => setMode({ k: 'edit', id })} />
+  return <ProductList canEdit={canEdit} notice={notice} onNew={() => setMode({ k: 'new' })} onOpen={(id) => setMode({ k: 'edit', id })} onStickers={onStickers} />
 }
 
-function ProductList({ canEdit, notice, onNew, onOpen }: { canEdit: boolean; notice: string | null; onNew: () => void; onOpen: (id: string) => void }) {
+function ProductList({ canEdit, notice, onNew, onOpen, onStickers }: { canEdit: boolean; notice: string | null; onNew: () => void; onOpen: (id: string) => void; onStickers: (variantIds: string[]) => void }) {
   const [rows, setRows] = useState<ProductListRow[]>([])
   const [cats, setCats] = useState<CategoryDto[]>([])
   const [q, setQ] = useState('')
@@ -49,7 +53,7 @@ function ProductList({ canEdit, notice, onNew, onOpen }: { canEdit: boolean; not
       {notice && <div className="banner good" role="status">{notice}</div>}
       {node}
       {dlg === 'cats' && <CategoriesModal onClose={() => { setDlg(null); setTick((t) => t + 1) }} />}
-      {dlg === 'import' && <ImportModal onClose={() => setDlg(null)} onDone={(text) => { setDlg(null); setTick((t) => t + 1); setMsg({ ok: true, text }) }} />}
+      {dlg === 'import' && <ImportModal onClose={() => setDlg(null)} onStickers={onStickers} onDone={(text) => { setDlg(null); setTick((t) => t + 1); setMsg({ ok: true, text }) }} />}
       <div className="panel">
         <div className="row">
           <div className="f"><label htmlFor="pq">Search name, brand or barcode</label><input id="pq" value={q} onChange={(e) => setQ(e.target.value)} /></div>

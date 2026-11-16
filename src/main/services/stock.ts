@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { getDb } from '../db'
 import {
-  variantLabel,
+  DUPLICATE_PURCHASE, variantLabel,
   type MoveRow, type PurchaseRow, type StockInInput, type StockRow, type SupplierDto, type VariantSearchRow
 } from '@shared/catalogue'
 import type {
@@ -101,6 +101,10 @@ export function stockIn(input: StockInInput): { purchaseId: string; qty: number 
     if (!db.prepare('SELECT 1 FROM variants WHERE id=?').get(l.variantId)) throw new Error('An item on this list no longer exists.')
   }
   if (input.supplierId && !db.prepare('SELECT 1 FROM suppliers WHERE id=?').get(input.supplierId)) throw new Error('Supplier not found.')
+
+  const billNo = input.billNo.trim()
+  if (billNo && !input.allowDuplicate && db.prepare("SELECT 1 FROM purchases WHERE bill_no=? AND COALESCE(supplier_id,'')=COALESCE(?,'')").get(billNo, input.supplierId))
+    throw new Error(`${DUPLICATE_PURCHASE} supplier bill ${billNo} was already entered for this supplier.`)
 
   const id = randomUUID()
   const at = new Date().toISOString()

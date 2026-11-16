@@ -121,3 +121,4 @@
 |---|---|---|
 | 2026-11-13 | Placeholder note created | n/a (no git) |
 | 2026-11-13 | Returns, exchange, credit notes (issue, use, expiry), screen, tests | uncommitted |
+| 2026-11-16 | A return takes back the coins earned on the value returned (see [Coins](../coins/coins.md)) | uncommitted |

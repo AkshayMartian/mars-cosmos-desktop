@@ -97,3 +97,4 @@
 |---|---|---|
 | 2026-11-13 | Placeholder note created | n/a (no git) |
 | 2026-11-13 | Bills list, detail, reprint, WhatsApp, cancel; tests | uncommitted |
+| 2026-11-16 | Cancelling gives back the coins used and takes back the coins earned (see [Coins](../coins/coins.md)) | uncommitted |

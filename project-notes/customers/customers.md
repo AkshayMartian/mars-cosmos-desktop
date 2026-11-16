@@ -161,3 +161,4 @@ Schema: see README section 7. `customers.sizes` (migration 4) holds the JSON. Th
 | 2026-11-12 | Customers screen: list, search, profile, add/edit dialog, delete, birthdays panel with WhatsApp wish | n/a (no git) |
 | 2026-11-12 | Sizes made dynamic per category; migration 2 (`customer_sizes`) | n/a |
 | 2026-11-13 | **Usual sizes are now three fixed plain-text boxes** (shirt, trouser, shoe) stored as JSON in `customers.sizes` (schema v4); heading "Customer's usual sizes (optional)" with a hint and placeholders; per-category boxes and `customers:sizeFields` removed (D-27); Billing customer card shows the sizes and finds the customer as soon as 10 digits are typed | n/a |
+| 2026-11-16 | Profile shows coins and unused credit note balance | uncommitted |

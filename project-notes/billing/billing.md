@@ -276,3 +276,4 @@ INSERT INTO payments (bill_id,mode,amount) VALUES (?,?,?);
 | 2026-11-12 | Search tells you when a match is archived; held-bill lists order newest first | n/a |
 | 2026-11-13 | Cart rows show the photo of the scanned colour (`billing:photo`); the customer card shows the usual sizes and the customer is found as soon as 10 digits are typed | n/a |
 | 2026-11-13 | Wrong approver PINs are now limited (lockout); a refused approval returns to the approval dialog with the real reason (e.g. "locked for 60 seconds") | n/a |
+| 2026-11-16 | Coins: balance on the customer card, "Use coins" box, coins on the receipt (see [Coins](../coins/coins.md)) | uncommitted |

@@ -113,13 +113,14 @@ export function commitImport(token: string): ImportResult {
   for (const g of good) byProduct.set(g.product.toLowerCase(), [...(byProduct.get(g.product.toLowerCase()) ?? []), g])
 
   let items = 0
+  const variantIds: string[] = []
   getDb().transaction(() => {
     for (const group of byProduct.values()) {
       const first = group[0]!
-      insertProduct(actor.id, { name: first.product, brand: first.brand, categoryId: first.categoryId }, group.map((g) => g.spec), 'import')
+      variantIds.push(...insertProduct(actor.id, { name: first.product, brand: first.brand, categoryId: first.categoryId }, group.map((g) => g.spec), 'import').variantIds)
       items += group.length
     }
   })()
   pending.delete(token)
-  return { products: byProduct.size, items, pieces: good.reduce((a, g) => a + g.spec.qty, 0) }
+  return { products: byProduct.size, items, pieces: good.reduce((a, g) => a + g.spec.qty, 0), variantIds }
 }

@@ -19,6 +19,7 @@ export function Stickers({ intent }: { intent?: string }) {
   useEffect(() => {
     void run(() => window.api.stickers.context()).then((c) => c && setCtx(c))
     if (intent?.startsWith('purchase')) void loadLast(intent.split(':')[1])
+    else if (intent?.startsWith('variants:')) void loadStock(intent.slice(9).split(',').filter(Boolean))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -53,6 +54,12 @@ export function Stickers({ intent }: { intent?: string }) {
   async function onEnter() {
     if (results.length === 1) return void add(results[0]!)
     if (!results.length && q.trim()) setMsg({ ok: false, text: `No item found for "${q.trim()}".` })
+  }
+
+  /** from Products / Import: one label for every piece in stock of these items */
+  async function loadStock(ids: string[]) {
+    const items = await run(() => window.api.stickers.stock(ids))
+    if (items) put(items, (i) => i.qty)
   }
 
   async function loadLast(purchaseId?: string) {

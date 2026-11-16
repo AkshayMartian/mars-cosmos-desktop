@@ -26,6 +26,11 @@ export interface AppInfo {
   shopName: string
   counter: string
   idleMinutes: number
+  /** false on a brand-new install: the owner is walked through shop, GST and printers after the first login */
+  setupDone: boolean
+  /** days since the newest backup (null = never); `backupWarn` = older than 2 days while the shop has data */
+  backupDays: number | null
+  backupWarn: boolean
 }
 
 export type MenuId =

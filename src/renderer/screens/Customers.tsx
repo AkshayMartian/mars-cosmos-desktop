@@ -110,6 +110,8 @@ function Detail({ p, canDelete, onEdit, onDelete }: { p: CustomerProfile; canDel
         <span className="sub">Offers</span><span>{p.offersConsent ? 'Yes' : 'No'}</span>
         <span className="sub">Visits</span><span className="num">{p.visits}</span>
         <span className="sub">Spent</span><span className="num">{formatRupees(p.spent)}</span>
+        <span className="sub">Coins</span><span className="num">{p.coins}</span>
+        <span className="sub">Credit notes</span><span className="num">{formatRupees(p.creditNotes)}</span>
       </div>
       {p.consentAt && <div className="hint">Consent recorded {fmtDay(p.consentAt)} by {p.consentBy ?? '—'}</div>}
       {p.notes && <div className="hint">Note: {p.notes}</div>}

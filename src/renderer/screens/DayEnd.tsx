@@ -15,6 +15,7 @@ export function DayEnd() {
   const [confirm, setConfirm] = useState(false)
   const [opening, setOpening] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [closedId, setClosedId] = useState<string | null>(null) // the day just closed, for its slip
   const { run, attempt, setMsg, node } = useMsg()
 
   const load = useCallback(() => run(() => window.api.day.summary()).then((d) => d && setS(d)), [run])
@@ -30,7 +31,7 @@ export function DayEnd() {
     const r = await run(() => window.api.day.close(toPaise(counted)))
     setBusy(false)
     if (!r) return
-    setCounted('')
+    setCounted(''); setClosedId(r.sessionId)
     const how = r.diff === 0 ? 'The cash matches.' : r.diff < 0 ? `Cash is short by ${formatRupees(-r.diff)}.` : `Cash is over by ${formatRupees(r.diff)}.`
     setMsg(r.backup.ok
       ? { ok: true, text: `Day closed. Expected ${formatRupees(r.expected)}, counted ${formatRupees(r.counted)}. ${how} Backup saved to ${r.backup.file}` }
@@ -47,7 +48,7 @@ export function DayEnd() {
         {node}
         {opening && <OpeningModal onStarted={() => { setOpening(false); setMsg(null); void load() }} />}
         <div className="panel">
-          <div className="empty">No open day on this counter.<br /><br /><button className="btn p" onClick={() => setOpening(true)}>Open the day</button></div>
+          <div className="empty">No open day on this counter.<br /><br /><button className="btn p" onClick={() => setOpening(true)}>Open the day</button>{closedId && <> <button className="btn" onClick={() => void run(() => window.api.print.dayEnd(closedId), 'Day-end slip sent to the printer.')}>Print day-end slip</button></>}</div>
         </div>
       </>
     )

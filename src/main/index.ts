@@ -4,7 +4,7 @@ import { resolveDbPath } from './config'
 import { openDb } from './db'
 import { registerIpc } from './ipc'
 import { purgeTemp, setPhotoDir } from './photoStore'
-import { setBackupDir } from './services/backup'
+import { autoBackupIfDue, setBackupDir } from './services/backup'
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -31,6 +31,13 @@ function createWindow(): void {
   else void win.loadFile(join(__dirname, '../renderer/index.html'))
 }
 
+// One copy of the app per PC: a second launch brings the open window forward.
+if (!app.requestSingleInstanceLock()) app.quit()
+app.on('second-instance', () => {
+  const w = BrowserWindow.getAllWindows()[0]
+  if (w) { if (w.isMinimized()) w.restore(); w.focus() }
+})
+
 app.whenReady().then(() => {
   const dbPath = resolveDbPath(app.getPath('userData'))
   console.log(`[mars-pos] database: ${dbPath}`)
@@ -39,6 +46,7 @@ app.whenReady().then(() => {
   purgeTemp(24 * 60 * 60 * 1000) // photos chosen but never saved
   setBackupDir(join(app.getPath('userData'), 'backups')) // until a USB / second-disk folder is chosen in Settings
   registerIpc()
+  autoBackupIfDue()
   createWindow()
   app.on('activate', () => BrowserWindow.getAllWindows().length === 0 && createWindow())
 })

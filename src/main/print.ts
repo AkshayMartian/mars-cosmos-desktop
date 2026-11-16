@@ -4,6 +4,7 @@ import { labelSize, printDocument, LABEL_CSS, type StickerItem, type StickerPrin
 import { getAltJob } from './services/alterations'
 import { alterationConfig } from './services/altcore'
 import { receiptTextFor } from './services/billing'
+import { daySlip } from './services/dayend'
 import { requireRole } from './services/session'
 import { getSetting } from './services/settings'
 import { logPrint, prepareJob, stickerContext } from './services/stickers'
@@ -79,6 +80,12 @@ export async function testReceipt(): Promise<void> {
   const shop = getSetting<{ name?: string }>('shop', {}).name || 'Your Shop'
   const line = '-'.repeat(width)
   await sendToPrinter(textJob([shop.toUpperCase(), 'TEST RECEIPT', line, 'If you can read this, the receipt', 'printer is working.', line, new Date().toLocaleString('en-IN')].join('\n'), width))
+}
+
+/** The day-end slip of a closed day, on the receipt printer. */
+export async function printDayEnd(sessionId: string): Promise<void> {
+  const width = getSetting<{ width?: string }>('receipt', {}).width === '58 mm' ? 32 : 36
+  await sendToPrinter(textJob(daySlip(sessionId, width), width))
 }
 
 /**

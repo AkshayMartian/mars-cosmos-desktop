@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { formatRupees, toPaise } from '@shared/money'
-import type { PurchaseRow, SupplierDto, VariantSearchRow } from '@shared/catalogue'
+import { DUPLICATE_PURCHASE, type PurchaseRow, type SupplierDto, type VariantSearchRow } from '@shared/catalogue'
 import { fmtDay, Modal, num, useMsg } from '../ui'
 
 interface Line { v: VariantSearchRow; qty: string; cost: string }
@@ -57,10 +57,14 @@ export function StockIn({ onNewProduct, canAddProduct, onStickers }: { onNewProd
 
   async function save() {
     setBusy(true)
-    const r = await run(() => window.api.stock.in({
-      supplierId: supplierId || null, billNo, billDate,
-      lines: lines.map((l) => ({ variantId: l.v.id, qty: num(l.qty), cost: toPaise(l.cost) }))
-    }))
+    const input = { supplierId: supplierId || null, billNo, billDate, lines: lines.map((l) => ({ variantId: l.v.id, qty: num(l.qty), cost: toPaise(l.cost) })) }
+    // the same supplier bill number again: ask before saving it twice
+    const r = await run(async () => {
+      try { return await window.api.stock.in(input) } catch (e) {
+        if (e instanceof Error && e.message.startsWith(DUPLICATE_PURCHASE) && window.confirm(`${e.message} Save it again anyway?`)) return window.api.stock.in({ ...input, allowDuplicate: true })
+        throw e
+      }
+    })
     setBusy(false)
     if (!r) return
     setLines([]); setBillNo('')

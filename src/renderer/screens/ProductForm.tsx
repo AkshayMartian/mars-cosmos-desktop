@@ -4,7 +4,6 @@ import { toPaise } from '@shared/money'
 import type { CategoryDto, ProductDetail, ProductPhotoDto } from '@shared/catalogue'
 import { Modal, num, pickPhoto, useMsg } from '../ui'
 
-const STICKERS_SOON = 'Sticker printing arrives with the printing milestone, right after billing.'
 
 /** One colour's photo: shown in its row on the right-hand panel. */
 interface ColourPhoto { colour: string; dataUrl: string | null; fileName: string | null }
@@ -46,7 +45,7 @@ function PhotosPanel({ rows, editable, onAdd, onRemove, children }: {
 
 const split = (s: string): string[] => [...new Set(s.split(',').map((x) => x.trim()).filter(Boolean))]
 
-export function NewProduct({ onDone }: { onDone: (notice?: string) => void }) {
+export function NewProduct({ onDone }: { onDone: (notice?: string, stickers?: string[]) => void }) {
   const [cats, setCats] = useState<CategoryDto[]>([])
   const [f, setF] = useState({ name: '', brand: '', categoryId: '', mrp: '', sale: '', cost: '', sizes: 'S, M, L, XL', colours: 'Blue' })
   const [grid, setGrid] = useState<Record<string, string>>({})
@@ -76,7 +75,7 @@ export function NewProduct({ onDone }: { onDone: (notice?: string) => void }) {
       photos: Object.fromEntries(colours.filter((c) => photos[c]).map((c) => [c, photos[c]!.file]))
     }))
     setBusy(false)
-    if (r) onDone(`Saved ${r.variantIds.length} items.${printStickers ? ' ' + STICKERS_SOON : ''}`)
+    if (r) onDone(`Saved ${r.variantIds.length} items.`, printStickers ? r.variantIds : undefined)
   }
 
   return (
@@ -145,7 +144,7 @@ export function NewProduct({ onDone }: { onDone: (notice?: string) => void }) {
   )
 }
 
-export function EditProduct({ id, canEdit, onDone }: { id: string; canEdit: boolean; onDone: (notice?: string) => void }) {
+export function EditProduct({ id, canEdit, onDone }: { id: string; canEdit: boolean; onDone: (notice?: string, stickers?: string[]) => void }) {
   const [p, setP] = useState<ProductDetail | null>(null)
   const [cats, setCats] = useState<CategoryDto[]>([])
   const [head, setHead] = useState({ name: '', brand: '', categoryId: '' })
@@ -262,7 +261,7 @@ export function EditProduct({ id, canEdit, onDone }: { id: string; canEdit: bool
         {canEdit ? (
           <PhotosPanel rows={photoRows} editable onAdd={(c) => void addPhoto(c)} onRemove={(c) => void removePhoto(c)}>
             <button className="btn p" onClick={() => void saveChanges()}>Save changes</button>
-            <button className="btn" onClick={() => onDone(STICKERS_SOON)}>Print stickers</button>
+            <button className="btn" onClick={() => onDone(undefined, p.variants.map((v) => v.id))}>Print stickers</button>
             {p.active
               ? <button className="btn danger" onClick={() => setConfirmArchive(true)}>Archive</button>
               : <button className="btn p" onClick={() => void restore()}>Restore</button>}

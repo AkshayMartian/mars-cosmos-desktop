@@ -33,6 +33,8 @@
 
 ## 4. APIs
 
+- **Same supplier bill twice:** `stock:in` refuses a bill number already entered for the same supplier with `Duplicate purchase: supplier bill … was already entered for this supplier.` The screen asks "Save it again anyway?" and, on yes, sends `allowDuplicate:true`.
+
 IPC result `{ ok:true, data }` / `{ ok:false, error:"message" }`.
 
 ### `window.api.stock.search(q)` · channel `stock:search`
@@ -135,3 +137,4 @@ INSERT INTO stock_moves (variant_id,qty,type,ref,reason,staff_id,at) VALUES (?,?
 | 2026-11-12 | Matched the design: + New product, Add supplier dialog with mobile and GSTIN, first supplier preselected, Stickers button | n/a |
 | 2026-11-12 | Scan box looks up again on Enter (fast scanners no longer race the live search) | n/a |
 | 2026-11-12 | Recent purchases ordered by time then insertion (ties) | n/a |
+| 2026-11-16 | Saving the same supplier bill number again asks first ("Duplicate purchase") | uncommitted |

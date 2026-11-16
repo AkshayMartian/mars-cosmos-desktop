@@ -42,6 +42,8 @@ After closing, Billing shows "Start the day" again for the next day.
 
 ## 4. APIs
 
+- `print:dayEnd` · `window.api.print.dayEnd(sessionId)`: prints the slip of a closed day (opening, cash sales, refunds, expenses, expected, counted, short/over, bills) on the receipt printer. The button **Print day-end slip** appears on the Day end screen after closing. `day:close` now also returns `sessionId`.
+
 IPC result `{ ok:true, data }` / `{ ok:false, error:"message" }`. Roles for all: **owner, manager, cashier**.
 
 ### `window.api.day.summary()` · channel `day:summary`
@@ -146,3 +148,4 @@ INSERT INTO backups (at,file,size_bytes) VALUES (?,?,?);
 |---|---|---|
 | 2026-11-12 | Day end screen: figures, expenses, counted cash, close day with confirmation | n/a (no git) |
 | 2026-11-12 | Close day runs a real database backup (`backup.ts`); backup name collision in the same second fixed | n/a |
+| 2026-11-16 | Print day-end slip after closing (`print:dayEnd`) | uncommitted |

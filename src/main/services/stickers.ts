@@ -37,6 +37,15 @@ export function stickerItems(ids: string[]): StickerItem[] {
   return ids.map((id) => rows.find((r) => r.variantId === id)).filter((r): r is Row => !!r).map((r) => toItem(r, shop))
 }
 
+/** Items by id with the quantity on the shelf (at least 1): "print a label for every piece I have". */
+export function stockItems(ids: string[]): StickerItem[] {
+  requireRole('owner', 'manager', 'store')
+  if (!ids.length) return []
+  const rows = getDb().prepare(`${BASE},COALESCE(s.qty,0) AS qty FROM variants v JOIN products p ON p.id=v.product_id LEFT JOIN v_stock s ON s.variant_id=v.id WHERE v.id IN (${ids.map(() => '?').join(',')}) ORDER BY p.name,v.rowid`).all(...ids) as Row[]
+  const shop = shopName()
+  return rows.map((r) => toItem(r, shop))
+}
+
 /** The pieces of a purchase (the latest when no id) with the quantity received: "print what just arrived". */
 export function lastPurchaseItems(purchaseId?: string): StickerItem[] {
   requireRole('owner', 'manager', 'store')

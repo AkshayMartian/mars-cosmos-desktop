@@ -8,6 +8,7 @@ import { createBill, getBill, nextBillNo, openSessionRow } from './billing'
 import { requireRole } from './session'
 import { getSetting } from './settings'
 import { addMove } from './stock'
+import { reverseForReturn } from './coins'
 
 const WHO = ['owner', 'manager', 'cashier'] as const
 
@@ -145,6 +146,9 @@ export function doReturn(input: ReturnInput): ReturnResult {
       addMove({ variantId: p.l.variantId, qty: p.q, type: 'sale_return', ref: no, staffId: actor.id, at })
     }
 
+    // The coins earned on what comes back are taken back (never more than the customer still has).
+    const coinsTaken = orig.customer_id ? reverseForReturn(orig.customer_id, id, refund, at) : 0
+
     // Exchange: new items go on a normal sale bill; the returned value pays for them first.
     let sale: ReturnResult['saleBill'] = null
     let applied = 0
@@ -180,7 +184,7 @@ export function doReturn(input: ReturnInput): ReturnResult {
         cashRefund = left
       }
     }
-    audit(actor.id, 'return', { bill: orig.no, returnBill: no, value: refund, exchange: sale?.no ?? null, creditNote: creditNote?.amount ?? 0, cashRefund, ...(approvedBy ? { approvedBy, ageDays: age } : {}) })
+    audit(actor.id, 'return', { bill: orig.no, returnBill: no, value: refund, exchange: sale?.no ?? null, creditNote: creditNote?.amount ?? 0, cashRefund, coinsTaken, ...(approvedBy ? { approvedBy, ageDays: age } : {}) })
     result = { returnBill: getBill(id), saleBill: sale, creditNote, cashRefund, customerPaid }
   })()
   return result

@@ -8,6 +8,8 @@
 - **Status:** **partial** (2026-11-12): automatic backup on close = done and tested; folder setting, manual backup, restore, "no backup for 2 days" warning, copying photos = pending.
 - **Code:** `src/main/services/backup.ts` (`runBackup`, `setBackupDir`, `backupFolder`) · called by `src/main/services/dayend.ts` (`closeDay`) · start-up wiring in `src/main/index.ts` · table `backups` · tests in `src/main/services/dayend.test.ts` (backup group).
 
+**Also automatic:** at app start `autoBackupIfDue()` backs up when the shop has data and the newest backup is over 24 hours old (it never stops the app from opening). A yellow bar on every screen (owner and manager) says when the newest backup is over 2 days old or there is none (`app:info` → `backupWarn`, `backupDays`). A missing USB folder gives "The backup folder … cannot be used. If it is on a USB drive, plug the drive in…".
+
 ## 2. Screen controls
 
 No dedicated controls. (Day end's **Close day** is what triggers it; the result message shows the backup path.)
@@ -60,3 +62,4 @@ DELETE FROM backups WHERE id=?;
 |---|---|---|
 | 2026-11-12 | Backup on day close with `VACUUM INTO`, 30-copy retention | n/a (no git) |
 | 2026-11-12 | Unique file names (two backups in the same second collided) | n/a |
+| 2026-11-16 | Automatic backup at app start when the newest is over 24 hours old (`autoBackupIfDue`); clear message when the backup drive is missing; warning bar (owner, manager) when the newest backup is over 2 days old or none | uncommitted |

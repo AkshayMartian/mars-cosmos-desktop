@@ -19,6 +19,8 @@ export interface DayEndSummary {
 }
 
 export interface CloseDayResult {
+  /** the day that was closed (to print its slip) */
+  sessionId: string
   expected: Paise
   counted: Paise
   /** counted minus expected: negative = cash is short */

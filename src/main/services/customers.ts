@@ -6,9 +6,10 @@ import { NO_SIZES, parseSizes } from '@shared/customers'
 import { parseDayMonth, todayMonthDay } from '@shared/dates'
 import { audit } from './auth'
 import { requireRole } from './session'
+import { liveBalance } from './coins'
 
 interface Row { id: string; name: string; mobile: string; gstin: string | null; sizes: string | null; wa: number; offers: number }
-const toDto = (r: Row): CustomerDto => ({ id: r.id, name: r.name, mobile: r.mobile, gstin: r.gstin, sizes: parseSizes(r.sizes), waConsent: !!r.wa, offersConsent: !!r.offers })
+const toDto = (r: Row, coins = 0): CustomerDto => ({ id: r.id, name: r.name, mobile: r.mobile, gstin: r.gstin, sizes: parseSizes(r.sizes), waConsent: !!r.wa, offersConsent: !!r.offers, coins })
 
 const SELECT = 'SELECT id,name,mobile,gstin,sizes,wa_consent AS wa,offers_consent AS offers FROM customers'
 
@@ -30,7 +31,7 @@ export function findCustomerByMobile(mobile: string): CustomerDto | null {
   const m = mobile.replace(/\D/g, '')
   if (m.length !== 10) throw new Error('Enter a 10-digit mobile number.')
   const r = getDb().prepare(`${SELECT} WHERE mobile=? AND deleted_at IS NULL`).get(m) as Row | undefined
-  return r ? toDto(r) : null
+  return r ? toDto(r, liveBalance(r.id)) : null
 }
 
 /* ---------- the Customers screen ---------- */
@@ -62,7 +63,7 @@ export function getCustomer(id: string): CustomerProfile {
               c.consent_at AS consentAt,s.name AS consentBy,${STATS}
        FROM customers c LEFT JOIN staff s ON s.id=c.consent_by WHERE c.id=? AND c.deleted_at IS NULL`
     )
-    .get(id) as (Omit<CustomerProfile, 'waConsent' | 'offersConsent' | 'recentBills' | 'sizes'> & { wa: number; offers: number; sizesJson: string | null }) | undefined
+    .get(id) as (Omit<CustomerProfile, 'waConsent' | 'offersConsent' | 'recentBills' | 'sizes' | 'coins' | 'creditNotes'> & { wa: number; offers: number; sizesJson: string | null }) | undefined
   if (!r) throw new Error('Customer not found.')
   const { wa, offers, sizesJson, ...rest } = r
   return {
@@ -70,6 +71,8 @@ export function getCustomer(id: string): CustomerProfile {
     waConsent: !!wa,
     offersConsent: !!offers,
     sizes: parseSizes(sizesJson),
+    coins: liveBalance(id),
+    creditNotes: (db.prepare('SELECT COALESCE(SUM(balance),0) AS n FROM credit_notes WHERE customer_id=? AND balance>0 AND expires_at>?').get(id, new Date().toISOString()) as { n: number }).n,
     recentBills: db.prepare("SELECT no,at,grand FROM bills WHERE customer_id=? AND status='completed' ORDER BY at DESC, rowid DESC LIMIT 6").all(id) as CustomerProfile['recentBills']
   }
 }
@@ -166,5 +169,5 @@ export function createCustomer(input: NewCustomerInput): CustomerDto {
     .prepare('INSERT INTO customers (id,mobile,name,sizes,wa_consent,offers_consent,consent_at,consent_by) VALUES (?,?,?,?,?,?,?,?)')
     .run(id, mobile, name, JSON.stringify(NO_SIZES), input.waConsent ? 1 : 0, input.offersConsent ? 1 : 0, consented ? new Date().toISOString() : null, consented ? actor.id : null)
   audit(actor.id, 'customer_create', { id })
-  return { id, name, mobile, gstin: null, sizes: { ...NO_SIZES }, waConsent: input.waConsent, offersConsent: input.offersConsent }
+  return { id, name, mobile, gstin: null, sizes: { ...NO_SIZES }, waConsent: input.waConsent, offersConsent: input.offersConsent, coins: 0 }
 }

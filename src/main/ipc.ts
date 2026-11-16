@@ -15,7 +15,7 @@ import * as stickers from './services/stickers'
 import * as admin from './services/admin'
 import * as reports from './services/reports'
 import { exportExcel, exportPdf } from './reportExport'
-import { listPrinters, openDrawer, printAlteration, printReceipt, printStickers, testReceipt, testSticker } from './print'
+import { listPrinters, printDayEnd, openDrawer, printAlteration, printReceipt, printStickers, testReceipt, testSticker } from './print'
 import { restoreFromFile, restoreListed } from './restore'
 import * as stock from './services/stock'
 
@@ -95,6 +95,7 @@ export function registerIpc(): void {
   h('settings:setPin', admin.setStaffPin)
   h('settings:backups', admin.backupInfo)
   h('settings:saveBackupFolder', admin.saveBackupFolder)
+  h('settings:finishSetup', admin.finishSetup)
   h('settings:backupNow', admin.backupNow)
   h('settings:restore', restoreListed)
   h('settings:restoreFromFile', restoreFromFile)
@@ -106,6 +107,7 @@ export function registerIpc(): void {
   h('stickers:context', stickers.stickerContext)
   h('stickers:items', stickers.stickerItems)
   h('stickers:lastPurchase', stickers.lastPurchaseItems)
+  h('stickers:stock', stickers.stockItems)
   h('stickers:printers', listPrinters)
   h('stickers:savePrefs', stickers.saveStickerPrefs)
   h('stickers:print', printStickers)
@@ -119,6 +121,7 @@ export function registerIpc(): void {
   h('day:summary', daySummary)
   h('day:addExpense', addExpense)
   h('day:close', closeDay)
+  h('print:dayEnd', printDayEnd)
 
   h('customers:list', listCustomers)
   h('customers:get', getCustomer)

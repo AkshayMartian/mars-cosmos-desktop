@@ -22,7 +22,9 @@ const sqlQuote = (s: string): string => `'${s.replace(/'/g, "''")}'`
 export function runBackup(): { file: string; sizeBytes: number } {
   const folder = backupFolder()
   if (!folder) throw new Error('No backup folder is set.')
-  mkdirSync(folder, { recursive: true })
+  try { mkdirSync(folder, { recursive: true }) } catch {
+    throw new Error(`The backup folder ${folder} cannot be used. If it is on a USB drive, plug the drive in, or choose another folder in Settings → Backup.`)
+  }
 
   // mars-2026-11-12.db; a second backup the same day gets the time added, and if even that is taken, a counter
   const now = new Date()
@@ -43,6 +45,20 @@ export function runBackup(): { file: string; sizeBytes: number } {
     db.prepare('DELETE FROM backups WHERE id=?').run(o.id)
   }
   return { file, sizeBytes }
+}
+
+/**
+ * App start: if the shop has data and the newest backup is older than 24 hours (or there is none), take one.
+ * Never throws: a missing USB drive must not stop the shop from opening; the warning bar and Settings show it.
+ */
+export function autoBackupIfDue(now: Date = new Date()): { file: string } | null {
+  try {
+    const db = getDb()
+    if (!db.prepare('SELECT 1 FROM bills LIMIT 1').get() && !db.prepare('SELECT 1 FROM products LIMIT 1').get()) return null
+    const last = db.prepare('SELECT at FROM backups ORDER BY id DESC LIMIT 1').get() as { at: string } | undefined
+    if (last && now.getTime() - new Date(last.at).getTime() < 24 * 3600_000) return null
+    return { file: runBackup().file }
+  } catch { return null }
 }
 
 /** Is this file a MARS POS database we can restore? Opens it read-only and checks it has our tables and is not from a newer app. */

@@ -27,6 +27,8 @@ Open → `window.api.settings.get()` → `settings:get` → `getAllSettings`. Ea
 
 ## 4. APIs (all owner only; each returns the saved values)
 
+- `settings:finishSetup` · `window.api.settings.finishSetup()`: marks the first-run wizard done (`settings.setup_done`). The wizard (`Setup.tsx`) shows right after the owner's first login while `app:info` says `setupDone:false`; a shop that already has a name, a bill or a product counts as set up. It reuses the Shop, GST and Printers tabs and can be skipped.
+
 - `settings:get` · `window.api.settings.get()`: `{ shop, gst, receipt, printers, coins }`.
 - `settings:saveShop` · `saveShop({ name, phone, address, gstin, state })`. Errors: "Type the shop name." · "The GSTIN is not valid…" · "The phone number is not valid." 
 - `settings:saveGst` · `saveGst('regular'|'composition'|'unregistered')`. Error: "Choose a GST type."
@@ -76,3 +78,5 @@ No new table. Writes `settings` keys `shop` (name, phone, address, gstin, state)
 | 2026-11-13 | Placeholder note created | n/a (no git) |
 | 2026-11-16 | Settings screen with eight tabs, owner-only service, tests | uncommitted |
 | 2026-11-16 | Printing (receipt, tag, slip, test, drawer), receipt width and review link, restore from backup | uncommitted |
+| 2026-11-16 | Light / dark theme button in the top bar: Auto (dark 7 pm to 7 am by the PC clock), Light, Dark. Saved on each PC (browser storage), not in the database | uncommitted |
+| 2026-11-16 | First-run setup wizard for the owner (shop, GST, printers; skippable) and `settings:finishSetup` | uncommitted |

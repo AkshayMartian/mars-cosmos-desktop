@@ -54,6 +54,9 @@ export interface CustomerProfile {
   consentBy: string | null
   visits: number
   spent: Paise
+  /** coins the customer can spend now, and the unused credit note balance */
+  coins: number
+  creditNotes: Paise
   recentBills: { no: string; at: string; grand: Paise }[]
 }
 

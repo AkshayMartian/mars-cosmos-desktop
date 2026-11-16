@@ -10,6 +10,8 @@ import { Login } from './screens/Login'
 import { Placeholder } from './screens/Placeholder'
 import { Reports } from './screens/Reports'
 import { Returns } from './screens/Returns'
+import { Setup } from './screens/Setup'
+import { applyTheme, loadMode, saveMode, THEME_LABEL, THEME_ORDER, type ThemeMode } from './theme'
 import { Products } from './screens/Products'
 import { Settings } from './screens/Settings'
 import { Stickers } from './screens/Stickers'
@@ -30,7 +32,7 @@ const SCREENS: Partial<Record<MenuId, (p: ScreenProps) => ReactElement>> = {
   bills: (p) => <Bills user={p.user} />,
   alterations: (p) => <Alterations user={p.user} />,
   returns: () => <Returns />,
-  products: (p) => <Products user={p.user} intent={p.intent} />,
+  products: (p) => <Products user={p.user} intent={p.intent} onStickers={(ids) => p.go('stickers', 'variants:' + ids.join(','))} />,
   reports: () => <Reports />,
   settings: () => <Settings />,
   stickers: (p) => <Stickers intent={p.intent} />,
@@ -61,6 +63,8 @@ export function App() {
     window.addEventListener('mars:settings-saved', f) // the shop name in the top bar follows Settings
     return () => window.removeEventListener('mars:settings-saved', f)
   }, [])
+  // a fresh look after every login: the backup warning and the setup flag change while the app stays open
+  useEffect(() => { if (user) void window.api.app.info().then(setInfo) }, [user])
   // "My sales today" chip: refreshed on login, on every screen change, with the clock and right after a bill is saved.
   const [salesTick, setSalesTick] = useState(0)
   useEffect(() => { if (user) void window.api.app.mySales().then(setSales, () => undefined) }, [user, view, clock, salesTick])
@@ -79,6 +83,14 @@ export function App() {
     return () => window.removeEventListener('keydown', f)
   }, [user, go])
 
+  const [themeMode, setThemeMode] = useState<ThemeMode>(loadMode)
+  useEffect(() => {
+    applyTheme(themeMode)
+    if (themeMode !== 'auto') return
+    const t = setInterval(() => applyTheme('auto'), 60_000) // flips by itself at 7 am / 7 pm
+    return () => clearInterval(t)
+  }, [themeMode])
+  const cycleTheme = () => { const n = THEME_ORDER[(THEME_ORDER.indexOf(themeMode) + 1) % THEME_ORDER.length]!; saveMode(n); setThemeMode(n) }
   const lock = useCallback(() => { void window.api.auth.logout(); setUser(null) }, [])
 
   // Clock + idle auto-lock (prototype: 10 minutes without a click or key).
@@ -103,6 +115,7 @@ export function App() {
         <span className="shop">{info?.shopName ?? ''} · Counter {info?.counter ?? ''}</span>
         <span className="sp" />
         <span className="shop num">{clock}</span>
+        <button className="btn-top" data-theme-btn title="Auto = dark from 7 pm to 7 am. Click to change." onClick={cycleTheme}>Theme: {THEME_LABEL[themeMode]}</button>
         {user && (
           <>
             <span className="chip good" title="Your sales today as salesperson">My sales today {formatRupees(sales)}</span>
@@ -127,8 +140,16 @@ export function App() {
             ))}
           </nav>
           <main className="work">
+            {info?.backupWarn && (user.role === 'owner' || user.role === 'manager') && (
+              <div className="chip warn" role="status" style={{ alignSelf: 'stretch', padding: '8px 12px', borderRadius: 8, whiteSpace: 'normal' }}>
+                {info.backupDays === null ? 'No backup has been taken yet.' : `The last backup is ${info.backupDays} days old.`}{' '}
+                {user.role === 'owner' ? <button className="btn sm" onClick={() => go('settings')}>Back up now</button> : 'Ask the owner to back up (Settings → Backup).'}
+              </div>
+            )}
             {/* key = remount on switch so each screen reloads fresh data */}
-            {Screen ? <Screen key={view} user={user} go={go} intent={intent} /> : <Placeholder title={items.find((m) => m.id === view)?.label ?? ''} />}
+            {user.role === 'owner' && info && !info.setupDone
+              ? <Setup onDone={() => { void window.api.app.info().then(setInfo); go(homeFor(user.role)) }} />
+              : Screen ? <Screen key={view} user={user} go={go} intent={intent} /> : <Placeholder title={items.find((m) => m.id === view)?.label ?? ''} />}
           </main>
         </div>
       )}

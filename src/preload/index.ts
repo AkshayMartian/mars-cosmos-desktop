@@ -91,6 +91,7 @@ const api = {
     setPin: (id: string, pin: string) => call<void>('settings:setPin', id, pin),
     backups: () => call<BackupInfo>('settings:backups'),
     saveBackupFolder: (f: string) => call<BackupInfo>('settings:saveBackupFolder', f),
+    finishSetup: () => call<true>('settings:finishSetup'),
     backupNow: () => call<BackupInfo>('settings:backupNow'),
     restore: (file: string) => call<{ restarting: true }>('settings:restore', file),
     restoreFromFile: () => call<{ restarting: true } | null>('settings:restoreFromFile')
@@ -100,12 +101,14 @@ const api = {
     alteration: (jobId: string, which: 'tag' | 'slip') => call<void>('print:alteration', jobId, which),
     testReceipt: () => call<void>('print:testReceipt'),
     testSticker: () => call<void>('print:testSticker'),
-    openDrawer: () => call<void>('print:openDrawer')
+    openDrawer: () => call<void>('print:openDrawer'),
+    dayEnd: (sessionId: string) => call<void>('print:dayEnd', sessionId)
   },
   stickers: {
     context: () => call<StickerContext>('stickers:context'),
     items: (ids: string[]) => call<StickerItem[]>('stickers:items', ids),
     lastPurchase: (purchaseId?: string) => call<StickerItem[]>('stickers:lastPurchase', purchaseId),
+    stock: (ids: string[]) => call<StickerItem[]>('stickers:stock', ids),
     printers: () => call<string[]>('stickers:printers'),
     savePrefs: (p: { size: string; printer: string }) => call<StickerContext>('stickers:savePrefs', p),
     print: (lines: { variantId: string; qty: number }[]) => call<StickerPrintResult>('stickers:print', lines)

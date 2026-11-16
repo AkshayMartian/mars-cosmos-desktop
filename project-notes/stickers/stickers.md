@@ -33,6 +33,7 @@
 ## 4. APIs
 
 - `stickers:context` · `window.api.stickers.context()`: `{ shop, sizeId, printer, canManage }`. Roles owner, manager, store.
+- `stickers:stock` · `window.api.stickers.stock(ids)`: like `stickers:items` but the quantity is the stock on the shelf (at least 1). Used by Products and Import. Roles owner, manager, store.
 - `stickers:items` · `window.api.stickers.items(ids)`: label data per variant `{ variantId, shop, name, colour, size, barcode, mrp, qty:1 }`. The MRP comes from the database.
 - `stickers:lastPurchase` · `window.api.stickers.lastPurchase(purchaseId?)`: items of that purchase (latest when none) with `qty` = pieces received; empty list when there is none.
 - `stickers:printers` · `window.api.stickers.printers()`: names of printers installed on this PC.
@@ -70,3 +71,4 @@ No new table. Reads `variants`, `products`, `purchases`, `purchase_lines`; reads
 |---|---|---|
 | 2026-11-13 | Placeholder note created | n/a (no git) |
 | 2026-11-13 | Print stickers screen, EAN-13 labels, print through the Windows driver, label settings, Stock in link, tests | uncommitted |
+| 2026-11-16 | Labels from Products ("Save & print stickers", "Print stickers" on an item) and after an Excel import: opens this screen with one label per piece in stock (`stickers:stock`) | uncommitted |

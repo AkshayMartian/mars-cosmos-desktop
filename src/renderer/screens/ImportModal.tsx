@@ -2,9 +2,10 @@ import { useState } from 'react'
 import type { ImportPreview } from '@shared/catalogue'
 import { Modal, useMsg } from '../ui'
 
-export function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: (text: string) => void }) {
+export function ImportModal({ onClose, onDone, onStickers }: { onClose: () => void; onDone: (text: string) => void; onStickers: (variantIds: string[]) => void }) {
   const [preview, setPreview] = useState<ImportPreview | null>(null)
   const [busy, setBusy] = useState(false)
+  const [done, setDone] = useState<{ text: string; ids: string[] } | null>(null)
   const { run, node } = useMsg()
 
   async function choose() {
@@ -17,7 +18,19 @@ export function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: 
     setBusy(true)
     const r = await run(() => window.api.import.commit(preview.token))
     setBusy(false)
-    if (r) onDone(`Imported ${r.items} items (${r.products} products), ${r.pieces} pieces`)
+    if (r) setDone({ text: `Imported ${r.items} items (${r.products} products), ${r.pieces} pieces`, ids: r.variantIds })
+  }
+
+  if (done) {
+    return (
+      <Modal title="Import finished" onClose={() => onDone(done.text)}>
+        <p style={{ margin: 0 }}>{done.text}.</p>
+        <div className="mfoot">
+          <button className="btn" onClick={() => onDone(done.text)}>Close</button>
+          <button className="btn p" onClick={() => onStickers(done.ids)}>Print stickers</button>
+        </div>
+      </Modal>
+    )
   }
 
   const skipped = preview ? preview.rows.length - preview.goodRows : 0

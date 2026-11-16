@@ -145,6 +145,14 @@ export function setStaffPin(staffId: string, pin: string): void {
   audit(a.id, 'pin_change', { id: staffId, by: 'owner' })
 }
 
+/** The first-run wizard is finished (or skipped): the owner is not asked again. */
+export function finishSetup(): true {
+  const a = owner()
+  put('setup_done', true)
+  audit(a.id, 'settings_change', { key: 'setup_done' })
+  return true
+}
+
 /* ---------- backup ---------- */
 
 export function backupInfo(): BackupInfo {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { calc } from '@shared/calc'
+import { coinPaise, maxCoinsFor } from '@shared/coins'
 import { formatRupees, toPaise } from '@shared/money'
 import { sizesText } from '@shared/customers'
 import { receiptText, whatsappText } from '@shared/receipt'
@@ -34,6 +35,7 @@ export function Billing({ user }: { user: StaffPublic }) {
   const [customer, setCustomer] = useState<CustomerDto | null>(null)
   const [miss, setMiss] = useState(false)
   const [billDisc, setBillDisc] = useState('')
+  const [coinsUse, setCoinsUse] = useState('')
   const [salesBy, setSalesBy] = useState('')
   const [dlg, setDlg] = useState<Dlg>(null)
   const [heldCount, setHeldCount] = useState(0)
@@ -82,16 +84,18 @@ export function Billing({ user }: { user: StaffPublic }) {
   const scheme = ctx?.gstScheme ?? 'regular'
   // alteration charges added to this bill are service lines after the items (GST % from the Alterations rules)
   const charges = useMemo(() => cart.filter((l) => alts[l.v.id] && alts[l.v.id]!.mode === 'bill' && toPaise(alts[l.v.id]!.form.charge) > 0).map((l) => ({ v: l.v, price: toPaise(alts[l.v.id]!.form.charge) })), [cart, alts])
+  const calcLines = useMemo(() => [
+    ...cart.map((l) => ({ variantId: l.v.id, qty: l.qty, price: l.v.price, disc: toPaise(l.disc), gst: l.v.gst })),
+    ...charges.map((c) => ({ variantId: '__alt' + c.v.id, qty: 1, price: c.price, gst: { mode: 'fixed' as const, rate: altCtx?.cfg.rate ?? 18 } }))
+  ], [cart, charges, altCtx])
+  const base = useMemo(() => calc(scheme, calcLines, toPaise(billDisc)), [scheme, calcLines, billDisc])
+  // Coins: no more than the balance and the shop's max % of the bill; the box follows the cart if the bill shrinks.
+  const coinCfg = ctx?.coins
+  const maxCoins = coinCfg && customer ? maxCoinsFor(base.grand, customer.coins, coinCfg) : 0
+  const coinsN = Math.min(Math.max(0, Math.floor(Number(coinsUse) || 0)), maxCoins)
   const totals = useMemo(
-    () => calc(
-      scheme,
-      [
-        ...cart.map((l) => ({ variantId: l.v.id, qty: l.qty, price: l.v.price, disc: toPaise(l.disc), gst: l.v.gst })),
-        ...charges.map((c) => ({ variantId: '__alt' + c.v.id, qty: 1, price: c.price, gst: { mode: 'fixed' as const, rate: altCtx?.cfg.rate ?? 18 } }))
-      ],
-      toPaise(billDisc)
-    ),
-    [scheme, cart, charges, billDisc, altCtx]
+    () => (coinsN > 0 && coinCfg ? calc(scheme, calcLines, toPaise(billDisc), coinsN * coinPaise(coinCfg)) : base),
+    [scheme, calcLines, billDisc, coinsN, coinCfg, base]
   )
 
   /* ----- cart ----- */
@@ -121,7 +125,7 @@ export function Billing({ user }: { user: StaffPublic }) {
   }
 
   function clearBill() {
-    setCart([]); setAlts({}); setQ(''); setResults([]); setMobile(''); setCustomer(null); setMiss(false); setBillDisc(''); setSalesBy('')
+    setCart([]); setAlts({}); setQ(''); setResults([]); setMobile(''); setCustomer(null); setMiss(false); setBillDisc(''); setCoinsUse(''); setSalesBy('')
     approval.current = undefined
     setMsg(null)
     scanRef.current?.focus()
@@ -181,7 +185,7 @@ export function Billing({ user }: { user: StaffPublic }) {
     try {
       const bill = await window.api.billing.create({
         lines: cart.map((l) => ({ variantId: l.v.id, qty: l.qty, disc: toPaise(l.disc) })),
-        customerId: customer?.id ?? null, billDisc: toPaise(billDisc), salesBy, payments, creditNotes, approval: approval.current,
+        customerId: customer?.id ?? null, billDisc: toPaise(billDisc), coinsUsed: coinsN, salesBy, payments, creditNotes, approval: approval.current,
         alterations: Object.entries(alts).map(([vid, a]) => billAlteration(vid, a.form, a.mode))
       })
       setMsg(null); announceSale(); setDlg({ t: 'receipt', bill })
@@ -333,7 +337,9 @@ export function Billing({ user }: { user: StaffPublic }) {
                 <b>{customer.name}</b>
                 {sizesText(customer.sizes) && <span className="sub" aria-label="Usual sizes">{sizesText(customer.sizes)}</span>}
                 {customer.gstin && <span className="sub">GSTIN {customer.gstin} (business bill)</span>}
-                <div><button className="btn sm" onClick={() => { setCustomer(null); setMobile(''); setMiss(false); setAlts({}) }}>Change customer</button></div>
+                {ctx?.coins.on && <span className="sub">Coins: <b>{customer.coins}</b>{customer.coins > 0 ? ` (worth ${formatRupees(customer.coins * coinPaise(ctx.coins))})` : ''}</span>}
+                {notes.length > 0 && <span className="sub">Credit notes: <b>{formatRupees(notes.reduce((a, n) => a + n.balance, 0))}</b></span>}
+                <div><button className="btn sm" onClick={() => { setCustomer(null); setMobile(''); setMiss(false); setAlts({}); setCoinsUse('') }}>Change customer</button></div>
               </div>
             ) : miss ? (
               <div className="cust"><span>No customer with this number.</span><div><button className="btn sm p" onClick={() => setDlg({ t: 'customer' })}>Add customer</button></div></div>
@@ -349,10 +355,18 @@ export function Billing({ user }: { user: StaffPublic }) {
               </select>
             </div>
             <div className="f"><label htmlFor="billDisc">Bill discount ₹</label><input id="billDisc" type="number" min="0" value={billDisc} onChange={(e) => setBillDisc(e.target.value)} /></div>
+            {ctx?.coins.on && customer && customer.coins > 0 && (
+              <div className="f"><label htmlFor="coinsUse">Use coins (balance {customer.coins}, this bill up to {maxCoins})</label>
+                <div className="row" style={{ alignItems: 'center' }}>
+                  <input id="coinsUse" type="number" min="0" max={maxCoins} step="1" disabled={maxCoins === 0} style={{ flex: 1 }} value={coinsUse} onChange={(e) => setCoinsUse(e.target.value)} />
+                  <button className="btn sm" disabled={maxCoins === 0} onClick={() => setCoinsUse(String(maxCoins))}>Use max</button>
+                </div></div>
+            )}
             <div className="tot">
               <span>Items</span><span className="num">{totals.qty}</span>
               <span>Subtotal</span><span className="num">{formatRupees(totals.subtotal)}</span>
               {totals.discount > 0 && <><span>Discount</span><span className="num">−{formatRupees(totals.discount)}</span></>}
+              {totals.coinValue > 0 && <><span>Coins ({coinsN})</span><span className="num">−{formatRupees(totals.coinValue)}</span></>}
               <span className="sub">{scheme === 'regular' ? 'GST included' : 'Bill of supply (no GST)'}</span><span className="sub num">{formatRupees(gstTotal)}</span>
               {totals.roundOff !== 0 && <><span className="sub">Round off</span><span className="sub num">{formatRupees(totals.roundOff)}</span></>}
               <span className="g">Total</span><span className="g">{formatRupees(totals.grand)}</span>

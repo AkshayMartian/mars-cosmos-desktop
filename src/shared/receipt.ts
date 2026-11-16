@@ -28,12 +28,16 @@ export function receiptText(b: BillDto, shop: ShopInfo, scheme: GstScheme, copy 
   }
   out.push(line)
   if (b.discount) out.push(lr('Discount', formatPlain(-b.discount)))
+  if (b.coinsUsed && b.coinValue) out.push(lr(`Coins used (${b.coinsUsed})`, formatPlain(-b.coinValue)))
   if (b.roundOff) out.push(lr('Round off', formatPlain(b.roundOff)))
   out.push(lr('TOTAL', 'Rs ' + formatPlain(b.grand)))
   if (scheme === 'regular') out.push(lr('Taxable', formatPlain(b.taxable)), lr('CGST', formatPlain(b.cgst)), lr('SGST', formatPlain(b.sgst)))
   out.push(line)
   for (const p of b.payments) out.push(lr('Paid ' + p.mode.replace('_', ' ').toUpperCase(), formatPlain(p.amount)))
   out.push(line)
+  if (b.customer && b.type === 'sale' && (b.coinsEarned || b.coinsUsed || b.coinBalance)) {
+    out.push(lr('Coins earned', String(b.coinsEarned ?? 0)), lr('Coin balance', String(b.coinBalance ?? 0)), line)
+  }
   if (b.alterations?.length) {
     out.push('ALTERATION')
     for (const a of b.alterations) out.push(`${a.no}  ${a.work.join(', ')}`, `  Ready: ${new Date(a.dueAt).toLocaleString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}`)
@@ -53,6 +57,7 @@ export function whatsappText(b: BillDto, shop: ShopInfo): string {
     `Bill ${b.no} · ${date}`,
     ...b.lines.map((l) => `• ${l.name} ${l.size} × ${l.qty} = ${formatRupees(l.total)}`),
     `Total: ${formatRupees(b.grand)}`,
+    b.coinsEarned ? `You earned ${b.coinsEarned} coins. Your coin balance: ${b.coinBalance ?? 0}.` : '',
     shop.policy
   ].filter(Boolean).join('\n')
 }

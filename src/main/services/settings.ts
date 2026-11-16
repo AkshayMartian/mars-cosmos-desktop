@@ -22,5 +22,14 @@ export function mySalesToday(): number {
 export function appInfo(): AppInfo {
   const shop = getSetting<{ name?: string }>('shop', {})
   const security = getSetting<{ idleMinutes?: number }>('security', {})
-  return { shopName: shop.name || 'Your Shop', counter: getSetting('counter', 'C1'), idleMinutes: security.idleMinutes ?? 10 }
+  const db = getDb()
+  const used = !!db.prepare('SELECT 1 FROM bills LIMIT 1').get() || !!db.prepare('SELECT 1 FROM products LIMIT 1').get()
+  // A shop that already has a name, bills or products was set up before this wizard existed.
+  const setupDone = getSetting<boolean>('setup_done', false) || !!shop.name || used
+  const last = db.prepare('SELECT at FROM backups ORDER BY id DESC LIMIT 1').get() as { at: string } | undefined
+  const backupDays = last ? Math.floor((Date.now() - new Date(last.at).getTime()) / 864e5) : null
+  return {
+    shopName: shop.name || 'Your Shop', counter: getSetting('counter', 'C1'), idleMinutes: security.idleMinutes ?? 10,
+    setupDone, backupDays, backupWarn: used && (backupDays === null || backupDays > 2)
+  }
 }

@@ -97,7 +97,12 @@ export interface StockInInput {
   billNo: string
   billDate: string
   lines: { variantId: string; qty: number; cost: Paise }[]
+  /** the same supplier bill number was already entered: save anyway (the owner confirmed) */
+  allowDuplicate?: boolean
 }
+
+/** Start of the refusal when a supplier bill number was entered before; the screen asks "save anyway?" */
+export const DUPLICATE_PURCHASE = 'Duplicate purchase:'
 
 export interface PurchaseRow {
   id: string
@@ -145,6 +150,8 @@ export interface ImportResult {
   products: number
   items: number
   pieces: number
+  /** the items just created, so labels can be printed for them */
+  variantIds: string[]
 }
 
 export const variantLabel = (name: string, colour: string, size: string): string =>

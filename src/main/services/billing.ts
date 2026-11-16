@@ -14,6 +14,8 @@ import { requireRole, type Actor } from './session'
 import { getSetting } from './settings'
 import { receiptText, receiptWidth } from '@shared/receipt'
 import { addMove, stockOf } from './stock'
+import { coinCfg, coinBalance, liveBalance, recordSale } from './coins'
+import { coinPaise, maxCoinsFor } from '@shared/coins'
 
 const SELLERS = ['owner', 'manager', 'cashier'] as const
 
@@ -93,7 +95,8 @@ export function billingContext(): BillingContext {
     approvers: db.prepare("SELECT id,name,role FROM staff WHERE active=1 AND role IN ('owner','manager') ORDER BY rowid").all() as BillingContext['approvers'],
     maxDiscountPct: me.m,
     actorRole: actor.role,
-    shop: shopInfo()
+    shop: shopInfo(),
+    coins: coinCfg()
   }
 }
 
@@ -185,9 +188,21 @@ export function createBill(input: NewBillInput, internals: BillInternals = {}): 
     calcLines.push({ variantId: id, qty: w.qty, price: v.price, disc: w.disc, gst: v.gst })
   }
   for (const sv of services) calcLines.push({ variantId: SERVICE, qty: 1, price: sv.price, gst: { mode: 'fixed', rate: sv.rate } })
-  const c = calc(scheme, calcLines, input.billDisc)
+  let c = calc(scheme, calcLines, input.billDisc)
 
   if (input.customerId && !db.prepare('SELECT 1 FROM customers WHERE id=? AND deleted_at IS NULL').get(input.customerId)) throw new Error('Customer not found.')
+
+  // Coins: the customer's balance and the shop's max % of the bill limit what can be spent.
+  const coinsUsed = input.coinsUsed ?? 0
+  if (!Number.isInteger(coinsUsed) || coinsUsed < 0) throw new Error('Coins must be a whole number.')
+  if (coinsUsed > 0) {
+    const cfg = coinCfg()
+    if (!cfg.on) throw new Error('Coins are switched off in Settings.')
+    if (!input.customerId) throw new Error('Coins can only be used when the customer is on the bill.')
+    const most = maxCoinsFor(c.grand, liveBalance(input.customerId), cfg)
+    if (coinsUsed > most) throw new Error(most > 0 ? `This bill can use at most ${most} coins.` : 'This customer has no coins to use on this bill.')
+    c = calc(scheme, calcLines, input.billDisc, coinsUsed * coinPaise(cfg))
+  }
   const salesBy = input.salesBy && db.prepare('SELECT 1 FROM staff WHERE id=? AND active=1').get(input.salesBy) ? input.salesBy : actor.id
 
   const maxPct = (db.prepare('SELECT max_discount_pct AS m FROM staff WHERE id=?').get(actor.id) as { m: number }).m
@@ -231,6 +246,10 @@ export function createBill(input: NewBillInput, internals: BillInternals = {}): 
       `INSERT INTO bills (id,no,type,status,customer_id,staff_id,sales_by,session_id,at,subtotal,discount,taxable,cgst,sgst,round_off,grand)
        VALUES (?,?,'sale','completed',?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(id, no, input.customerId, actor.id, salesBy, session.id, at, c.subtotal, c.discount, c.taxable, c.cgst, c.sgst, c.roundOff, c.grand)
+    if (input.customerId) {
+      const earned = recordSale(input.customerId, id, coinsUsed, c.grand, at)
+      db.prepare('UPDATE bills SET coins_used=?,coins_earned=? WHERE id=?').run(coinsUsed, earned, id)
+    }
 
     const insLine = db.prepare(
       `INSERT INTO bill_lines (bill_id,variant_id,name,size,colour,hsn,qty,mrp,price,discount,taxable,gst_rate,cgst,sgst,total)
@@ -272,14 +291,18 @@ export function getBill(id: string): BillDto {
   const b = db
     .prepare(
       `SELECT b.id,b.no,b.type,b.status,b.at,b.subtotal,b.discount,b.taxable,b.cgst,b.sgst,b.round_off AS roundOff,b.grand,
+              b.coins_used AS coinsUsed,b.coins_earned AS coinsEarned,b.customer_id AS custId,
               s.name AS staffName,c.name AS cName,c.mobile AS cMobile,c.gstin AS cGstin
        FROM bills b JOIN staff s ON s.id=b.staff_id LEFT JOIN customers c ON c.id=b.customer_id WHERE b.id=?`
     )
-    .get(id) as (Omit<BillDto, 'customer' | 'lines' | 'payments' | 'alterations'> & { cName: string | null; cMobile: string | null; cGstin: string | null }) | undefined
+    .get(id) as (Omit<BillDto, 'customer' | 'lines' | 'payments' | 'alterations' | 'coinValue' | 'coinBalance'> & { custId: string | null; cName: string | null; cMobile: string | null; cGstin: string | null }) | undefined
   if (!b) throw new Error('Bill not found.')
-  const { cName, cMobile, cGstin, ...rest } = b
+  const { cName, cMobile, cGstin, custId, ...rest } = b
   return {
     ...rest,
+    // what the coins were worth on this bill: total = subtotal − discount − coins, and the grand total is that total rounded
+    ...(b.coinsUsed ? { coinValue: b.subtotal - b.discount - b.grand + b.roundOff } : {}),
+    ...(custId && b.type === 'sale' ? { coinBalance: coinBalance(custId) } : {}),
     customer: cName ? { name: cName, mobile: cMobile, gstin: cGstin } : null,
     lines: db.prepare('SELECT name,colour,size,qty,price,gst_rate AS rate,total,hsn FROM bill_lines WHERE bill_id=? ORDER BY id').all(id) as BillDto['lines'],
     payments: db.prepare('SELECT mode,amount FROM payments WHERE bill_id=? ORDER BY id').all(id) as BillDto['payments'],
