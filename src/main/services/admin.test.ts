@@ -178,7 +178,7 @@ describe('Restore checks', () => {
     expect(validateBackup(join(dir, 'missing.db'), latest)).toMatchObject({ ok: false })
     const junk = join(dir, 'junk.db')
     writeFileSync(junk, 'not a database')
-    expect(validateBackup(junk, latest)).toMatchObject({ ok: false, error: expect.stringContaining('not a MARS POS') })
+    expect(validateBackup(junk, latest)).toMatchObject({ ok: false, error: expect.stringContaining('not a Mars Cosmos') })
     expect(validateBackup(made, latest - 1)).toMatchObject({ ok: false, error: expect.stringContaining('newer') })
   })
 })

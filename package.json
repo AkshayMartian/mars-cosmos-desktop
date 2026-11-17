@@ -1,7 +1,7 @@
 {
   "name": "mars-pos",
   "version": "0.1.0",
-  "description": "MARS POS - offline-first point of sale for clothing and accessory shops",
+  "description": "Mars Cosmos - offline-first point of sale for clothing and accessory shops",
   "private": true,
   "main": "./out/main/index.js",
   "scripts": {
@@ -43,7 +43,7 @@
   "author": "MARS",
   "build": {
     "appId": "com.mars.pos",
-    "productName": "MARS POS",
+    "productName": "Mars Cosmos",
     "directories": {
       "output": "dist"
     },

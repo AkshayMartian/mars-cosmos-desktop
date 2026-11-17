@@ -1,4 +1,4 @@
-# MARS POS: project notes
+# Mars Cosmos: project notes
 
 Start here to review any module. Each module has one note (copy of [_module-template.md](_module-template.md)). **A task is not done until its note is updated.** `src/main/notes.test.ts` checks that every IPC channel, table and migration is written down.
 

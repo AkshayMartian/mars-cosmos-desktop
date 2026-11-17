@@ -61,21 +61,21 @@ export function autoBackupIfDue(now: Date = new Date()): { file: string } | null
   } catch { return null }
 }
 
-/** Is this file a MARS POS database we can restore? Opens it read-only and checks it has our tables and is not from a newer app. */
+/** Is this file a Mars Cosmos database we can restore? Opens it read-only and checks it has our tables and is not from a newer app. */
 export function validateBackup(file: string, latestVersion: number): { ok: true; staff: number } | { ok: false; error: string } {
   if (!existsSync(file)) return { ok: false, error: 'That file was not found.' }
   let d: Database.Database | null = null
   try {
     d = new Database(file, { readonly: true, fileMustExist: true })
     const v = d.pragma('user_version', { simple: true }) as number
-    if (v > latestVersion) return { ok: false, error: 'This backup is from a newer version of MARS POS. Update the app first.' }
+    if (v > latestVersion) return { ok: false, error: 'This backup is from a newer version of Mars Cosmos. Update the app first.' }
     const staff = (d.prepare('SELECT COUNT(*) AS n FROM staff').get() as { n: number }).n
     d.prepare('SELECT COUNT(*) FROM bills').get()
     d.prepare('SELECT COUNT(*) FROM stock_moves').get()
     if (!staff) return { ok: false, error: 'This file has no staff, so it is not a usable backup.' }
     return { ok: true, staff }
   } catch {
-    return { ok: false, error: 'This is not a MARS POS backup file.' }
+    return { ok: false, error: 'This is not a Mars Cosmos backup file.' }
   } finally {
     d?.close()
   }

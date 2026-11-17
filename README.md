@@ -1,4 +1,4 @@
-# MARS POS
+# Mars Cosmos
 
 Offline point-of-sale for clothing and accessory shops (Windows desktop).
 

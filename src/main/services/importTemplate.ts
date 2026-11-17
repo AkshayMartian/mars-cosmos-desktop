@@ -20,7 +20,7 @@ const MAX_ROWS = 2000 // rows that get the dropdown and number checks
 /** `rows` pre-fills the Products sheet (used for the sample file); leave it out for the blank template. */
 export async function buildTemplate(categories: TemplateCategory[], rows: (string | number)[][] = []): Promise<Buffer> {
   const wb = new ExcelJS.Workbook()
-  wb.creator = 'MARS POS'
+  wb.creator = 'Mars Cosmos'
 
   /* 1 · Products: the sheet that gets imported (header only) */
   const ws = wb.addWorksheet('Products', { views: [{ state: 'frozen', ySplit: 1 }] })
@@ -48,10 +48,10 @@ export async function buildTemplate(categories: TemplateCategory[], rows: (strin
   const help = wb.addWorksheet('How to fill')
   help.getColumn(1).width = 16
   help.getColumn(2).width = 100
-  help.addRow(['MARS POS · product import']).font = { bold: true, size: 14 }
+  help.addRow(['Mars Cosmos · product import']).font = { bold: true, size: 14 }
   help.addRow([])
   const helpRows: [string, string][] = [
-    ['How it works', 'Fill the "Products" sheet: one row for each size and colour of a product. Save the file. In MARS POS go to Products > Import from Excel > Choose file.'],
+    ['How it works', 'Fill the "Products" sheet: one row for each size and colour of a product. Save the file. In Mars Cosmos go to Products > Import from Excel > Choose file.'],
     ['Check first', 'The app shows every row before importing. Rows with mistakes are skipped and tell you why; good rows are imported.'],
     ['Product *', 'Product name. Repeat the same name on every row of that product (one row per size and colour). Names that already exist in the app are skipped.'],
     ['Brand', 'Optional.'],
@@ -62,7 +62,7 @@ export async function buildTemplate(categories: TemplateCategory[], rows: (strin
     ['Sale price', 'Optional. The price you actually sell at, including GST. Leave blank to use the MRP.'],
     ['Cost', 'Optional. What you paid for one piece. Used for stock value reports.'],
     ['Qty', 'Optional. Pieces you have in the shop today (opening stock). Leave blank for 0. A whole number.'],
-    ['Barcodes', 'MARS POS makes a barcode for every row. Print stickers after importing. Brand barcodes can be added later on the product screen.'],
+    ['Barcodes', 'Mars Cosmos makes a barcode for every row. Print stickers after importing. Brand barcodes can be added later on the product screen.'],
     ['Rules', 'Do not change the column names in row 1. Do not add or reorder columns. A product cannot have the same size and colour twice, and all rows of one product need the same category.'],
     ['* required', '']
   ]

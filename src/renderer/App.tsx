@@ -114,7 +114,7 @@ export function App() {
   return (
     <div className="app">
       <header className="top">
-        <span className="logo"><i />MARS POS</span>
+        <span className="logo"><i />Mars Cosmos</span>
         <span className="shop">{info?.shopName ?? ''} · Counter {info?.counter ?? ''}</span>
         <span className="sp" />
         <span className="shop num">{clock}</span>

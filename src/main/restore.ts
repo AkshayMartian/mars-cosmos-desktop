@@ -49,7 +49,7 @@ export async function restoreListed(file: string): Promise<{ restarting: true }>
 /** Any backup file the owner picks (for example from a USB drive). Returns null when the dialog is cancelled. */
 export async function restoreFromFile(): Promise<{ restarting: true } | null> {
   requireRole('owner')
-  const r = await dialog.showOpenDialog({ title: 'Choose a MARS POS backup', properties: ['openFile'], filters: [{ name: 'MARS POS backup', extensions: ['db'] }] })
+  const r = await dialog.showOpenDialog({ title: 'Choose a Mars Cosmos backup', properties: ['openFile'], filters: [{ name: 'Mars Cosmos backup', extensions: ['db'] }] })
   if (r.canceled || !r.filePaths[0]) return null
   return restore(r.filePaths[0])
 }
