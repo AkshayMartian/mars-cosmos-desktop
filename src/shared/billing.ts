@@ -95,7 +95,7 @@ export interface BillDto {
   status: 'completed' | 'cancelled'
   at: string
   staffName: string
-  customer: { name: string; mobile: string | null; gstin: string | null } | null
+  customer: { name: string; mobile: string | null; gstin: string | null; /** agreed to get the bill on WhatsApp */ waConsent?: boolean } | null
   lines: { name: string; colour: string; size: string; qty: number; price: Paise; rate: number; total: Paise; hsn: string }[]
   subtotal: Paise
   discount: Paise
@@ -124,4 +124,8 @@ export interface HeldBillDto {
 export interface HeldPayload {
   lines: { variantId: string; qty: number; disc: Paise }[]
   customerId: string | null
+  /** kept so a resumed bill comes back exactly as it was left (older held bills do not have these) */
+  customerMobile?: string | null
+  billDisc?: Paise
+  salesBy?: string | null
 }

@@ -58,7 +58,8 @@ export function Bills(_props: { user: StaffPublic }) {
 
   const b = detail?.bill
   const mobile = b?.customer?.mobile
-  const wa = b && ctx && mobile && b.type === 'sale' ? `https://wa.me/91${mobile}?text=${encodeURIComponent(whatsappText(b, ctx.shop))}` : null
+  const noConsent = !!b?.customer && b.customer.waConsent === false // they have not agreed to WhatsApp bills
+  const wa = b && ctx && mobile && !noConsent && b.type === 'sale' ? `https://wa.me/91${mobile}?text=${encodeURIComponent(whatsappText(b, ctx.shop))}` : null
 
   return (
     <>
@@ -105,7 +106,7 @@ export function Bills(_props: { user: StaffPublic }) {
               </div>
               <div className="row">
                 <button className="btn" onClick={() => setDlg({ t: 'receipt' })}>Reprint</button>
-                {wa ? <a className="btn" href={wa} target="_blank" rel="noopener noreferrer">Send on WhatsApp</a> : <button className="btn" disabled title={b.type === 'return' ? 'Not for return bills' : 'This bill has no customer mobile'}>Send on WhatsApp</button>}
+                {wa ? <a className="btn" href={wa} target="_blank" rel="noopener noreferrer">Send on WhatsApp</a> : <button className="btn" disabled title={b.type === 'return' ? 'Not for return bills' : noConsent ? 'This customer has not agreed to WhatsApp bills. Edit the customer to record their consent.' : 'This bill has no customer mobile'}>Send on WhatsApp</button>}
                 {detail.cancellable && <button className="btn danger" onClick={() => { setReason(''); setDlg({ t: 'cancel' }) }}>Cancel bill</button>}
               </div>
               {detail.cancelHint && b.status === 'completed' && b.type === 'sale' && <div className="hint">{detail.cancelHint}</div>}

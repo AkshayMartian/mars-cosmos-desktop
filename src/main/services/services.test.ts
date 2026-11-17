@@ -23,6 +23,7 @@ describe('login', () => {
     expect(r.mustChangePin).toBe(true)
     expect(() => listProducts()).not.toThrow() // reads are open
     expect(() => createProduct(shirt())).toThrow('Not logged in')
+    expect(changePin('3333').ok).toBe(false) // the PIN they were given is not allowed
     expect(changePin('7391').ok).toBe(true)
     expect(() => createProduct(shirt())).toThrow('not allowed') // cashier cannot create products
   })

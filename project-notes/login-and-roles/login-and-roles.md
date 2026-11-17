@@ -177,3 +177,4 @@ Seed (first run only): Owner 1111 (max discount 100, cancel ✔, price ✔) · M
 | 2026-11-12 | Approval names the approver (`approval.ts`); idle lock; "My sales today" chip; F1 shortcut | n/a |
 | 2026-11-13 | **K-01 fixed**: approver PIN lockout (5 wrong → 1 min, doubling to 15; per approver; separate from login), migration 3 `approval_attempts`, 13 tests | n/a |
 | 2026-11-16 | Only one copy of the app per PC (a second launch brings the open window forward) | uncommitted |
+| 2026-11-17 | Found in a full test: at the first login a new staff member could "change" their PIN to the same given PIN; now refused | uncommitted |

@@ -3,7 +3,7 @@ import { tagLines, slipText } from '@shared/alterations'
 import { labelSize, printDocument, LABEL_CSS, type StickerItem, type StickerPrintResult } from '@shared/stickers'
 import { getAltJob } from './services/alterations'
 import { alterationConfig } from './services/altcore'
-import { receiptTextFor } from './services/billing'
+import { getBill, receiptTextFor } from './services/billing'
 import { daySlip } from './services/dayend'
 import { requireRole } from './services/session'
 import { getSetting } from './services/settings'
@@ -80,6 +80,27 @@ export async function testReceipt(): Promise<void> {
   const shop = getSetting<{ name?: string }>('shop', {}).name || 'Your Shop'
   const line = '-'.repeat(width)
   await sendToPrinter(textJob([shop.toUpperCase(), 'TEST RECEIPT', line, 'If you can read this, the receipt', 'printer is working.', line, new Date().toLocaleString('en-IN')].join('\n'), width))
+}
+
+/**
+ * Right after a bill is saved: print the receipt and open the drawer for cash, with no questions asked.
+ * Only when a receipt printer is chosen in Settings (without one, every bill would open the print dialog: staff press
+ * "Print receipt" instead). A printer problem never undoes the bill: it comes back as a note for the screen.
+ */
+export interface AfterSale { printed: boolean; drawer: boolean; note: string | null }
+export async function afterSale(billId: string): Promise<AfterSale> {
+  const bill = getBill(billId) // checks the role
+  const cfg = getSetting<{ receipt?: string; drawer?: boolean }>('printers', {})
+  const out: AfterSale = { printed: false, drawer: false, note: null }
+  if (!cfg.receipt) return out
+  try {
+    await printReceipt(billId)
+    out.printed = true
+    if (cfg.drawer && bill.payments.some((p) => p.mode === 'cash' && p.amount > 0)) { await sendToPrinter(textJob('.', 36)); out.drawer = true }
+  } catch (e) {
+    out.note = `Bill saved, but the receipt was not printed: ${e instanceof Error ? e.message : 'printer error'} Use Print receipt to try again.`
+  }
+  return out
 }
 
 /** The day-end slip of a closed day, on the receipt printer. */

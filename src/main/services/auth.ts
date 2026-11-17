@@ -48,6 +48,8 @@ export function changePin(pin: string): { ok: boolean; error?: string; staff?: S
   const len = s.role === 'owner' ? 6 : 4
   if (!new RegExp(`^\\d{${len}}$`).test(pin)) return { ok: false, error: `PIN must be ${len} digits.` }
   if (isWeakPin(pin)) return { ok: false, error: 'Choose a PIN that is harder to guess.' }
+  const old = getDb().prepare('SELECT pin_hash AS h FROM staff WHERE id=?').get(id) as { h: string }
+  if (verifyPin(pin, old.h)) return { ok: false, error: 'Choose a different PIN: it cannot be the one you were given.' }
   getDb().prepare('UPDATE staff SET pin_hash=?, must_change_pin=0 WHERE id=?').run(hashPin(pin), id)
   audit(id, 'pin_change')
   setCurrent(id)

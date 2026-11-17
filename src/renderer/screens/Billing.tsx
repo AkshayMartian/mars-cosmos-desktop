@@ -20,7 +20,7 @@ type Dlg =
   | { t: 'held' }
   | { t: 'customer' }
   | { t: 'alt'; variantId: string }
-  | { t: 'receipt'; bill: BillDto }
+  | { t: 'receipt'; bill: BillDto; note?: string | null; printed?: boolean }
   | null
 
 /** Tell the top bar ("My sales today") that a bill was saved. */
@@ -189,7 +189,10 @@ export function Billing({ user }: { user: StaffPublic }) {
         customerId: customer?.id ?? null, billDisc: toPaise(billDisc), coinsUsed: coinsN, salesBy, payments, creditNotes, approval: approval.current,
         alterations: Object.entries(alts).map(([vid, a]) => billAlteration(vid, a.form, a.mode))
       })
-      setMsg(null); announceSale(); setDlg({ t: 'receipt', bill })
+      setMsg(null); announceSale()
+      // receipt + cash drawer straight away when a receipt printer is set (a printer problem is shown, the bill stays saved)
+      const auto = await window.api.print.afterSale(bill.id).catch(() => null)
+      setDlg({ t: 'receipt', bill, note: auto?.note ?? null, printed: !!auto?.printed })
     } catch (e) {
       const text = e instanceof Error ? e.message : 'Something went wrong.'
       // A refused approval (wrong PIN, or locked after too many tries) goes back to the approval dialog with the real reason.
@@ -201,7 +204,7 @@ export function Billing({ user }: { user: StaffPublic }) {
   /* ----- hold / resume ----- */
   async function hold() {
     if (!cart.length) return setMsg({ ok: false, text: 'Nothing to hold.' })
-    const ok = await attempt(() => window.api.billing.hold({ lines: cart.map((l) => ({ variantId: l.v.id, qty: l.qty, disc: toPaise(l.disc) })), customerId: customer?.id ?? null }))
+    const ok = await attempt(() => window.api.billing.hold({ lines: cart.map((l) => ({ variantId: l.v.id, qty: l.qty, disc: toPaise(l.disc) })), customerId: customer?.id ?? null, customerMobile: customer?.mobile ?? null, billDisc: toPaise(billDisc), salesBy: salesBy || null }))
     const hadAlts = Object.keys(alts).length > 0
     if (ok) { clearBill(); void loadHeld(); setMsg({ ok: true, text: hadAlts ? 'Bill held. The alteration requests are not kept: add them again after resuming.' : 'Bill held. Find it under "Held".' }) }
   }
@@ -225,6 +228,9 @@ export function Billing({ user }: { user: StaffPublic }) {
       back.push({ v, qty, disc: l.disc ? String(l.disc / 100) : '' })
     }
     setCart(back)
+    if (payload.billDisc) setBillDisc(String(payload.billDisc / 100))
+    if (payload.salesBy) setSalesBy(payload.salesBy)
+    if (payload.customerMobile) { setMobile(payload.customerMobile); void findCustomer(payload.customerMobile) }
     if (notes.length) setMsg({ ok: false, text: `Bill resumed, but ${notes.join('; ')}.` })
     setDlg(null); void loadHeld()
   }
@@ -394,7 +400,7 @@ export function Billing({ user }: { user: StaffPublic }) {
       })()}
       {dlg?.t === 'held' && <HeldModal onClose={() => setDlg(null)} onResume={(h) => void resume(h)} />}
       {dlg?.t === 'customer' && <CustomerModal mobile={mobile} onClose={() => setDlg(null)} onSaved={(c) => { setCustomer(c); setMobile(c.mobile); setMiss(false); setDlg(null) }} />}
-      {dlg?.t === 'receipt' && ctx && <ReceiptModal bill={dlg.bill} ctx={ctx} onNew={() => { setDlg(null); clearBill(); void loadCtx(); void loadHeld() }} />}
+      {dlg?.t === 'receipt' && ctx && <ReceiptModal bill={dlg.bill} ctx={ctx} note={dlg.note} printed={dlg.printed} onNew={() => { setDlg(null); clearBill(); void loadCtx(); void loadHeld() }} />}
     </>
   )
 }
@@ -528,7 +534,7 @@ export function CustomerModal({ mobile, onClose, onSaved }: { mobile: string; on
   )
 }
 
-export function ReceiptModal({ bill, ctx, onNew }: { bill: BillDto; ctx: BillingContext; onNew: () => void }) {
+export function ReceiptModal({ bill, ctx, onNew, note, printed }: { bill: BillDto; ctx: BillingContext; onNew: () => void; note?: string | null; printed?: boolean }) {
   const [tags, setTags] = useState<{ jobs: AltJobDto[]; actx: AltContext } | null>(null)
   const { run: runP, node: printMsg } = useMsg()
   async function showTags() {
@@ -540,15 +546,17 @@ export function ReceiptModal({ bill, ctx, onNew }: { bill: BillDto; ctx: Billing
   // A walk-in has no number on the bill: ask for it here, only when the shop wants to send the bill on WhatsApp.
   const [typed, setTyped] = useState('')
   const mobile = bill.customer?.mobile ?? (typed.length === 10 ? typed : null)
-  const wa = mobile ? `https://wa.me/91${mobile}?text=${encodeURIComponent(whatsappText(bill, ctx.shop))}` : null
+  const noConsent = !!bill.customer && bill.customer.waConsent === false // they have not agreed to WhatsApp bills
+  const wa = mobile && !noConsent ? `https://wa.me/91${mobile}?text=${encodeURIComponent(whatsappText(bill, ctx.shop))}` : null
   return (
     <Modal title="Receipt" wide onClose={onNew}>
-      <div className="banner good">Bill {bill.no} saved · {formatRupees(bill.grand)}</div>
+      <div className="banner good">Bill {bill.no} saved · {formatRupees(bill.grand)}{printed ? ' · receipt printed' : ''}</div>
+      {note && <div className="banner bad" role="alert">{note}</div>}
       <div className="receipt" aria-label="Receipt">{receiptText(bill, ctx.shop, ctx.gstScheme)}</div>
       {printMsg}
       <div className="mfoot">
         {!bill.customer?.mobile && bill.type === 'sale' && <input aria-label="Customer mobile for WhatsApp" inputMode="numeric" maxLength={10} placeholder="Mobile to send on WhatsApp" style={{ width: 190 }} value={typed} onChange={(e) => setTyped(e.target.value.replace(/\D/g, ''))} />}
-        {wa ? <a className="btn" href={wa} target="_blank" rel="noopener noreferrer">Send on WhatsApp</a> : <button className="btn" disabled title="Type the customer's 10-digit mobile to send the bill on WhatsApp">Send on WhatsApp</button>}
+        {wa ? <a className="btn" href={wa} target="_blank" rel="noopener noreferrer">Send on WhatsApp</a> : <button className="btn" disabled title={noConsent ? 'This customer has not agreed to WhatsApp bills. Edit the customer to record their consent.' : "Type the customer's 10-digit mobile to send the bill on WhatsApp"}>Send on WhatsApp</button>}
         <button className="btn" onClick={() => void runP(() => window.api.print.receipt(bill.id), 'Sent to the receipt printer.')}>Print receipt</button>
         {bill.alterations?.length ? <button className="btn" onClick={() => void showTags()}>Print tailor tag</button> : null}
         <button className="btn p" autoFocus onClick={onNew}>New bill</button>

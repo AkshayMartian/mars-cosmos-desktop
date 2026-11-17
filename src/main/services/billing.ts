@@ -293,18 +293,18 @@ export function getBill(id: string): BillDto {
     .prepare(
       `SELECT b.id,b.no,b.type,b.status,b.at,b.subtotal,b.discount,b.taxable,b.cgst,b.sgst,b.round_off AS roundOff,b.grand,
               b.coins_used AS coinsUsed,b.coins_earned AS coinsEarned,b.customer_id AS custId,
-              s.name AS staffName,c.name AS cName,c.mobile AS cMobile,c.gstin AS cGstin
+              s.name AS staffName,c.name AS cName,c.mobile AS cMobile,c.gstin AS cGstin,c.wa_consent AS cWa
        FROM bills b JOIN staff s ON s.id=b.staff_id LEFT JOIN customers c ON c.id=b.customer_id WHERE b.id=?`
     )
-    .get(id) as (Omit<BillDto, 'customer' | 'lines' | 'payments' | 'alterations' | 'coinValue' | 'coinBalance'> & { custId: string | null; cName: string | null; cMobile: string | null; cGstin: string | null }) | undefined
+    .get(id) as (Omit<BillDto, 'customer' | 'lines' | 'payments' | 'alterations' | 'coinValue' | 'coinBalance'> & { custId: string | null; cWa: number | null; cName: string | null; cMobile: string | null; cGstin: string | null }) | undefined
   if (!b) throw new Error('Bill not found.')
-  const { cName, cMobile, cGstin, custId, ...rest } = b
+  const { cName, cMobile, cGstin, cWa, custId, ...rest } = b
   return {
     ...rest,
     // what the coins were worth on this bill: total = subtotal − discount − coins, and the grand total is that total rounded
     ...(b.coinsUsed ? { coinValue: b.subtotal - b.discount - b.grand + b.roundOff } : {}),
     ...(custId && b.type === 'sale' ? { coinBalance: coinBalance(custId) } : {}),
-    customer: cName ? { name: cName, mobile: cMobile, gstin: cGstin } : null,
+    customer: cName ? { name: cName, mobile: cMobile, gstin: cGstin, waConsent: !!cWa } : null,
     lines: db.prepare('SELECT name,colour,size,qty,price,gst_rate AS rate,total,hsn FROM bill_lines WHERE bill_id=? ORDER BY id').all(id) as BillDto['lines'],
     payments: db.prepare('SELECT mode,amount FROM payments WHERE bill_id=? ORDER BY id').all(id) as BillDto['payments'],
     alterations: (db.prepare('SELECT id,no,work,due_at AS dueAt FROM alterations WHERE bill_id=? ORDER BY rowid').all(id) as { id: string; no: string; work: string; dueAt: string }[]).map((a) => ({ ...a, work: a.work.split(', ') }))

@@ -67,6 +67,8 @@
 
 ## 4. APIs
 
+- `print:afterSale` · `window.api.print.afterSale(billId)`: called by Billing right after a bill is saved. If a receipt printer is chosen in Settings → Printers it prints the receipt and, when "Open drawer on cash" is on and the bill has a cash payment, opens the drawer. **Response:** `{ printed, drawer, note }`; `note` is a message when the printer failed (the bill stays saved; the receipt window shows it and Print receipt tries again). With no printer chosen nothing happens (staff press Print receipt). **Roles:** owner, manager, cashier.
+
 All calls: IPC result `{ ok:true, data }` / `{ ok:false, error:"message" }`; the screen sees `data` or a rejected promise. Roles for every call below: **owner, manager, cashier** (anything else: `You are not allowed to do this.`; no session: `Not logged in.`).
 
 ### `window.api.billing.context()` · channel `billing:context`
@@ -279,3 +281,4 @@ INSERT INTO payments (bill_id,mode,amount) VALUES (?,?,?);
 | 2026-11-16 | Coins: balance on the customer card, "Use coins" box, coins on the receipt (see [Coins](../coins/coins.md)) | uncommitted |
 | 2026-11-16 | "Not now" on the Start the day prompt, so the owner can reach other screens when no day is open (bills still need an open day) | uncommitted |
 | 2026-11-17 | Walk-ins: the customer mobile is optional (needed only for an alteration, coins, a credit note or WhatsApp); the salesperson defaults to the person logged in (`meId` in `billing:context`); on the receipt a walk-in can type a mobile to send the bill on WhatsApp | uncommitted |
+| 2026-11-17 | Found in a full test: Hold → Resume lost the customer, bill discount and salesperson (now kept); receipt and cash drawer now run by themselves after Save when a receipt printer is chosen; WhatsApp bill link needs the customer's WhatsApp consent | uncommitted |
