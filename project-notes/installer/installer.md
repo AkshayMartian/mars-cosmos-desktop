@@ -37,3 +37,11 @@
 | 2026-11-12 | Removed the `postinstall` native rebuild (not needed; fixes "no Python" error) | n/a (no git) |
 | 2026-11-13 | Placeholder note created | n/a |
 | 2026-11-16 | `npm run dist` builds `distMARS POS Setup 0.1.0.exe` (electron-builder, NSIS, per-user). Electron moved to devDependencies; native rebuild off (prebuilt better-sqlite3). Not yet installed on a clean PC; unsigned; default icon | uncommitted |
+| 2026-11-17 | Installer tested here: silent install, uninstall (app removed, all 837 data files in %APPDATA%mars-pos kept), reinstall. `deleteAppDataOnUninstall:false` set. Signing instructions below. Still needs a clean-PC test | uncommitted |
+
+## Data location and code signing (2026-11-17)
+
+- **Data stays out of the install folder.** The program goes in the install folder (per user by default, you can choose the folder). All data is in `%APPDATA%mars-pos` (database `mars-pos.db`, `backups`, `photos`, `config.json`). If `config.json` has a `dbPath`, the database is at that path instead. The uninstaller never deletes this folder (`deleteAppDataOnUninstall:false`), so reinstalling or updating keeps everything. Tested on the developer PC: uninstall kept all 837 files, reinstall kept them.
+- **Silent install** (for IT): `"MARS POS Setup 0.1.0.exe" /currentuser /S`. Silent uninstall: `"Uninstall MARS POS.exe" /currentuser /S`.
+- **Code signing (not done: needs a certificate bought by the owner).** Without it Windows shows "Unknown publisher" / SmartScreen. Buy an OV or EV code-signing certificate (EV removes the SmartScreen warning at once; OV builds reputation over time) or use Azure Trusted Signing. Then, on the build PC, set `CSC_LINK` (path to the .pfx or its base64) and `CSC_KEY_PASSWORD`, and run `npm run dist`: electron-builder signs the app and the installer automatically. Check with right-click → Properties → Digital Signatures.
+- **Clean-PC test (still to do):** install on a PC that has never had the app, open it, make a bill, close it, reinstall over it, and confirm the bill is still there.

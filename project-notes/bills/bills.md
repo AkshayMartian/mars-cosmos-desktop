@@ -98,3 +98,4 @@
 | 2026-11-13 | Placeholder note created | n/a (no git) |
 | 2026-11-13 | Bills list, detail, reprint, WhatsApp, cancel; tests | uncommitted |
 | 2026-11-16 | Cancelling gives back the coins used and takes back the coins earned (see [Coins](../coins/coins.md)) | uncommitted |
+| 2026-11-17 | Cancel rule tightened: a cashier always needs a manager or owner PIN (the old "can cancel" flag no longer skips it; the checkbox is gone from Settings → Staff); a reason is required; stock and coins come back; the bill stays Cancelled and its number is never reused (tests added) | uncommitted |

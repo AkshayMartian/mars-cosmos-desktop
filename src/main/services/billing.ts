@@ -95,6 +95,7 @@ export function billingContext(): BillingContext {
     approvers: db.prepare("SELECT id,name,role FROM staff WHERE active=1 AND role IN ('owner','manager') ORDER BY rowid").all() as BillingContext['approvers'],
     maxDiscountPct: me.m,
     actorRole: actor.role,
+    meId: actor.id,
     shop: shopInfo(),
     coins: coinCfg()
   }

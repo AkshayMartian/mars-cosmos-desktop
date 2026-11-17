@@ -65,7 +65,7 @@ export function billDetail(id: string): BillDetail {
     .prepare('SELECT b.cancel_reason AS reason,s.name AS by FROM bills b LEFT JOIN staff s ON s.id=b.cancelled_by WHERE b.id=?')
     .get(id) as { reason: string | null; by: string | null }
   const hint = cancelRefusal(id)
-  return { bill, cancelReason: x.reason, cancelledBy: x.by, cancellable: hint === null, cancelHint: hint, needsApproval: !(actor.canCancel || isManager(actor)) }
+  return { bill, cancelReason: x.reason, cancelledBy: x.by, cancellable: hint === null, cancelHint: hint, needsApproval: !isManager(actor) }
 }
 
 /**
@@ -81,7 +81,8 @@ export function cancelBill(input: CancelInput): BillDetail {
   const refusal = cancelRefusal(input.billId)
   if (refusal) throw new Error(refusal)
   // Checked before the transaction so a wrong PIN is still counted.
-  const approvedBy = actor.canCancel || isManager(actor) ? actor.id : checkApprover(input.approval)
+  // Only an owner or manager cancels alone. A cashier always needs a manager or owner to type their PIN.
+  const approvedBy = isManager(actor) ? actor.id : checkApprover(input.approval)
 
   const at = new Date().toISOString()
   db.transaction(() => {

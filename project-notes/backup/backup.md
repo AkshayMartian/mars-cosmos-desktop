@@ -63,3 +63,4 @@ DELETE FROM backups WHERE id=?;
 | 2026-11-12 | Backup on day close with `VACUUM INTO`, 30-copy retention | n/a (no git) |
 | 2026-11-12 | Unique file names (two backups in the same second collided) | n/a |
 | 2026-11-16 | Automatic backup at app start when the newest is over 24 hours old (`autoBackupIfDue`); clear message when the backup drive is missing; warning bar (owner, manager) when the newest backup is over 2 days old or none | uncommitted |
+| 2026-11-17 | The app also checks every hour while it stays open, so the daily backup happens even if it is never restarted | uncommitted |

@@ -214,3 +214,21 @@ describe('finding items to sell', () => {
     expect(getBill).toBeTypeOf('function')
   })
 })
+
+describe('walk-in customers', () => {
+  it('bills without a customer or a chosen salesperson; the salesperson is the person billing', () => {
+    const { shirt } = stockedShop()
+    as('cashier'); openDay(0)
+    expect(billingContext().meId).toBe(id('cashier'))
+    const b = createBill(bill(shirt.id))
+    expect(b.customer).toBeNull()
+    expect((getDb().prepare('SELECT sales_by AS s FROM bills WHERE id=?').get(b.id) as { s: string }).s).toBe(id('cashier'))
+    expect(whatsappText(b, billingContext().shop).startsWith('Hi, thank you')).toBe(true)
+  })
+  it('still needs a customer for an alteration, coins or a credit note', () => {
+    const { shirt } = stockedShop()
+    as('cashier'); openDay(0)
+    expect(() => createBill(bill(shirt.id, { coinsUsed: 1 }))).toThrow(/customer|coins/i)
+    expect(() => createBill(bill(shirt.id, { payments: [], creditNotes: [{ id: 'x', amount: 149_900 }] }))).toThrow('customer')
+  })
+})

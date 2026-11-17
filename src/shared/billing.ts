@@ -42,6 +42,8 @@ export interface BillingContext {
   /** this user's own discount limit; owner and manager are not limited */
   maxDiscountPct: number
   actorRole: Role
+  /** the person logged in: the default salesperson */
+  meId: string
   shop: ShopInfo
   /** coin rules from Settings → Coins */
   coins: CoinSettings

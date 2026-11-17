@@ -53,7 +53,7 @@ export function receiptText(b: BillDto, shop: ShopInfo, scheme: GstScheme, copy 
 export function whatsappText(b: BillDto, shop: ShopInfo): string {
   const date = new Date(b.at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
   return [
-    `Hi ${b.customer?.name ?? ''}, thank you for shopping at ${shop.name}!`,
+    `Hi${b.customer?.name ? ' ' + b.customer.name : ''}, thank you for shopping at ${shop.name}!`,
     `Bill ${b.no} · ${date}`,
     ...b.lines.map((l) => `• ${l.name} ${l.size} × ${l.qty} = ${formatRupees(l.total)}`),
     `Total: ${formatRupees(b.grand)}`,

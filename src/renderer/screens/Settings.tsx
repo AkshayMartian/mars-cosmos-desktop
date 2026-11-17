@@ -186,10 +186,10 @@ function StaffTab() {
     <>
       {node}
       <div className="tw"><table>
-        <thead><tr><th>Name</th><th>Role</th><th className="r">Max discount</th><th className="r">Commission</th><th>Cancel bills</th><th>Change price</th><th>Status</th><th /></tr></thead>
+        <thead><tr><th>Name</th><th>Role</th><th className="r">Max discount</th><th className="r">Commission</th><th>Change price</th><th>Status</th><th /></tr></thead>
         <tbody>{rows.map((s) => (
           <tr key={s.id}><td>{s.name}</td><td>{ROLE_NAMES[s.role]}</td><td className="r num">{s.maxDiscountPct}%</td><td className="r num">{s.commissionPct}%</td>
-            <td>{s.canCancel ? 'Yes' : 'No'}</td><td>{s.canChangePrice ? 'Yes' : 'No'}</td>
+            <td>{s.canChangePrice ? 'Yes' : 'No'}</td>
             <td>{s.active ? <span className="chip good">Active</span> : <span className="chip muted">Inactive</span>}</td>
             <td><button className="btn sm" onClick={() => open(s)}>Edit</button></td></tr>
         ))}</tbody>
@@ -222,7 +222,6 @@ function StaffModal({ form, onClose, onSaved }: { form: StaffForm; onClose: () =
         <div className="f"><label htmlFor="st-d">Max discount %</label><input id="st-d" type="number" min="0" max="100" value={f.maxDiscountPct} onChange={(e) => setF({ ...f, maxDiscountPct: e.target.value })} /></div>
         <div className="f"><label htmlFor="st-cm">Commission %</label><input id="st-cm" type="number" min="0" max="100" step="0.5" value={f.commissionPct} onChange={(e) => setF({ ...f, commissionPct: e.target.value })} /></div>
       </div>
-      <label className="check"><input type="checkbox" checked={f.canCancel} onChange={(e) => setF({ ...f, canCancel: e.target.checked })} /> Can cancel bills without approval</label>
       <label className="check"><input type="checkbox" checked={f.canChangePrice} onChange={(e) => setF({ ...f, canChangePrice: e.target.checked })} /> Can change price</label>
       <label className="check"><input type="checkbox" disabled={isOwner} checked={f.active} onChange={(e) => setF({ ...f, active: e.target.checked })} /> Active</label>
       {!f.id && <div className="f"><label htmlFor="st-pin">PIN (4 digits) *</label><input id="st-pin" type="password" inputMode="numeric" maxLength={4} value={f.pin} onChange={(e) => setF({ ...f, pin: e.target.value.replace(/\D/g, '') })} />

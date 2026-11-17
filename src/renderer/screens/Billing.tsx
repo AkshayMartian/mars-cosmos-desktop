@@ -51,6 +51,8 @@ export function Billing({ user }: { user: StaffPublic }) {
   const loadCtx = useCallback(() => run(() => window.api.billing.context()).then((c) => c && setCtx(c)), [run])
   const loadHeld = useCallback(() => window.api.billing.held().then((h) => setHeldCount(h.length), () => undefined), [])
   useEffect(() => { void loadCtx(); void loadHeld() }, [loadCtx, loadHeld])
+  // The salesperson is the person logged in, unless the cashier picks someone else.
+  useEffect(() => { if (ctx && !salesBy) setSalesBy(ctx.meId) }, [ctx, salesBy])
 
   useEffect(() => { void window.api.alterations.context().then(setAltCtx, () => undefined) }, [])
 
@@ -126,7 +128,7 @@ export function Billing({ user }: { user: StaffPublic }) {
   }
 
   function clearBill() {
-    setCart([]); setAlts({}); setQ(''); setResults([]); setMobile(''); setCustomer(null); setMiss(false); setBillDisc(''); setCoinsUse(''); setSalesBy('')
+    setCart([]); setAlts({}); setQ(''); setResults([]); setMobile(''); setCustomer(null); setMiss(false); setBillDisc(''); setCoinsUse(''); setSalesBy(ctx?.meId ?? '')
     approval.current = undefined
     setMsg(null)
     scanRef.current?.focus()
@@ -170,8 +172,6 @@ export function Billing({ user }: { user: StaffPublic }) {
 
   function startPay() {
     if (!cart.length || !ctx?.session) return
-    if (!customer) return setMsg({ ok: false, text: 'Enter the customer mobile and press Find. The customer is required.' })
-    if (!salesBy) return setMsg({ ok: false, text: 'Choose the salesperson. It is required.' })
     setMsg(null)
     const reasons = approvalReasons()
     if (reasons.length && !approval.current) return setDlg({ t: 'approval', reasons })
@@ -322,7 +322,7 @@ export function Billing({ user }: { user: StaffPublic }) {
           <div className="panel">
             <div className="row">
               <div className="f" style={{ flex: 1 }}>
-                <label htmlFor="custMobile">Customer mobile (F4) *</label>
+                <label htmlFor="custMobile">Customer mobile (F4)</label>
                 <input id="custMobile" ref={mobileRef} inputMode="numeric" maxLength={10} placeholder="10-digit mobile" value={mobile}
                   onChange={(e) => {
                     const digits = e.target.value.replace(/\D/g, '')
@@ -344,14 +344,13 @@ export function Billing({ user }: { user: StaffPublic }) {
               </div>
             ) : miss ? (
               <div className="cust"><span>No customer with this number.</span><div><button className="btn sm p" onClick={() => setDlg({ t: 'customer' })}>Add customer</button></div></div>
-            ) : <div className="hint">Required. Enter the 10-digit mobile and press Find.</div>}
+            ) : <div className="hint">Walk-in? Leave this empty. The mobile is needed only for an alteration, coins, a credit note or WhatsApp.{ctx?.coins.on ? ' Add it to earn coins.' : ''}</div>}
           </div>
 
           <div className="panel">
             <div className="f">
-              <label htmlFor="salesBy">Salesperson (for commission) *</label>
-              <select id="salesBy" required value={salesBy} onChange={(e) => setSalesBy(e.target.value)}>
-                <option value="">Choose salesperson…</option>
+              <label htmlFor="salesBy">Salesperson (for commission)</label>
+              <select id="salesBy" value={salesBy} onChange={(e) => setSalesBy(e.target.value)}>
                 {ctx?.salespeople.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </div>
@@ -538,7 +537,9 @@ export function ReceiptModal({ bill, ctx, onNew }: { bill: BillDto; ctx: Billing
       setTags({ jobs, actx })
     } catch { /* the receipt stays open */ }
   }
-  const mobile = bill.customer?.mobile
+  // A walk-in has no number on the bill: ask for it here, only when the shop wants to send the bill on WhatsApp.
+  const [typed, setTyped] = useState('')
+  const mobile = bill.customer?.mobile ?? (typed.length === 10 ? typed : null)
   const wa = mobile ? `https://wa.me/91${mobile}?text=${encodeURIComponent(whatsappText(bill, ctx.shop))}` : null
   return (
     <Modal title="Receipt" wide onClose={onNew}>
@@ -546,7 +547,8 @@ export function ReceiptModal({ bill, ctx, onNew }: { bill: BillDto; ctx: Billing
       <div className="receipt" aria-label="Receipt">{receiptText(bill, ctx.shop, ctx.gstScheme)}</div>
       {printMsg}
       <div className="mfoot">
-        {wa ? <a className="btn" href={wa} target="_blank" rel="noopener noreferrer">Send on WhatsApp</a> : <button className="btn" disabled title="Add the customer's mobile on the bill to send it on WhatsApp">Send on WhatsApp</button>}
+        {!bill.customer?.mobile && bill.type === 'sale' && <input aria-label="Customer mobile for WhatsApp" inputMode="numeric" maxLength={10} placeholder="Mobile to send on WhatsApp" style={{ width: 190 }} value={typed} onChange={(e) => setTyped(e.target.value.replace(/\D/g, ''))} />}
+        {wa ? <a className="btn" href={wa} target="_blank" rel="noopener noreferrer">Send on WhatsApp</a> : <button className="btn" disabled title="Type the customer's 10-digit mobile to send the bill on WhatsApp">Send on WhatsApp</button>}
         <button className="btn" onClick={() => void runP(() => window.api.print.receipt(bill.id), 'Sent to the receipt printer.')}>Print receipt</button>
         {bill.alterations?.length ? <button className="btn" onClick={() => void showTags()}>Print tailor tag</button> : null}
         <button className="btn p" autoFocus onClick={onNew}>New bill</button>

@@ -47,6 +47,8 @@ app.whenReady().then(() => {
   setBackupDir(join(app.getPath('userData'), 'backups')) // until a USB / second-disk folder is chosen in Settings
   registerIpc()
   autoBackupIfDue()
+  // A shop that leaves the app open all night still gets its daily backup: look again every hour.
+  setInterval(autoBackupIfDue, 60 * 60 * 1000)
   createWindow()
   app.on('activate', () => BrowserWindow.getAllWindows().length === 0 && createWindow())
 })

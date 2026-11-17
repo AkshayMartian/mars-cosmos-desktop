@@ -278,3 +278,4 @@ INSERT INTO payments (bill_id,mode,amount) VALUES (?,?,?);
 | 2026-11-13 | Wrong approver PINs are now limited (lockout); a refused approval returns to the approval dialog with the real reason (e.g. "locked for 60 seconds") | n/a |
 | 2026-11-16 | Coins: balance on the customer card, "Use coins" box, coins on the receipt (see [Coins](../coins/coins.md)) | uncommitted |
 | 2026-11-16 | "Not now" on the Start the day prompt, so the owner can reach other screens when no day is open (bills still need an open day) | uncommitted |
+| 2026-11-17 | Walk-ins: the customer mobile is optional (needed only for an alteration, coins, a credit note or WhatsApp); the salesperson defaults to the person logged in (`meId` in `billing:context`); on the receipt a walk-in can type a mobile to send the bill on WhatsApp | uncommitted |
