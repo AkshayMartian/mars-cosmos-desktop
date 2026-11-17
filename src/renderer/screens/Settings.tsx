@@ -95,6 +95,9 @@ function ReceiptTab({ all, onSaved }: { all: AllSettings; onSaved: (r: AllSettin
 
 /* ---------- printers ---------- */
 
+/** Windows "printers" that only save a file or open a program: a receipt sent there never comes out of a roll printer. */
+const NOT_REAL = /onenote|pdf|xps|fax|virtual|anydesk|teamviewer/i
+
 export function PrintersTab({ all, onSaved }: { all: AllSettings; onSaved: (p: AllSettings['printers']) => void }) {
   const [receipt, setReceipt] = useState(all.printers.receipt)
   const [drawer, setDrawer] = useState(all.printers.drawer)
@@ -126,9 +129,10 @@ export function PrintersTab({ all, onSaved }: { all: AllSettings; onSaved: (p: A
       {node}
       <div className="row">
         <div className="f" style={{ flex: 1 }}><label htmlFor="pr-r">Receipt printer</label>
-          <select id="pr-r" value={receipt} onChange={(e) => setReceipt(e.target.value)}><option value="">Not chosen</option>{withCurrent(receipt).map((n) => <option key={n} value={n}>{n}</option>)}</select></div>
+          <select id="pr-r" value={receipt} onChange={(e) => setReceipt(e.target.value)}><option value="">Not chosen</option>{withCurrent(receipt).map((n) => <option key={n} value={n}>{n}{NOT_REAL.test(n) ? ' (not a real printer)' : ''}</option>)}</select></div>
         <button className="btn" onClick={() => void saveThen(() => window.api.print.testReceipt(), 'Test receipt sent.')}>Test receipt</button>
       </div>
+      {receipt && NOT_REAL.test(receipt) && <div className="banner">"{receipt}" is not a real printer: it saves a file or opens another program, so nothing prints on your receipt roll. Choose your receipt printer{names.find((n) => !NOT_REAL.test(n) && /80|58|pos|thermal|receipt|tvs|epson/i.test(n)) ? <> (for example <b>{names.find((n) => !NOT_REAL.test(n) && /80|58|pos|thermal|receipt|tvs|epson/i.test(n))}</b>)</> : null}.</div>}
       <div className="row">
         <div className="f" style={{ flex: 1 }}><label htmlFor="pr-s">Sticker printer</label>
           <select id="pr-s" value={sticker} onChange={(e) => setSticker(e.target.value)}><option value="">Ask me every time (print dialog)</option>{withCurrent(sticker).map((n) => <option key={n} value={n}>{n}</option>)}</select></div>

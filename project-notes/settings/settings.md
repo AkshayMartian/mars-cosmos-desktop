@@ -82,3 +82,4 @@ No new table. Writes `settings` keys `shop` (name, phone, address, gstin, state)
 | 2026-11-16 | First-run setup wizard for the owner (shop, GST, printers; skippable) and `settings:finishSetup` | uncommitted |
 | 2026-11-16 | Found by running the app: the setup wizard vanished after step 1 (saving the shop name counted as set up); it now stays until Finish or Skip. Coins tab and Receipt tab wording corrected | uncommitted |
 | 2026-11-17 | Staff: the "Can cancel bills without approval" option is removed (cancelling by a cashier always needs a manager PIN) | uncommitted |
+| 2026-11-17 | Printers tab warns when the chosen receipt printer is not a real printer (OneNote, PDF, XPS, Fax): bills "print" there but nothing comes out of the roll printer | uncommitted |
