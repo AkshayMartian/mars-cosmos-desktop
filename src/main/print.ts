@@ -1,5 +1,6 @@
 import { BrowserWindow } from 'electron'
 import { tagLines, slipText } from '@shared/alterations'
+import { rollDoc } from '@shared/rollPrint'
 import { labelSize, printDocument, LABEL_CSS, type StickerItem, type StickerPrintResult } from '@shared/stickers'
 import { getAltJob } from './services/alterations'
 import { alterationConfig } from './services/altcore'
@@ -36,14 +37,10 @@ async function sendToPrinter(j: Job): Promise<void> {
 const receiptPrinter = (): string => getSetting<{ receipt?: string }>('printers', {}).receipt ?? ''
 const esc = (s: string): string => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!)
 
-/** Plain receipt text on a roll: monospace, as wide as the paper, as tall as the text. */
+/** Plain receipt text on a roll, in Arial Black, as wide as the paper and as tall as the text. */
 function textJob(text: string, chars: number): Job {
-  const wMm = chars <= 32 ? 58 : 80
-  const pt = chars <= 32 ? 7 : 8.5
-  const lines = text.split('\n').length
-  const hMm = Math.ceil(((lines + 3) * pt * 1.25 * 25.4) / 72)
-  const html = `<!doctype html><meta charset="utf-8"><style>@page{size:${wMm}mm ${hMm}mm;margin:0}body{margin:0;padding:2mm 3mm;color:#000}pre{margin:0;font:bold ${pt}pt/1.25 "Courier New",monospace;white-space:pre;color:#000;-webkit-text-stroke:.25pt #000}</style><pre>${esc(text)}</pre>`
-  return { html, printer: receiptPrinter(), wMm, hMm }
+  const d = rollDoc(text, chars)
+  return { html: d.html, printer: receiptPrinter(), wMm: d.wMm, hMm: d.hMm }
 }
 
 /* ---------- stickers ---------- */
