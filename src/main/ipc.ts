@@ -15,7 +15,7 @@ import * as stickers from './services/stickers'
 import * as admin from './services/admin'
 import * as reports from './services/reports'
 import { exportExcel, exportPdf } from './reportExport'
-import { afterSale, listPrinters, printDayEnd, openDrawer, printAlteration, printReceipt, printStickers, testReceipt, testSticker } from './print'
+import { listPrinters, printDayEnd, openDrawer, printAlteration, printReceipt, printStickers, testReceipt, testSticker } from './print'
 import { restoreFromFile, restoreListed } from './restore'
 import * as stock from './services/stock'
 
@@ -100,7 +100,6 @@ export function registerIpc(): void {
   h('settings:restore', restoreListed)
   h('settings:restoreFromFile', restoreFromFile)
   h('print:receipt', printReceipt)
-  h('print:afterSale', afterSale)
   h('print:alteration', printAlteration)
   h('print:testReceipt', testReceipt)
   h('print:testSticker', testSticker)

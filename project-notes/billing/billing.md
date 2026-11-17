@@ -67,7 +67,6 @@
 
 ## 4. APIs
 
-- `print:afterSale` · `window.api.print.afterSale(billId)`: called by Billing right after a bill is saved. If a receipt printer is chosen in Settings → Printers it prints the receipt and, when "Open drawer on cash" is on and the bill has a cash payment, opens the drawer. **Response:** `{ printed, drawer, note }`; `note` is a message when the printer failed (the bill stays saved; the receipt window shows it and Print receipt tries again). With no printer chosen nothing happens (staff press Print receipt). **Roles:** owner, manager, cashier.
 
 All calls: IPC result `{ ok:true, data }` / `{ ok:false, error:"message" }`; the screen sees `data` or a rejected promise. Roles for every call below: **owner, manager, cashier** (anything else: `You are not allowed to do this.`; no session: `Not logged in.`).
 
@@ -283,3 +282,4 @@ INSERT INTO payments (bill_id,mode,amount) VALUES (?,?,?);
 | 2026-11-17 | Walk-ins: the customer mobile is optional (needed only for an alteration, coins, a credit note or WhatsApp); the salesperson defaults to the person logged in (`meId` in `billing:context`); on the receipt a walk-in can type a mobile to send the bill on WhatsApp | uncommitted |
 | 2026-11-17 | Found in a full test: Hold → Resume lost the customer, bill discount and salesperson (now kept); receipt and cash drawer now run by themselves after Save when a receipt printer is chosen; WhatsApp bill link needs the customer's WhatsApp consent | uncommitted |
 | 2026-11-17 | Barcode scanner fix: when the scan box has lost focus (after a click on a button or empty space) a typed digit or letter now goes to the scan box (also on Print stickers, Stock in, Stock out, Stock count); an unknown barcode empties the box so the next scan is not glued onto it; Enter reads the box's own value | uncommitted |
+| 2026-11-17 | Receipt no longer prints when the bill is saved: it prints only when staff press Print receipt (`print:afterSale` removed). Printed receipt text is now bold black so it is not faint on thermal paper | uncommitted |

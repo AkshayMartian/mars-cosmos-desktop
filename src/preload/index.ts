@@ -98,7 +98,6 @@ const api = {
   },
   print: {
     receipt: (billId: string, copy = false) => call<void>('print:receipt', billId, copy),
-    afterSale: (billId: string) => call<{ printed: boolean; drawer: boolean; note: string | null }>('print:afterSale', billId),
     alteration: (jobId: string, which: 'tag' | 'slip') => call<void>('print:alteration', jobId, which),
     testReceipt: () => call<void>('print:testReceipt'),
     testSticker: () => call<void>('print:testSticker'),

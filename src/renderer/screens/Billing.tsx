@@ -20,7 +20,7 @@ type Dlg =
   | { t: 'held' }
   | { t: 'customer' }
   | { t: 'alt'; variantId: string }
-  | { t: 'receipt'; bill: BillDto; note?: string | null; printed?: boolean }
+  | { t: 'receipt'; bill: BillDto }
   | null
 
 /** Tell the top bar ("My sales today") that a bill was saved. */
@@ -194,9 +194,7 @@ export function Billing({ user }: { user: StaffPublic }) {
         alterations: Object.entries(alts).map(([vid, a]) => billAlteration(vid, a.form, a.mode))
       })
       setMsg(null); announceSale()
-      // receipt + cash drawer straight away when a receipt printer is set (a printer problem is shown, the bill stays saved)
-      const auto = await window.api.print.afterSale(bill.id).catch(() => null)
-      setDlg({ t: 'receipt', bill, note: auto?.note ?? null, printed: !!auto?.printed })
+      setDlg({ t: 'receipt', bill }) // nothing prints until staff press Print receipt
     } catch (e) {
       const text = e instanceof Error ? e.message : 'Something went wrong.'
       // A refused approval (wrong PIN, or locked after too many tries) goes back to the approval dialog with the real reason.
@@ -404,7 +402,7 @@ export function Billing({ user }: { user: StaffPublic }) {
       })()}
       {dlg?.t === 'held' && <HeldModal onClose={() => setDlg(null)} onResume={(h) => void resume(h)} />}
       {dlg?.t === 'customer' && <CustomerModal mobile={mobile} onClose={() => setDlg(null)} onSaved={(c) => { setCustomer(c); setMobile(c.mobile); setMiss(false); setDlg(null) }} />}
-      {dlg?.t === 'receipt' && ctx && <ReceiptModal bill={dlg.bill} ctx={ctx} note={dlg.note} printed={dlg.printed} onNew={() => { setDlg(null); clearBill(); void loadCtx(); void loadHeld() }} />}
+      {dlg?.t === 'receipt' && ctx && <ReceiptModal bill={dlg.bill} ctx={ctx} onNew={() => { setDlg(null); clearBill(); void loadCtx(); void loadHeld() }} />}
     </>
   )
 }
@@ -538,7 +536,7 @@ export function CustomerModal({ mobile, onClose, onSaved }: { mobile: string; on
   )
 }
 
-export function ReceiptModal({ bill, ctx, onNew, note, printed }: { bill: BillDto; ctx: BillingContext; onNew: () => void; note?: string | null; printed?: boolean }) {
+export function ReceiptModal({ bill, ctx, onNew }: { bill: BillDto; ctx: BillingContext; onNew: () => void }) {
   const [tags, setTags] = useState<{ jobs: AltJobDto[]; actx: AltContext } | null>(null)
   const { run: runP, node: printMsg } = useMsg()
   async function showTags() {
@@ -554,8 +552,7 @@ export function ReceiptModal({ bill, ctx, onNew, note, printed }: { bill: BillDt
   const wa = mobile && !noConsent ? `https://wa.me/91${mobile}?text=${encodeURIComponent(whatsappText(bill, ctx.shop))}` : null
   return (
     <Modal title="Receipt" wide onClose={onNew}>
-      <div className="banner good">Bill {bill.no} saved · {formatRupees(bill.grand)}{printed ? ' · receipt printed' : ''}</div>
-      {note && <div className="banner bad" role="alert">{note}</div>}
+      <div className="banner good">Bill {bill.no} saved · {formatRupees(bill.grand)}</div>
       <div className="receipt" aria-label="Receipt">{receiptText(bill, ctx.shop, ctx.gstScheme)}</div>
       {printMsg}
       <div className="mfoot">
