@@ -3,7 +3,7 @@ import { formatRupees } from '@shared/money'
 import type { MoveRow, StockRow } from '@shared/catalogue'
 import { ADJUST_REASONS, type AdjustReason, type ApprovalInput, type ApproverDto, type CountDto, type MoveFullRow } from '@shared/stockops'
 import type { StaffPublic } from '@shared/types'
-import { fmtDate, Modal, useMsg } from '../ui'
+import { fmtDate, Modal, useMsg, useScanFocus } from '../ui'
 import { ApprovalModal } from './Billing'
 
 type Tab = 'levels' | 'count' | 'moves'
@@ -135,6 +135,7 @@ function Count({ user }: { user: StaffPublic }) {
   const [confirmDiscard, setConfirmDiscard] = useState(false)
   const [approvers, setApprovers] = useState<ApproverDto[]>([])
   const scan = useRef<HTMLInputElement>(null)
+  useScanFocus(scan)
   const { msg, run, attempt, setMsg, node } = useMsg()
 
   const load = useCallback(() => run(() => window.api.count.get()).then((c) => setCount(c ?? null)), [run])
@@ -195,7 +196,7 @@ function Count({ user }: { user: StaffPublic }) {
       )}
       <div className="f">
         <label htmlFor="cq">Scan each piece on the shelf</label>
-        <input id="cq" ref={scan} className="big" autoFocus autoComplete="off" value={code} onChange={(e) => setCode(e.target.value)}
+        <input id="cq" ref={scan} onFocus={(e) => e.target.select()} className="big" autoFocus autoComplete="off" value={code} onChange={(e) => setCode(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && code.trim()) { e.preventDefault(); void scanEnter() } }} />
       </div>
       <div className="hint">{scanned} pieces scanned · {diffs.length} items differ from the system.</div>

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { VariantSearchRow } from '@shared/catalogue'
 import { LABEL_CSS, LABEL_SIZES, MAX_PER_ITEM, labelHtml, labelSize, type StickerContext, type StickerItem } from '@shared/stickers'
-import { Modal, num, useMsg } from '../ui'
+import { Modal, num, useMsg, useScanFocus } from '../ui'
 
 interface Line { item: StickerItem; qty: string }
 
@@ -14,6 +14,7 @@ export function Stickers({ intent }: { intent?: string }) {
   const [busy, setBusy] = useState(false)
   const [settings, setSettings] = useState(false)
   const scan = useRef<HTMLInputElement>(null)
+  useScanFocus(scan)
   const { run, setMsg, node } = useMsg()
 
   useEffect(() => {
@@ -53,7 +54,7 @@ export function Stickers({ intent }: { intent?: string }) {
 
   async function onEnter() {
     if (results.length === 1) return void add(results[0]!)
-    if (!results.length && q.trim()) setMsg({ ok: false, text: `No item found for "${q.trim()}".` })
+    if (!results.length && q.trim()) { setMsg({ ok: false, text: `No item found for "${q.trim()}".` }); setQ("") }
   }
 
   /** from Products / Import: one label for every piece in stock of these items */
@@ -97,7 +98,7 @@ export function Stickers({ intent }: { intent?: string }) {
         <div className="panel">
           <div className="f">
             <label htmlFor="stk-q">Scan or search item</label>
-            <input id="stk-q" ref={scan} autoFocus value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void onEnter() } }} autoComplete="off" />
+            <input id="stk-q" ref={scan} onFocus={(e) => e.target.select()} autoFocus value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void onEnter() } }} autoComplete="off" />
             {results.length > 0 && (
               <div className="results">
                 {results.map((v) => (

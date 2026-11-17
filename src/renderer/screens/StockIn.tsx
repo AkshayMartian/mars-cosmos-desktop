@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { formatRupees, toPaise } from '@shared/money'
 import { DUPLICATE_PURCHASE, type PurchaseRow, type SupplierDto, type VariantSearchRow } from '@shared/catalogue'
-import { fmtDay, Modal, num, useMsg } from '../ui'
+import { fmtDay, Modal, num, useMsg, useScanFocus } from '../ui'
 
 interface Line { v: VariantSearchRow; qty: string; cost: string }
 const today = (): string => {
@@ -21,6 +21,7 @@ export function StockIn({ onNewProduct, canAddProduct, onStickers }: { onNewProd
   const [dlg, setDlg] = useState(false)
   const [busy, setBusy] = useState(false)
   const scan = useRef<HTMLInputElement>(null)
+  useScanFocus(scan)
   const { run, setMsg, node } = useMsg()
 
   const loadSuppliers = () => run(() => window.api.stock.suppliers()).then((s) => { if (s) { setSuppliers(s); setSupplierId((cur) => cur || s[0]?.id || '') } })
@@ -49,7 +50,7 @@ export function StockIn({ onNewProduct, canAddProduct, onStickers }: { onNewProd
     const found = await run(() => window.api.stock.search(q))
     if (!found) return
     if (found.length >= 1) add(found[0]!)
-    else if (q.trim()) setMsg({ ok: false, text: `No item found for "${q.trim()}". New product? Use "+ New product".` })
+    else if (q.trim()) { setMsg({ ok: false, text: `No item found for "${q.trim()}". New product? Use "+ New product".` }); setQ("") }
   }
 
   const pieces = lines.reduce((a, l) => a + num(l.qty), 0)
@@ -96,7 +97,7 @@ export function StockIn({ onNewProduct, canAddProduct, onStickers }: { onNewProd
           </div>
           <div className="f">
             <label htmlFor="piq">Scan or search item</label>
-            <input id="piq" ref={scan} className="big" autoComplete="off" autoFocus value={q} onChange={(e) => setQ(e.target.value)}
+            <input id="piq" ref={scan} onFocus={(e) => e.target.select()} className="big" autoComplete="off" autoFocus value={q} onChange={(e) => setQ(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void scanEnter() } }} />
           </div>
           {results.length > 0 && (

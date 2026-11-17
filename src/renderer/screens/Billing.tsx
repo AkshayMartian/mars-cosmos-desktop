@@ -9,7 +9,7 @@ import type { CreditNoteDto } from '@shared/returns'
 import type { AltContext, AltJobDto } from '@shared/alterations'
 import { AltFields, altFormError, billAlteration, emptyAltForm, TagModal, type AltForm } from './AlterationForm'
 import type { StaffPublic } from '@shared/types'
-import { fmtDate, Modal, useMsg } from '../ui'
+import { fmtDate, Modal, useMsg, useScanFocus } from '../ui'
 
 interface CartLine { v: SellableVariant; qty: number; disc: string }
 /** A tailoring job asked for on a cart line (made when the bill is saved). */
@@ -45,6 +45,7 @@ export function Billing({ user }: { user: StaffPublic }) {
   const [alts, setAlts] = useState<Record<string, AltDraft>>({})
   const approval = useRef<{ staffId: string; pin: string } | undefined>(undefined)
   const scanRef = useRef<HTMLInputElement>(null)
+  useScanFocus(scanRef)
   const mobileRef = useRef<HTMLInputElement>(null)
   const { msg, run, attempt, setMsg, node } = useMsg()
 
@@ -134,7 +135,9 @@ export function Billing({ user }: { user: StaffPublic }) {
     scanRef.current?.focus()
   }
 
-  async function scanEnter() {
+  async function scanEnter(typed: string) {
+    // the box's own value, not the last render's: a fast scanner can press Enter before React has re-rendered
+    const q = typed
     const found = await run(() => window.api.billing.search(q))
     if (!found) return
     if (found.length === 1) add(found[0]!)
@@ -146,6 +149,7 @@ export function Billing({ user }: { user: StaffPublic }) {
           ? `No item found for "${q.trim()}". "${archived.join('", "')}" ${archived.length === 1 ? 'is' : 'are'} archived: restore it in Products → Show archived to sell it.`
           : `No item found for "${q.trim()}".`
       })
+      setQ(''); setResults([]) // empty the box so the next scan is not glued onto this one
     }
   }
 
@@ -264,8 +268,8 @@ export function Billing({ user }: { user: StaffPublic }) {
         <div className="panel">
           <div className="f">
             <label htmlFor="scan">Scan barcode or type item name</label>
-            <input id="scan" ref={scanRef} className="big" autoFocus autoComplete="off" placeholder="2000000000015 or 'shirt'" value={q}
-              onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void scanEnter() } }} />
+            <input id="scan" ref={scanRef} onFocus={(e) => e.target.select()} className="big" autoFocus autoComplete="off" placeholder="2000000000015 or 'shirt'" value={q}
+              onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void scanEnter(e.currentTarget.value) } }} />
           </div>
           {results.length > 0 && !exactBarcode && (
             <div className="results">

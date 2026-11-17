@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { SupplierDto, VariantSearchRow } from '@shared/catalogue'
 import { OUT_TYPES, type ApprovalInput, type ApproverDto, type OutType } from '@shared/stockops'
 import type { StaffPublic } from '@shared/types'
-import { num, useMsg } from '../ui'
+import { num, useMsg, useScanFocus } from '../ui'
 import { ApprovalModal } from './Billing'
 
 interface Line { v: VariantSearchRow; qty: string }
@@ -19,6 +19,7 @@ export function StockOut({ user }: { user: StaffPublic }) {
   const [asking, setAsking] = useState<string[] | null>(null)
   const [busy, setBusy] = useState(false)
   const scan = useRef<HTMLInputElement>(null)
+  useScanFocus(scan)
   const { msg, run, setMsg, node } = useMsg()
 
   useEffect(() => {
@@ -43,7 +44,7 @@ export function StockOut({ user }: { user: StaffPublic }) {
     const found = await run(() => window.api.stock.search(q))
     if (!found) return
     if (found.length) add(found[0]!)
-    else if (q.trim()) setMsg({ ok: false, text: `No item found for "${q.trim()}".` })
+    else if (q.trim()) { setMsg({ ok: false, text: `No item found for "${q.trim()}".` }); setQ("") }
   }
 
   const pieces = lines.reduce((a, l) => a + num(l.qty), 0)
@@ -94,7 +95,7 @@ export function StockOut({ user }: { user: StaffPublic }) {
           </div>
           <div className="f">
             <label htmlFor="soq">Scan or search item</label>
-            <input id="soq" ref={scan} className="big" autoFocus autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)}
+            <input id="soq" ref={scan} onFocus={(e) => e.target.select()} className="big" autoFocus autoComplete="off" value={q} onChange={(e) => setQ(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void scanEnter() } }} />
           </div>
           {results.length > 0 && (

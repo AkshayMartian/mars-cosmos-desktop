@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactNode, type RefObject } from 'react'
 
 /** Dialog over the screen (prototype .scrim/.modal). Esc closes. */
 export function Modal({ title, wide, onClose, children }: { title: string; wide?: boolean; onClose: () => void; children: ReactNode }) {
@@ -18,6 +18,25 @@ export function Modal({ title, wide, onClose, children }: { title: string; wide?
 }
 
 /** Shared bits for screens. `useMsg` shows one success/error line; `run` wraps an IPC call and reports failures. */
+/**
+ * A barcode scanner is just a keyboard: it types the digits and presses Enter into whatever has focus. If the scan box
+ * lost focus (a click on a button or on empty space), the scan would go nowhere. So a letter or digit typed while no
+ * text field or dialog has focus is sent to the scan box instead.
+ */
+export function useScanFocus(ref: RefObject<HTMLInputElement | null>): void {
+  useEffect(() => {
+    const f = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.altKey || e.metaKey || e.key.length !== 1 || e.key === ' ') return
+      const t = e.target as HTMLElement | null
+      if (t?.closest('input, textarea, select, [contenteditable="true"]')) return // already typing somewhere
+      if (document.querySelector('[role="dialog"]')) return // a dialog owns the keyboard
+      ref.current?.focus() // the character that started this key press then lands in the scan box
+    }
+    window.addEventListener('keydown', f, true)
+    return () => window.removeEventListener('keydown', f, true)
+  }, [ref])
+}
+
 export function useMsg() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const run = useCallback(async <T,>(fn: () => Promise<T>, okText?: string): Promise<T | undefined> => {
