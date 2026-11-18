@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { code128Modules, formatSerial, parseStickerCode, stickerCode } from './serials'
+import { formatSerial, code128Modules, parseStickerCode, removeScannedPiece, stickerCode } from './serials'
 
 describe('sticker codes', () => {
   it('joins and splits barcode + serial', () => {
@@ -31,5 +31,40 @@ describe('Code 128', () => {
   })
   it('packs digits in pairs (shorter)', () => {
     expect(code128Modules('20000000000150001')!.length).toBeLessThan(code128Modules('2000000000015-0001')!.length)
+  })
+})
+
+describe('scan to remove', () => {
+  const v = { id: 'a', barcode: '2000000000015' }
+  const serials = Array.from({ length: 50 }, (_, i) => formatSerial(i + 1))
+  const rows = [{ v, qty: 50, serials }]
+
+  it('takes off just the scanned pieces: 50 scanned, 2 removed, 48 stay', () => {
+    const r1 = removeScannedPiece(rows, '20000000000150007')
+    if ('error' in r1) throw new Error(r1.error)
+    const r2 = removeScannedPiece(r1.lines, '2000000000015-0050')
+    if ('error' in r2) throw new Error(r2.error)
+    expect(r2.lines).toHaveLength(1)
+    expect(r2.lines[0]!.qty).toBe(48)
+    expect(r2.lines[0]!.serials).not.toContain('0007')
+    expect(r2.lines[0]!.serials).not.toContain('0050')
+    expect(rows[0]!.qty).toBe(50) // input untouched
+  })
+  it('refuses a piece that is not on the bill, a second scan of a removed piece, and a plain barcode', () => {
+    expect(removeScannedPiece(rows, '20000000000150099')).toEqual({ error: 'This piece is not on this bill' })
+    const r = removeScannedPiece(rows, '20000000000150001')
+    if ('error' in r) throw new Error(r.error)
+    expect(removeScannedPiece(r.lines, '20000000000150001')).toEqual({ error: 'This piece is not on this bill' })
+    expect(removeScannedPiece(rows, '2000000000015')).toEqual({ error: 'Scan the sticker of the piece to remove' })
+  })
+  it('works inside a bunch row and drops a row that runs empty', () => {
+    const bunch = { v, qty: 2, serials: ['0001', '0002'], bunch: 'B1' }
+    const r = removeScannedPiece([bunch], '20000000000150001')
+    if ('error' in r) throw new Error(r.error)
+    expect(r.lines[0]).toMatchObject({ qty: 1, serials: ['0002'], bunch: 'B1' })
+    const r2 = removeScannedPiece(r.lines, '20000000000150002')
+    if ('error' in r2) throw new Error(r2.error)
+    expect(r2.lines).toEqual([])
+    expect(r2.rowGone).toBe(true)
   })
 })

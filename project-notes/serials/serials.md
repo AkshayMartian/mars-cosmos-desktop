@@ -25,7 +25,7 @@
 | Add product → *Give every piece its own serial number* | checkbox (default on) | Makes the new product tracked; opening stock gets serials |
 | Edit product → *Serial numbers* | checkbox | Switches tracking on (every piece in stock gets a serial: "N pieces in stock got serials: print new stickers") or off (Billing sells by quantity again; pieces stay on record) |
 | Billing scan box | text | A sticker (`barcode` + `serial`, or typed `barcode-serial`) adds that piece. Same variant → same line, quantity +1. A plain barcode of a tracked item is refused (no serial) |
-| Billing line of a tracked item | row | Quantity is a number, **no − / + buttons**; serials listed under the item; only **✕** removes the **whole line** |
+| Billing line of a tracked item | row | Quantity is a number, **no − / + buttons**; serials listed under the item; **✕** removes the **whole line**; **Scan to remove** turns on a mode where each scanned sticker takes off just that piece (Done ends it) |
 | **Add as bunch** | button on a tracked line | Asks "how many pieces in all"; the last scanned piece is one of them; one new line with its own barcode (`21…`), fixed size |
 | Returns → pieces | checkboxes of serials | Choose exactly which pieces come back |
 | Returns → New items | scan box | Serial items are added by scanning; no − / + |
@@ -111,7 +111,7 @@ The six rules of the paper, as built:
 2. All pieces of a variant share **one** line on the bill (a bunch is the only exception, rule 4).
 3. The same piece scanned again changes nothing: *Already added*.
 4. A bunch is one extra line with its own barcode; its size is fixed.
-5. A scanned piece's quantity cannot be reduced: no − / + buttons; **✕** removes the whole line and its pieces are free at once.
+5. A scanned piece's quantity cannot be reduced: no − / + buttons; **✕** removes the whole line and its pieces are free at once. **Scan to remove** (added after the paper) removes single pieces by scanning them, so 2 of 50 do not need 48 re-scans; a piece not on the bill is refused with "This piece is not on this bill".
 6. Stock equals the real pieces. A held bill keeps its pieces reserved.
 
 Also: the main process never trusts the screen: serials, status, holds and duplicates are re-checked when the bill is saved.

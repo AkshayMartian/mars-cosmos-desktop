@@ -10,6 +10,7 @@ import type { CreditNoteDto } from '@shared/returns'
 import type { AltContext, AltJobDto } from '@shared/alterations'
 import { AltFields, altFormError, billAlteration, emptyAltForm, TagModal, type AltForm } from './AlterationForm'
 import type { StaffPublic } from '@shared/types'
+import { removeScannedPiece } from '@shared/serials'
 import { fmtDate, Modal, useMsg, useScanFocus } from '../ui'
 
 /**
@@ -48,6 +49,8 @@ export function Billing({ user }: { user: StaffPublic }) {
   const [skipOpen, setSkipOpen] = useState(false) // "Not now" on the Start the day prompt
   const [salesBy, setSalesBy] = useState('')
   const [dlg, setDlg] = useState<Dlg>(null)
+  /** Scan to remove: while on, a scanned sticker takes that one piece off the bill instead of adding it. */
+  const [removing, setRemoving] = useState(false)
   const [heldCount, setHeldCount] = useState(0)
   const [notes, setNotes] = useState<CreditNoteDto[]>([])
   const [altCtx, setAltCtx] = useState<AltContext | null>(null)
@@ -163,7 +166,7 @@ export function Billing({ user }: { user: StaffPublic }) {
   }
 
   function clearBill() {
-    setCart([]); setAlts({}); setQ(''); setResults([]); setMobile(''); setCustomer(null); setMiss(false); setBillDisc(''); setCoinsUse(''); setSalesBy(ctx?.meId ?? '')
+    setCart([]); setRemoving(false); setAlts({}); setQ(''); setResults([]); setMobile(''); setCustomer(null); setMiss(false); setBillDisc(''); setCoinsUse(''); setSalesBy(ctx?.meId ?? '')
     approval.current = undefined
     setMsg(null)
     scanRef.current?.focus()
@@ -172,6 +175,17 @@ export function Billing({ user }: { user: StaffPublic }) {
   async function scanEnter(typed: string) {
     // the box's own value, not the last render's: a fast scanner can press Enter before React has re-rendered
     const q = typed
+    if (removing) {
+      const r = removeScannedPiece(cart, q)
+      setQ(''); setResults([]); scanRef.current?.focus()
+      if ('error' in r) return setMsg({ ok: false, text: r.error })
+      if (r.rowGone) {
+        const gone = cart.find((l) => l.serials?.includes(r.serial) && q.includes(l.v.barcode))
+        if (gone && !r.lines.some((l) => l.v.id === gone.v.id)) setAlts((a) => { const { [gone.v.id]: _gone, ...rest } = a; return rest })
+      }
+      setCart(r.lines)
+      return setMsg({ ok: true, text: `Removed piece ${r.serial}` })
+    }
     // a sticker of a serial item (barcode + serial): the piece itself, with the rules checked in the main process
     const piece = await run(() => window.api.billing.scanPiece(q, piecesOnBill()))
     if (piece === undefined) { setQ(''); setResults([]); return } // refused: the message is on screen; empty the box for the next scan
@@ -305,7 +319,13 @@ export function Billing({ user }: { user: StaffPublic }) {
       <div className="cols">
         <div className="panel">
           <div className="f">
-            <label htmlFor="scan">Scan barcode or type item name</label>
+            {removing && (
+              <div className="banner" role="status" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, padding: '8px 10px', border: '1px solid var(--bad)', borderRadius: 8 }}>
+                <b>Scan to remove: scan each piece to take off the bill</b>
+                <button className="btn sm p" onClick={() => { setRemoving(false); setMsg(null); scanRef.current?.focus() }}>Done</button>
+              </div>
+            )}
+            <label htmlFor="scan">{removing ? 'Scan the piece to remove' : 'Scan barcode or type item name'}</label>
             <input id="scan" ref={scanRef} onFocus={(e) => e.target.select()} className="big" autoFocus autoComplete="off" placeholder="2000000000015 or 'shirt'" value={q}
               onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void scanEnter(e.currentTarget.value) } }} />
           </div>
@@ -336,6 +356,7 @@ export function Billing({ user }: { user: StaffPublic }) {
                               <div className="sub">{line.v.colour} · {line.v.size} · <span className="mono">{line.bunch ?? line.v.barcode}</span>{line.bunch ? ' · bunch' : ''} · {line.v.stock} in stock</div>
                               {line.serials && <div className="sub mono" aria-label="Serial numbers">Serial {line.serials.join(', ')}</div>}
                               <div style={{ marginTop: 4 }}>
+                                {line.serials && <button className="btn sm" style={{ marginRight: 6 }} onClick={() => { setRemoving(true); setMsg(null); scanRef.current?.focus() }}>Scan to remove</button>}
                                 {line.serials && !line.bunch && <button className="btn sm" style={{ marginRight: 6 }} onClick={() => setDlg({ t: 'bunch', key: line.key })}>Add as bunch</button>}
                                 {alts[line.v.id]
                                   ? <button className="chip good" style={{ border: 0, cursor: 'pointer' }} onClick={() => openAlt(line.v.id)}>✂ Alteration: {alts[line.v.id]!.form.work.join(', ')}</button>
@@ -351,7 +372,7 @@ export function Billing({ user }: { user: StaffPublic }) {
                         <td className="r"><input type="number" min="0" aria-label="Line discount" value={line.disc} onChange={(e) => setLineDisc(i, e.target.value)} /></td>
                         <td className="r num">{l.rate}%</td>
                         <td className="r num"><b>{formatRupees(l.net)}</b></td>
-                        <td><button className="btn sm" aria-label="Remove" onClick={() => remove(i)}>✕</button></td>
+                        <td><button className="btn sm" aria-label="Remove" title="Remove the whole row" onClick={() => remove(i)}>✕</button></td>
                       </tr>
                     )
                   })}

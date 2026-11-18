@@ -10,6 +10,8 @@ export const SERIAL_MSG = {
   onHold: 'This piece is in another bill on hold',
   unknown: 'This serial number is not in the stock records',
   noSerial: 'This sticker has no serial number. Stick one of our own stickers on the piece first.',
+  notOnBill: 'This piece is not on this bill',
+  removeNotSticker: 'Scan the sticker of the piece to remove',
   only: (n: number): string => `Only ${n} are free`
 } as const
 
@@ -35,6 +37,23 @@ export function parseStickerCode(raw: string): { barcode: string; serial: string
   if (dash) return { barcode: dash[1]!, serial: dash[2]! }
   const m = /^(\d{13})(\d+)$/.exec(c)
   return m ? { barcode: m[1]!, serial: m[2]! } : null
+}
+
+/**
+ * Scan to remove: takes one scanned piece off the bill, from whichever row holds it (a variant row or a bunch row).
+ * A row left with no pieces goes away. Returns the new rows, or the message to show when the piece is not on the bill.
+ */
+export function removeScannedPiece<L extends { v: { barcode: string; id: string }; qty: number; serials?: string[] }>(
+  lines: L[], code: string
+): { lines: L[]; serial: string; rowGone: boolean } | { error: string } {
+  const s = parseStickerCode(code)
+  if (!s) return { error: SERIAL_MSG.removeNotSticker }
+  const hit = lines.find((l) => l.v.barcode === s.barcode && l.serials?.includes(s.serial))
+  if (!hit) return { error: SERIAL_MSG.notOnBill }
+  const next = lines
+    .map((l) => (l === hit ? { ...l, serials: l.serials!.filter((x) => x !== s.serial), qty: l.qty - 1 } : l))
+    .filter((l) => !l.serials || l.serials.length > 0)
+  return { lines: next, serial: s.serial, rowGone: hit.serials!.length === 1 }
 }
 
 /** One piece on a piece list (history, return, stock out). */
