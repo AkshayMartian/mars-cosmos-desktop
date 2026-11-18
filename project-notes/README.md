@@ -12,6 +12,7 @@ Start here to review any module. Each module has one note (copy of [_module-temp
 | [Bills](bills/bills.md) | **done** | Bill list, reprint, WhatsApp, cancel bill |
 | [Alterations](alterations/alterations.md) | **done** | Tailor jobs, tags, slips, charges, tailors |
 | [Products](products/products.md) | **done** | Catalogue, size × colour, barcodes, photos, import |
+| [Serial numbers](serials/serials.md) | **built** (sticker scan untested) | A serial on every piece: scan pieces, bunches, return / count by serial |
 | [Print stickers](stickers/stickers.md) | **done** (labels) | Barcode labels (receipts and tags print too, see Settings) |
 | [Stock in](stock-in/stock-in.md) | **done** | Purchases and suppliers |
 | [Stock out](stock-out/stock-out.md) | **done** | Supplier return, damage, dispatch |
@@ -32,6 +33,7 @@ SQLite, money in integer paise, timestamps ISO-8601 text. Migrations are in `src
 |---|---|
 | Setup and people | `settings`, `staff`, `approval_attempts`, `audit_log`, `backups` |
 | Catalogue | `categories`, `products`, `variants`, `product_photos` |
+| Serial numbers | `pieces`, `piece_events`, `bunches`, `stock_count_pieces` |
 | Stock | `stock_moves` (stock is the sum of moves), `suppliers`, `purchases`, `purchase_lines`, `stock_outs`, `stock_out_lines`, `stock_counts`, `stock_count_lines` |
 | Customers | `customers`, `customer_sizes` (unused since migration 4), `coin_ledger` |
 | Selling | `bills`, `bill_lines`, `payments`, `bill_counters`, `held_bills`, `credit_notes` |
@@ -47,6 +49,7 @@ SQLite, money in integer paise, timestamps ISO-8601 text. Migrations are in `src
 | 3 | `approval_attempts`: wrong approver PINs counted per approver |
 | 4 | `product_photos` (one photo per colour), `customers.sizes` JSON, `products.photo` dropped |
 | 5 | `alterations.gst_rate`: the GST rate of an alteration charge is kept on the job |
+| 6 | Serial numbers: `products.track_serials`, `pieces`, `piece_events`, `bunches`, `stock_count_pieces` |
 
 ## 8. Roles and permissions
 

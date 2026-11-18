@@ -4,10 +4,12 @@ import { formatRupees, roundToRupee } from '@shared/money'
 import { receiptText } from '@shared/receipt'
 import { returnPart, type BillForReturn, type ReturnBillRow, type ReturnResult } from '@shared/returns'
 import type { BillingContext, PayMode, SellableVariant } from '@shared/billing'
+import { SERIAL_MSG } from '@shared/serials'
 import { fmtDate, fmtDay, Modal, useMsg } from '../ui'
 import { ApprovalModal, OpeningModal } from './Billing'
 
-interface NewLine { v: SellableVariant; qty: number }
+/** serials = the pieces of an item that uses serial numbers (scanned; the quantity is how many) */
+interface NewLine { v: SellableVariant; qty: number; serials?: string[] }
 
 /** Tell the top bar ("My sales today") that money moved. */
 const announce = () => window.dispatchEvent(new Event('mars:sale-saved'))
@@ -18,6 +20,7 @@ export function Returns() {
   const [found, setFound] = useState<ReturnBillRow[] | null>(null)
   const [bill, setBill] = useState<BillForReturn | null>(null)
   const [sel, setSel] = useState<Record<number, string>>({})
+  const [serialSel, setSerialSel] = useState<Record<number, string[]>>({}) // bill line id → serials of the pieces coming back
   const [nq, setNq] = useState('')
   const [results, setResults] = useState<SellableVariant[]>([])
   const [newLines, setNewLines] = useState<NewLine[]>([])
@@ -41,8 +44,8 @@ export function Returns() {
   const scheme = ctx?.gstScheme ?? 'regular'
   const picked = useMemo(() => {
     if (!bill) return []
-    return bill.lines.map((l) => ({ l, q: Math.max(0, Math.min(l.returnable, Math.floor(Number(sel[l.id]) || 0))) })).filter((x) => x.q > 0)
-  }, [bill, sel])
+    return bill.lines.map((l) => ({ l, q: l.pieces.length ? (serialSel[l.id] ?? []).length : Math.max(0, Math.min(l.returnable, Math.floor(Number(sel[l.id]) || 0))) })).filter((x) => x.q > 0)
+  }, [bill, sel, serialSel])
   const returnValue = roundToRupee(picked.reduce((a, x) => a + returnPart(x.l.total, x.l.qty, x.l.returned, x.q), 0))
   const exchange = useMemo(
     () => calc(scheme, newLines.map((n) => ({ variantId: n.v.id, qty: n.qty, price: n.v.price, gst: n.v.gst })), 0),
@@ -59,11 +62,12 @@ export function Returns() {
   async function pick(id: string) {
     const b = await run(() => window.api.returns.bill(id))
     if (!b) return
-    setBill(b); setSel({}); setNewLines([]); setNq(''); setSettle('credit_note'); setPayMode('cash'); approval.current = undefined; setMsg(null)
+    setBill(b); setSel({}); setSerialSel({}); setNewLines([]); setNq(''); setSettle('credit_note'); setPayMode('cash'); approval.current = undefined; setMsg(null)
   }
   function back() { setBill(null); setFound(null); approval.current = undefined; setMsg(null) }
 
   function addNew(v: SellableVariant) {
+    if (v.tracked) { setMsg({ ok: false, text: SERIAL_MSG.noSerial }); setNq(''); setResults([]); return }
     const have = newLines.find((n) => n.v.id === v.id)?.qty ?? 0
     if (v.stock <= 0) { setMsg({ ok: false, text: `${v.label} is out of stock.` }); return }
     if (have + 1 > v.stock) { setMsg({ ok: false, text: `Only ${v.stock} of ${v.label} in stock.` }); return }
@@ -71,8 +75,17 @@ export function Returns() {
     setNewLines((c) => (c.some((n) => n.v.id === v.id) ? c.map((n) => (n.v.id === v.id ? { ...n, qty: n.qty + 1 } : n)) : [...c, { v, qty: 1 }]))
     setNq(''); setResults([])
   }
+  /** a scanned piece of a serial item for the exchange: one row per variant, the pieces listed under it */
+  function addNewPiece(v: SellableVariant, serial: string) {
+    setMsg(null)
+    setNewLines((c) => (c.some((n) => n.v.id === v.id)
+      ? c.map((n) => (n.v.id === v.id ? { ...n, serials: [...(n.serials ?? []), serial], qty: n.qty + 1 } : n))
+      : [...c, { v, qty: 1, serials: [serial] }]))
+    setNq(''); setResults([])
+  }
   const bump = (i: number, d: number) => {
     const n = newLines[i]!
+    if (n.serials) return
     const next = n.qty + d
     if (next < 1) return
     if (next > n.v.stock) return setMsg({ ok: false, text: `Only ${n.v.stock} of ${n.v.label} in stock.` })
@@ -90,8 +103,8 @@ export function Returns() {
     setBusy(true)
     try {
       const r = await window.api.returns.do({
-        billId: bill.id, lines: picked.map((x) => ({ lineId: x.l.id, qty: x.q })),
-        newLines: newLines.map((n) => ({ variantId: n.v.id, qty: n.qty })), settle: effectiveSettle, payMode, approval: approval.current
+        billId: bill.id, lines: picked.map((x) => ({ lineId: x.l.id, qty: x.q, ...(x.l.pieces.length ? { serials: serialSel[x.l.id] } : {}) })),
+        newLines: newLines.map((n) => ({ variantId: n.v.id, qty: n.qty, ...(n.serials ? { serials: n.serials } : {}) })), settle: effectiveSettle, payMode, approval: approval.current
       })
       announce(); setMsg(null); setDlg({ t: 'done', r })
     } catch (e) {
@@ -143,7 +156,16 @@ export function Returns() {
                     <td>{l.name}<div className="sub">{l.colour} · {l.size}</div></td>
                     <td className="r num">{formatRupees(Math.round(l.total / l.qty))}</td>
                     <td className="num">{l.qty}{l.returned ? ` (${l.returned} back)` : ''}</td>
-                    <td>{l.returnable > 0
+                    <td>{l.returnable > 0 && l.pieces.length > 0
+                      ? (
+                        <div aria-label={`Pieces to return for ${l.name} ${l.colour} ${l.size}`}>
+                          {l.pieces.map((s) => (
+                            <label key={s} className="check mono"><input type="checkbox" checked={(serialSel[l.id] ?? []).includes(s)}
+                              onChange={(e) => setSerialSel((x) => ({ ...x, [l.id]: e.target.checked ? [...(x[l.id] ?? []), s] : (x[l.id] ?? []).filter((y) => y !== s) }))} /> {s}</label>
+                          ))}
+                        </div>
+                      )
+                      : l.returnable > 0
                       ? <input type="number" min="0" max={l.returnable} aria-label={`Return quantity for ${l.name} ${l.colour} ${l.size}`} value={sel[l.id] ?? ''}
                           onChange={(e) => setSel({ ...sel, [l.id]: e.target.value })} />
                       : <span className="sub">{l.service ? 'Service' : 'All returned'}</span>}</td>
@@ -158,6 +180,10 @@ export function Returns() {
                 onKeyDown={async (e) => {
                   if (e.key !== 'Enter') return
                   e.preventDefault()
+                  const code = nq
+                  const piece = await run(() => window.api.billing.scanPiece(code, newLines.flatMap((n) => (n.serials ?? []).map((serial) => ({ variantId: n.v.id, serial })))))
+                  if (piece === undefined) return setNq('')
+                  if (piece) return addNewPiece(piece.variant, piece.serial)
                   const r = await run(() => window.api.billing.search(nq))
                   if (r?.length === 1) addNew(r[0]!)
                 }} />
@@ -172,8 +198,8 @@ export function Returns() {
               {newLines.length ? (
                 <div className="tw"><table><tbody>{newLines.map((n, i) => (
                   <tr key={n.v.id}>
-                    <td>{n.v.label}</td>
-                    <td><span className="qty"><button aria-label="Less" onClick={() => bump(i, -1)}>−</button><span className="num">{n.qty}</span><button aria-label="More" onClick={() => bump(i, 1)}>+</button></span></td>
+                    <td>{n.v.label}{n.serials && <div className="sub mono">Serial {n.serials.join(', ')}</div>}</td>
+                    <td>{n.serials ? <b className="num">{n.qty}</b> : <span className="qty"><button aria-label="Less" onClick={() => bump(i, -1)}>−</button><span className="num">{n.qty}</span><button aria-label="More" onClick={() => bump(i, 1)}>+</button></span>}</td>
                     <td className="r num">{formatRupees(n.v.price * n.qty)}</td>
                     <td><button className="btn sm" aria-label="Remove" onClick={() => setNewLines((c) => c.filter((_, j) => j !== i))}>✕</button></td>
                   </tr>

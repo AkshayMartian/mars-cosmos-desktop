@@ -1,7 +1,11 @@
 import { formatRupees } from './money'
+import { code128Modules, stickerCode } from './serials'
 
-/** One label's worth of data. `qty` is how many stickers of it to print. */
-export interface StickerItem { variantId: string; shop: string; name: string; colour: string; size: string; barcode: string; mrp: number; qty: number }
+/**
+ * One label's worth of data. `qty` is how many stickers of it to print. An item with serial numbers lists the
+ * serials to print (one sticker per piece, `qty` = how many) and its barcode carries the serial too.
+ */
+export interface StickerItem { variantId: string; shop: string; name: string; colour: string; size: string; barcode: string; mrp: number; qty: number; serials?: string[] }
 
 export interface LabelSize { id: string; label: string; wMm: number; hMm: number }
 export const LABEL_SIZES: LabelSize[] = [
@@ -46,12 +50,25 @@ export function barcodeSvg(code: string, w: string, h: string): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 95 1" preserveAspectRatio="none" shape-rendering="crispEdges">${rects}</svg>`
 }
 
+/** SVG of a Code 128 barcode (the sticker code of a piece: barcode + serial). */
+export function code128Svg(text: string, w: string, h: string): string {
+  const m = code128Modules(text)
+  if (!m) return ''
+  let rects = ''
+  for (let i = 0; i < m.length; ) {
+    if (m[i] === '1') { let j = i; while (m[j] === '1') j++; rects += `<rect x="${i}" y="0" width="${j - i}" height="1"/>`; i = j } else i++
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${m.length} 1" preserveAspectRatio="none" shape-rendering="crispEdges">${rects}</svg>`
+}
+
 const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
 
 /** One label as HTML (also used for the on-screen preview). Sizes are in mm so it prints at true size. */
-export function labelHtml(i: StickerItem, size: LabelSize): string {
+export function labelHtml(i: StickerItem, size: LabelSize, serial?: string): string {
   const barH = Math.round(size.hMm * 0.3 * 10) / 10
-  return `<div class="lbl" style="width:${size.wMm}mm;height:${size.hMm}mm"><b class="shop">${esc(i.shop)}</b><span>${esc(i.name)}</span><span>${esc(i.size)} · ${esc(i.colour)}</span>${barcodeSvg(i.barcode, `${size.wMm - 6}mm`, `${barH}mm`)}<span class="code">${esc(i.barcode)}</span><b class="mrp">MRP ${esc(formatRupees(i.mrp))} <small>incl. of all taxes</small></b></div>`
+  const bars = serial ? code128Svg(stickerCode(i.barcode, serial), `${size.wMm - 6}mm`, `${barH}mm`) : barcodeSvg(i.barcode, `${size.wMm - 6}mm`, `${barH}mm`)
+  const code = serial ? `${i.barcode} · No. ${serial}` : i.barcode
+  return `<div class="lbl" style="width:${size.wMm}mm;height:${size.hMm}mm"><b class="shop">${esc(i.shop)}</b><span>${esc(i.name)}</span><span>${esc(i.size)} · ${esc(i.colour)}</span>${bars}<span class="code">${esc(code)}</span><b class="mrp">MRP ${esc(formatRupees(i.mrp))} <small>incl. of all taxes</small></b></div>`
 }
 
 export const LABEL_CSS =
@@ -60,7 +77,7 @@ export const LABEL_CSS =
 
 /** A whole print job: every item repeated `qty` times, one label per page. */
 export function printDocument(items: StickerItem[], size: LabelSize): string {
-  const body = items.flatMap((i) => Array.from({ length: i.qty }, () => labelHtml(i, size))).join('')
+  const body = items.flatMap((i) => (i.serials ? i.serials.map((s) => labelHtml(i, size, s)) : Array.from({ length: i.qty }, () => labelHtml(i, size)))).join('')
   const css = `@page{size:${size.wMm}mm ${size.hMm}mm;margin:0}body{margin:0}.lbl{page-break-after:always;break-after:page}${LABEL_CSS}`
   return `<!doctype html><html><head><meta charset="utf-8"><style>${css}</style></head><body>${body}</body></html>`
 }

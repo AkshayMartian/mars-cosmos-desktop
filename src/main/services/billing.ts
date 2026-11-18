@@ -3,7 +3,7 @@ import { getDb } from '../db'
 import { calc, type CalcLineInput } from '@shared/calc'
 import { fyOf, localDate } from '@shared/dates'
 import { variantLabel } from '@shared/catalogue'
-import type { BillDto, BillingContext, HeldBillDto, HeldPayload, NewBillInput, SellableVariant, ShopInfo } from '@shared/billing'
+import type { BillDto, BillingContext, BunchDto, HeldBillDto, HeldPayload, NewBillInput, ScannedPiece, SellableVariant, ShopInfo } from '@shared/billing'
 import type { GstScheme } from '@shared/types'
 import type { Paise } from '@shared/money'
 import type { PayMode } from '@shared/billing'
@@ -14,6 +14,8 @@ import { requireRole, type Actor } from './session'
 import { getSetting } from './settings'
 import { receiptText, receiptWidth } from '@shared/receipt'
 import { addMove, stockOf } from './stock'
+import { findPiece, freeSerials, heldSerials, isTracked, movePieces, newBunchCode, pieceProblem, resolveSticker, takeFree } from './serials'
+import { SERIAL_MSG } from '@shared/serials'
 import { coinCfg, coinBalance, liveBalance, recordSale } from './coins'
 import { coinPaise, maxCoinsFor } from '@shared/coins'
 
@@ -22,15 +24,46 @@ const SELLERS = ['owner', 'manager', 'cashier'] as const
 /* ---------- items ---------- */
 
 const SELL = `SELECT v.id,p.name,v.colour,v.size,v.barcode,v.mrp,v.sale_price AS price,COALESCE(s.qty,0) AS stock,
-              c.gst_mode AS mode,c.gst_rate AS rate,c.hsn
+              c.gst_mode AS mode,c.gst_rate AS rate,c.hsn,p.track_serials AS tracked
   FROM variants v JOIN products p ON p.id=v.product_id JOIN categories c ON c.id=p.category_id
   LEFT JOIN v_stock s ON s.variant_id=v.id WHERE p.active=1 AND c.is_service=0`
 
-interface SellRow { id: string; name: string; colour: string; size: string; barcode: string; mrp: number; price: number; stock: number; mode: 'auto' | 'fixed' | 'exempt'; rate: number; hsn: string }
+interface SellRow { id: string; name: string; colour: string; size: string; barcode: string; mrp: number; price: number; stock: number; mode: 'auto' | 'fixed' | 'exempt'; rate: number; hsn: string; tracked: number }
 const toSellable = (r: SellRow): SellableVariant => ({
   id: r.id, name: r.name, colour: r.colour, size: r.size, label: variantLabel(r.name, r.colour, r.size), barcode: r.barcode,
-  mrp: r.mrp, price: r.price, stock: r.stock, gst: { mode: r.mode, rate: r.rate }
+  mrp: r.mrp, price: r.price, stock: r.stock, gst: { mode: r.mode, rate: r.rate }, tracked: !!r.tracked
 })
+
+/**
+ * A scanned sticker (barcode + serial) → the piece, checked against the rules: known serial, in stock, not in a held
+ * bill, not already on this bill. Returns null when the code is not a sticker code, so the screen falls back to the
+ * normal barcode / name search. `inBill` = the pieces already on the bill being made.
+ */
+export function scanPiece(code: string, inBill: { variantId: string; serial: string }[]): ScannedPiece | null {
+  requireRole(...SELLERS)
+  const s = resolveSticker(code)
+  if (!s) return null
+  const v = sellableByIds([s.variantId])[0]
+  if (!v || !v.tracked) return null // not a serial item: the plain barcode search handles it
+  const piece = findPiece(s.variantId, s.serial)
+  if (piece && inBill.some((p) => p.variantId === s.variantId && p.serial === s.serial)) throw new Error(SERIAL_MSG.already)
+  const bad = pieceProblem(piece)
+  if (bad) throw new Error(bad)
+  return { variant: v, serial: s.serial }
+}
+
+/**
+ * Picks the pieces of a bunch: `qty` free pieces of the variant, the scanned one (`first`) included. The bunch gets its
+ * own barcode. `inBill` = serials of this variant already on the bill (they are not picked again).
+ */
+export function makeBunch(variantId: string, qty: number, inBill: string[], first?: string): BunchDto {
+  requireRole(...SELLERS)
+  if (!isTracked(variantId)) throw new Error('This item does not use serial numbers.')
+  if (!Number.isInteger(qty) || qty < 2) throw new Error('A bunch is 2 or more pieces.')
+  const free = freeSerials(variantId, inBill, first)
+  if (free.length < qty) throw new Error(SERIAL_MSG.only(free.length))
+  return { code: newBunchCode(), serials: free.slice(0, qty) }
+}
 
 /** A scanned barcode (ours or the brand's) wins; otherwise a name/brand/colour/size search. */
 export function sellableSearch(q: string): SellableVariant[] {
@@ -158,9 +191,22 @@ export function createBill(input: NewBillInput, internals: BillInternals = {}): 
   if (!input.lines.length && !services.length) throw new Error('Add at least one item.')
 
   const want = new Map<string, { qty: number; disc: number }>()
+  const serialsOf = new Map<string, string[]>() // tracked items: every serial on the bill
+  const bunchesIn: { code: string; variantId: string; serials: string[] }[] = []
   for (const l of input.lines) {
     if (!Number.isInteger(l.qty) || l.qty <= 0) throw new Error('Quantities must be whole numbers above zero.')
     if (!Number.isInteger(l.disc) || l.disc < 0) throw new Error('Discount cannot be negative.')
+    if (isTracked(l.variantId)) {
+      // serial numbers: the pieces sold are exactly the serials on the line, never just a number
+      const s = l.serials ?? []
+      if (!s.length || s.length !== l.qty) throw new Error('Scan the sticker of every piece: this item uses serial numbers.')
+      serialsOf.set(l.variantId, [...(serialsOf.get(l.variantId) ?? []), ...s])
+      if (l.bunch) {
+        if (s.length < 2) throw new Error('A bunch is 2 or more pieces.')
+        if (bunchesIn.some((b) => b.code === l.bunch) || db.prepare('SELECT 1 FROM bunches WHERE code=?').get(l.bunch)) throw new Error('That bunch is already on a bill.')
+        bunchesIn.push({ code: l.bunch, variantId: l.variantId, serials: s })
+      }
+    } else if (l.serials?.length || l.bunch) throw new Error('This item does not use serial numbers.')
     const w = want.get(l.variantId) ?? { qty: 0, disc: 0 }
     want.set(l.variantId, { qty: w.qty + l.qty, disc: w.disc + l.disc })
   }
@@ -176,6 +222,9 @@ export function createBill(input: NewBillInput, internals: BillInternals = {}): 
   }
 
   const items = new Map(sellableByIds([...want.keys()]).map((v) => [v.id, v]))
+  // the pieces must exist, be in stock and not sit in a held bill (checked again here: the screen is never trusted)
+  const pieces = new Map<string, ReturnType<typeof takeFree>>()
+  for (const [vid, serials] of serialsOf) pieces.set(vid, takeFree(vid, serials))
   const scheme = getSetting<GstScheme>('gst_scheme', 'regular')
   const calcLines: CalcLineInput[] = []
   for (const [id, w] of want) {
@@ -266,6 +315,16 @@ export function createBill(input: NewBillInput, internals: BillInternals = {}): 
       const hsn = (db.prepare('SELECT c.hsn FROM variants v JOIN products p ON p.id=v.product_id JOIN categories c ON c.id=p.category_id WHERE v.id=?').get(l.variantId) as { hsn: string }).hsn
       insLine.run(id, l.variantId, v.name, v.size, v.colour, hsn, l.qty, v.mrp, v.price, (l.disc ?? 0) + l.share, l.taxable, l.rate, l.cgst, l.sgst, l.net)
       addMove({ variantId: l.variantId, qty: -l.qty, type: 'sale', ref: no, staffId: actor.id, at })
+      // serial numbers: each piece sold is marked sold and linked to this bill (a bunch links its pieces to the bunch too)
+      const mine = pieces.get(l.variantId)
+      if (mine) {
+        const bunched = new Map<string, number>()
+        for (const b of bunchesIn.filter((x) => x.variantId === l.variantId)) {
+          const bid = Number(db.prepare('INSERT INTO bunches (code,variant_id,bill_id,qty,created_at) VALUES (?,?,?,?,?)').run(b.code, b.variantId, id, b.serials.length, at).lastInsertRowid)
+          for (const s of b.serials) bunched.set(s, bid)
+        }
+        for (const p of mine) movePieces([p.id], 'sold', 'sold', { ref: no, staffId: actor.id, at, billId: id, bunchId: bunched.get(p.serial) ?? null })
+      }
     }
     const insPay = db.prepare('INSERT INTO payments (bill_id,mode,amount) VALUES (?,?,?)')
     for (const p of payments) insPay.run(id, p.mode, p.amount)
@@ -322,6 +381,8 @@ export function receiptTextFor(billId: string, copy = false): { text: string; wi
 export function holdBill(payload: HeldPayload): void {
   const actor = requireRole(...SELLERS)
   if (!payload.lines.length) throw new Error('Nothing to hold.')
+  // a held bill keeps its pieces reserved: they must still be free now
+  for (const l of payload.lines) if (l.serials?.length) takeFree(l.variantId, l.serials)
   getDb().prepare('INSERT INTO held_bills (id,staff_id,payload,at) VALUES (?,?,?,?)').run(randomUUID(), actor.id, JSON.stringify(payload), new Date().toISOString())
 }
 
@@ -333,11 +394,29 @@ export function listHeld(): HeldBillDto[] {
   return rows.map((r) => ({ id: r.id, at: r.at, staffName: r.staffName, items: (JSON.parse(r.payload) as HeldPayload).lines.length }))
 }
 
-/** Takes the bill back out of the held list. */
-export function resumeHeld(id: string): HeldPayload {
+/**
+ * Takes the bill back out of the held list. Its pieces are no longer reserved, so each serial is checked again:
+ * a piece that is no longer in stock is dropped (and a bunch that lost a piece is dropped whole), with a note.
+ */
+export function resumeHeld(id: string): HeldPayload & { notes: string[] } {
   requireRole(...SELLERS)
   const r = getDb().prepare('SELECT payload FROM held_bills WHERE id=?').get(id) as { payload: string } | undefined
   if (!r) throw new Error('That held bill is no longer there.')
-  getDb().prepare('DELETE FROM held_bills WHERE id=?').run(id)
-  return JSON.parse(r.payload) as HeldPayload
+  const payload = JSON.parse(r.payload) as HeldPayload
+  const notes: string[] = []
+  getDb().transaction(() => {
+    getDb().prepare('DELETE FROM held_bills WHERE id=?').run(id)
+    const held = heldSerials() // other held bills
+    const lines: HeldPayload['lines'] = []
+    for (const l of payload.lines) {
+      if (!l.serials?.length) { lines.push(l); continue }
+      const ok = l.serials.filter((s) => !pieceProblem(findPiece(l.variantId, s), held))
+      if (ok.length === l.serials.length) { lines.push(l); continue }
+      if (l.bunch) { notes.push('a bunch was removed because some of its pieces are no longer free'); continue }
+      if (ok.length) lines.push({ ...l, serials: ok, qty: ok.length })
+      notes.push(`${l.serials.length - ok.length} piece(s) that are no longer in stock were removed`)
+    }
+    payload.lines = lines
+  })()
+  return { ...payload, notes }
 }

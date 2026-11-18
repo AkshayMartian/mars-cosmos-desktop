@@ -188,5 +188,45 @@ UPDATE customers SET sizes = json_object(
     sql: /* sql */ `
 ALTER TABLE alterations ADD COLUMN gst_rate INTEGER NOT NULL DEFAULT 18;
 `
+  },
+  {
+    // Serial numbers: a product can be tracked piece by piece. Every piece gets its own serial (unique within its variant)
+    // and a status; stock_moves stay the quantity ledger and always agree with the pieces that are 'in_stock'.
+    version: 6,
+    sql: /* sql */ `
+ALTER TABLE products ADD COLUMN track_serials INTEGER NOT NULL DEFAULT 0;   -- off for existing products; switched on per product
+
+CREATE TABLE bunches (                          -- many pieces of one variant sold together as one line with its own barcode
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  code TEXT NOT NULL UNIQUE,
+  variant_id TEXT NOT NULL REFERENCES variants(id),
+  bill_id TEXT REFERENCES bills(id),
+  qty INTEGER NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE pieces (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  variant_id TEXT NOT NULL REFERENCES variants(id),
+  serial TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'in_stock' CHECK (status IN ('in_stock','sold','damaged','supplier_return','dispatched','other_out','lost')),
+  bill_id TEXT REFERENCES bills(id),            -- the sale bill the piece is on while it is 'sold'
+  bunch_id INTEGER REFERENCES bunches(id),
+  purchase_id TEXT REFERENCES purchases(id),    -- the stock-in that brought it (for "print what just arrived")
+  created_at TEXT NOT NULL,
+  UNIQUE (variant_id, serial)
+);
+CREATE INDEX ix_pieces_variant ON pieces(variant_id, status);
+CREATE INDEX ix_pieces_bill ON pieces(bill_id);
+
+CREATE TABLE piece_events (                     -- the piece's history: received, sold on bill ..., returned, ...
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  piece_id INTEGER NOT NULL REFERENCES pieces(id),
+  event TEXT NOT NULL, ref TEXT, staff_id TEXT, at TEXT NOT NULL
+);
+CREATE INDEX ix_piece_events ON piece_events(piece_id);
+
+CREATE TABLE stock_count_pieces (count_id TEXT NOT NULL REFERENCES stock_counts(id), piece_id INTEGER NOT NULL REFERENCES pieces(id), PRIMARY KEY (count_id, piece_id));
+`
   }
 ]

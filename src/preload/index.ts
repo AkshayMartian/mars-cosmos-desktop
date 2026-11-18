@@ -7,14 +7,15 @@ import type { ReportDto, ReportPeriod, ReportTab } from '@shared/reports'
 import type { AllSettings, BackupInfo, CoinSettings, PrinterSettings, ReceiptSettings, ShopSettings, StaffAdminRow, StaffSaveInput } from '@shared/settings'
 import type { GstScheme } from '@shared/types'
 import type { StickerContext, StickerItem, StickerPrintResult } from '@shared/stickers'
+import type { PieceHistoryDto } from '@shared/serials'
 import type { BillDetail, BillListRow, BillPeriod, CancelInput } from '@shared/bills'
 import type { BillForReturn, CreditNoteDto, ReturnBillRow, ReturnInput, ReturnResult } from '@shared/returns'
 import type { AdjustInput, ApprovalInput, ApproverDto, CountDto, MoveFullRow, StockOutInput } from '@shared/stockops'
 import type {
-  BillDto, BillingContext, CustomerDto, HeldBillDto, HeldPayload, NewBillInput, NewCustomerInput, SellableVariant
+  BillDto, BillingContext, BunchDto, CustomerDto, HeldBillDto, HeldPayload, NewBillInput, NewCustomerInput, ScannedPiece, SellableVariant
 } from '@shared/billing'
 import type {
-  CategoryDto, ImportPreview, ImportResult, MoveRow, NewCategoryInput, NewProductInput, ProductPhotoDto, ProductDetail, ProductListRow, PurchaseRow,
+  CategoryDto, ImportPreview, ImportResult, MoveRow, NewCategoryInput, NewProductInput, PieceScan, ProductPhotoDto, ProductDetail, ProductListRow, PurchaseRow,
   StockInInput, StockRow, SupplierDto, VariantSearchRow
 } from '@shared/catalogue'
 
@@ -46,6 +47,7 @@ const api = {
     update: (id: string, patch: { name: string; brand: string; categoryId: string }) => call<void>('cat:update', id, patch),
     prices: (variantId: string, mrp: number, salePrice: number) => call<void>('cat:prices', variantId, mrp, salePrice),
     brandBarcode: (variantId: string, code: string) => call<void>('cat:brandBarcode', variantId, code),
+    trackSerials: (id: string, on: boolean) => call<{ newSerials: number }>('cat:trackSerials', id, on),
     archive: (id: string) => call<void>('cat:archive', id),
     restore: (id: string) => call<void>('cat:restore', id)
   },
@@ -53,6 +55,8 @@ const api = {
     context: () => call<BillingContext>('billing:context'),
     search: (q: string) => call<SellableVariant[]>('billing:search', q),
     archived: (q: string) => call<string[]>('billing:archived', q),
+    scanPiece: (code: string, inBill: { variantId: string; serial: string }[]) => call<ScannedPiece | null>('billing:scanPiece', code, inBill),
+    makeBunch: (variantId: string, qty: number, inBill: string[], first?: string) => call<BunchDto>('billing:makeBunch', variantId, qty, inBill, first),
     variants: (ids: string[]) => call<SellableVariant[]>('billing:variants', ids),
     photo: (variantId: string) => call<string | null>('billing:photo', variantId),
     openDay: (openingCash: number) => call<{ id: string }>('billing:openDay', openingCash),
@@ -60,7 +64,7 @@ const api = {
     bill: (id: string) => call<BillDto>('billing:bill', id),
     hold: (payload: HeldPayload) => call<void>('billing:hold', payload),
     held: () => call<HeldBillDto[]>('billing:held'),
-    resume: (id: string) => call<HeldPayload>('billing:resume', id)
+    resume: (id: string) => call<HeldPayload & { notes: string[] }>('billing:resume', id)
   },
   alterations: {
     list: (q = '') => call<AltList>('alt:list', q),
@@ -109,9 +113,10 @@ const api = {
     items: (ids: string[]) => call<StickerItem[]>('stickers:items', ids),
     lastPurchase: (purchaseId?: string) => call<StickerItem[]>('stickers:lastPurchase', purchaseId),
     stock: (ids: string[]) => call<StickerItem[]>('stickers:stock', ids),
+    piece: (code: string) => call<StickerItem>('stickers:piece', code),
     printers: () => call<string[]>('stickers:printers'),
     savePrefs: (p: { size: string; printer: string }) => call<StickerContext>('stickers:savePrefs', p),
-    print: (lines: { variantId: string; qty: number }[]) => call<StickerPrintResult>('stickers:print', lines)
+    print: (lines: { variantId: string; qty: number; serials?: string[] }[]) => call<StickerPrintResult>('stickers:print', lines)
   },
   bills: {
     list: (period: BillPeriod, q = '') => call<BillListRow[]>('bills:list', period, q),
@@ -145,6 +150,7 @@ const api = {
   },
   stock: {
     search: (q: string) => call<VariantSearchRow[]>('stock:search', q),
+    scanPiece: (code: string, inList: { variantId: string; serial: string }[], want: 'free' | 'gone' = 'free') => call<PieceScan | null>('stock:scanPiece', code, inList, want),
     levels: (q = '', lowOnly = false) => call<StockRow[]>('stock:levels', q, lowOnly),
     history: (variantId: string) => call<MoveRow[]>('stock:history', variantId),
     suppliers: () => call<SupplierDto[]>('stock:suppliers'),
@@ -152,7 +158,8 @@ const api = {
     in: (input: StockInInput) => call<{ purchaseId: string; qty: number }>('stock:in', input),
     recent: () => call<PurchaseRow[]>('stock:recent'),
     out: (input: StockOutInput) => call<{ id: string; qty: number }>('stock:out', input),
-    adjust: (input: AdjustInput) => call<{ stock: number }>('stock:adjust', input),
+    adjust: (input: AdjustInput) => call<{ stock: number; newSerials?: string[] }>('stock:adjust', input),
+    pieceHistory: (code: string) => call<PieceHistoryDto>('serials:history', code),
     moves: () => call<MoveFullRow[]>('stock:moves'),
     approvers: () => call<ApproverDto[]>('app:approvers')
   },

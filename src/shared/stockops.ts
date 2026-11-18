@@ -27,7 +27,8 @@ export interface StockOutInput {
   type: OutType
   supplierId: string | null
   reason: string
-  lines: { variantId: string; qty: number }[]
+  /** items using serial numbers list the exact pieces (by scanning), and qty is how many serials */
+  lines: { variantId: string; qty: number; serials?: string[] }[]
   /** needed when an item would go below zero stock */
   approval?: ApprovalInput
 }
@@ -45,6 +46,8 @@ export interface AdjustInput {
   variantId: string
   /** + adds stock, - removes it */
   change: number
+  /** items using serial numbers: the exact pieces going out (change < 0) or the lost / damaged pieces found again (change > 0, optional) */
+  serials?: string[]
   reason: AdjustReason
   approval?: ApprovalInput
 }
@@ -56,6 +59,9 @@ export interface CountLineDto {
   /** what the system said when the count was started */
   system: number
   counted: number
+  /** serial numbers are on: counted by scanning each piece; the pieces in stock that were not scanned yet */
+  tracked?: boolean
+  missing?: string[]
 }
 
 export interface CountDto {

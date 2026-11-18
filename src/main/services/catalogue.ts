@@ -6,6 +6,7 @@ import { assertTemp, promoteAs, readDataUrl, removeFile, saveTemp, slug } from '
 import { audit } from './auth'
 import { requireRole, current } from './session'
 import { addMove } from './stock'
+import { receivePieces, syncPieces } from './serials'
 
 export function listCategories(): CategoryDto[] {
   return getDb()
@@ -52,11 +53,11 @@ export function listProducts(q = '', categoryId = '', archived = false): Product
 
 export function getProduct(id: string): ProductDetail {
   const db = getDb()
-  const row = db.prepare('SELECT id,name,brand,category_id AS categoryId,active FROM products WHERE id=?').get(id) as
-    | (Omit<ProductDetail, 'variants' | 'active'> & { active: number })
+  const row = db.prepare('SELECT id,name,brand,category_id AS categoryId,active,track_serials AS trackSerials FROM products WHERE id=?').get(id) as
+    | (Omit<ProductDetail, 'variants' | 'active' | 'trackSerials'> & { active: number; trackSerials: number })
     | undefined
   if (!row) throw new Error('Product not found.')
-  const p = { ...row, active: !!row.active }
+  const p = { ...row, active: !!row.active, trackSerials: !!row.trackSerials }
   const variants = db
     .prepare(
       `SELECT v.id,v.product_id AS productId,v.size,v.colour,v.barcode,v.brand_barcode AS brandBarcode,
@@ -85,7 +86,7 @@ export const productNameTaken = (name: string): boolean =>
 /** One product + its variants + opening stock, all or nothing. Shared by the Add product form and Excel import. */
 export function insertProduct(
   actorId: string,
-  p: { name: string; brand: string; categoryId: string },
+  p: { name: string; brand: string; categoryId: string; trackSerials?: boolean },
   variants: VariantSpec[],
   source: 'product' | 'import' = 'product'
 ): { id: string; variantIds: string[] } {
@@ -94,13 +95,16 @@ export function insertProduct(
   const pid = randomUUID()
   const variantIds: string[] = []
   db.transaction(() => {
-    db.prepare('INSERT INTO products (id,name,brand,category_id,active,created_at) VALUES (?,?,?,?,1,?)').run(pid, p.name.trim(), p.brand.trim(), p.categoryId, at)
+    db.prepare('INSERT INTO products (id,name,brand,category_id,active,created_at,track_serials) VALUES (?,?,?,?,1,?,?)').run(pid, p.name.trim(), p.brand.trim(), p.categoryId, at, p.trackSerials ? 1 : 0)
     const ins = db.prepare('INSERT INTO variants (id,product_id,size,colour,barcode,mrp,sale_price,cost) VALUES (?,?,?,?,?,?,?,?)')
     for (const v of variants) {
       const vid = randomUUID()
       ins.run(vid, pid, v.size, v.colour, nextBarcode(), v.mrp, v.salePrice || v.mrp, v.cost)
       variantIds.push(vid)
-      if (v.qty > 0) addMove({ variantId: vid, qty: v.qty, type: 'opening', ref: source, reason: source === 'import' ? 'Excel import' : 'Opening stock', staffId: actorId, at })
+      if (v.qty > 0) {
+        addMove({ variantId: vid, qty: v.qty, type: 'opening', ref: source, reason: source === 'import' ? 'Excel import' : 'Opening stock', staffId: actorId, at })
+        receivePieces(vid, v.qty, { staffId: actorId, ref: 'opening stock', at })
+      }
     }
     audit(actorId, source === 'import' ? 'product_import' : 'product_create', { id: pid, variants: variantIds.length })
   })()
@@ -131,7 +135,7 @@ export function createProduct(input: NewProductInput): { id: string; variantIds:
   for (const colour of colours)
     for (const size of sizes)
       variants.push({ size, colour, mrp: input.mrp, salePrice: input.salePrice, cost: input.cost, qty: Math.max(0, Math.floor(Number(input.opening[`${colour}|${size}`] ?? 0))) })
-  const made = insertProduct(actor.id, { name, brand: input.brand, categoryId: input.categoryId }, variants)
+  const made = insertProduct(actor.id, { name, brand: input.brand, categoryId: input.categoryId, trackSerials: !!input.trackSerials }, variants)
   for (const [colour, file] of photos) attachPhoto(made.id, colour, file)
   return made
 }
@@ -270,4 +274,22 @@ export function restoreProduct(id: string): void {
   if (clash) throw new Error('Another product with this name exists now. Rename that one first.')
   getDb().prepare('UPDATE products SET active=1 WHERE id=?').run(id)
   audit(actor.id, 'product_restore', { id })
+}
+
+/**
+ * Switches serial numbers on or off for a product. Switching on gives every piece in stock its own serial (stock
+ * numbers stay the same); those pieces need new stickers before they can be sold by scanning. Switching off keeps the
+ * pieces on record, and switching on again brings them back in line with the stock.
+ */
+export function setTrackSerials(productId: string, on: boolean): { newSerials: number } {
+  const actor = requireRole('owner', 'manager')
+  const db = getDb()
+  if (!db.prepare('SELECT 1 FROM products WHERE id=?').get(productId)) throw new Error('Product not found.')
+  let created = 0
+  db.transaction(() => {
+    db.prepare('UPDATE products SET track_serials=? WHERE id=?').run(on ? 1 : 0, productId)
+    if (on) for (const v of db.prepare('SELECT id FROM variants WHERE product_id=?').all(productId) as { id: string }[]) created += syncPieces(v.id, actor.id).created
+    audit(actor.id, 'serials_toggle', { id: productId, on, created })
+  })()
+  return { newSerials: created }
 }

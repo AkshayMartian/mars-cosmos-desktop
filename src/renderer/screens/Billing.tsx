@@ -4,20 +4,29 @@ import { coinPaise, maxCoinsFor } from '@shared/coins'
 import { formatRupees, toPaise } from '@shared/money'
 import { sizesText } from '@shared/customers'
 import { receiptText, whatsappText } from '@shared/receipt'
-import type { BillDto, BillingContext, CustomerDto, HeldBillDto, PayMode, SellableVariant } from '@shared/billing'
+import type { BillDto, BillingContext, BillLineInput, CustomerDto, HeldBillDto, PayMode, SellableVariant } from '@shared/billing'
+import { SERIAL_MSG } from '@shared/serials'
 import type { CreditNoteDto } from '@shared/returns'
 import type { AltContext, AltJobDto } from '@shared/alterations'
 import { AltFields, altFormError, billAlteration, emptyAltForm, TagModal, type AltForm } from './AlterationForm'
 import type { StaffPublic } from '@shared/types'
 import { fmtDate, Modal, useMsg, useScanFocus } from '../ui'
 
-interface CartLine { v: SellableVariant; qty: number; disc: string }
+/**
+ * One row of the bill. An item with serial numbers keeps the serial of every piece (qty = how many, never typed):
+ * all pieces of a variant share one row, and a bunch is its own row with its own barcode.
+ */
+interface CartLine { key: string; v: SellableVariant; qty: number; disc: string; serials?: string[]; bunch?: string }
+let lineSeq = 0
+const newKey = (): string => 'l' + ++lineSeq
+const lineInput = (l: CartLine, disc: number): BillLineInput => ({ variantId: l.v.id, qty: l.qty, disc, ...(l.serials ? { serials: l.serials } : {}), ...(l.bunch ? { bunch: l.bunch } : {}) })
 /** A tailoring job asked for on a cart line (made when the bill is saved). */
 interface AltDraft { form: AltForm; mode: 'bill' | 'pickup' }
 type Dlg =
   | { t: 'pay' }
   | { t: 'approval'; reasons: string[]; error?: string }
   | { t: 'held' }
+  | { t: 'bunch'; key: string }
   | { t: 'customer' }
   | { t: 'alt'; variantId: string }
   | { t: 'receipt'; bill: BillDto }
@@ -87,7 +96,7 @@ export function Billing({ user }: { user: StaffPublic }) {
 
   const scheme = ctx?.gstScheme ?? 'regular'
   // alteration charges added to this bill are service lines after the items (GST % from the Alterations rules)
-  const charges = useMemo(() => cart.filter((l) => alts[l.v.id] && alts[l.v.id]!.mode === 'bill' && toPaise(alts[l.v.id]!.form.charge) > 0).map((l) => ({ v: l.v, price: toPaise(alts[l.v.id]!.form.charge) })), [cart, alts])
+  const charges = useMemo(() => cart.filter((l, i) => cart.findIndex((x) => x.v.id === l.v.id) === i && alts[l.v.id] && alts[l.v.id]!.mode === 'bill' && toPaise(alts[l.v.id]!.form.charge) > 0).map((l) => ({ v: l.v, price: toPaise(alts[l.v.id]!.form.charge) })), [cart, alts])
   const calcLines = useMemo(() => [
     ...cart.map((l) => ({ variantId: l.v.id, qty: l.qty, price: l.v.price, disc: toPaise(l.disc), gst: l.v.gst })),
     ...charges.map((c) => ({ variantId: '__alt' + c.v.id, qty: 1, price: c.price, gst: { mode: 'fixed' as const, rate: altCtx?.cfg.rate ?? 18 } }))
@@ -105,17 +114,42 @@ export function Billing({ user }: { user: StaffPublic }) {
   /* ----- cart ----- */
   /** Nothing without stock goes on a bill, and never more than the stock. */
   function add(v: SellableVariant) {
+    if (v.tracked) { setMsg({ ok: false, text: SERIAL_MSG.noSerial }); setQ(''); setResults([]); scanRef.current?.focus(); return }
     const inCart = cart.find((l) => l.v.id === v.id)?.qty ?? 0
     if (v.stock <= 0) { setMsg({ ok: false, text: `${v.label} is out of stock.` }); setQ(''); setResults([]); scanRef.current?.focus(); return }
     if (inCart + 1 > v.stock) { setMsg({ ok: false, text: `Only ${v.stock} of ${v.label} in stock.` }); setQ(''); setResults([]); scanRef.current?.focus(); return }
     setMsg(null)
-    setCart((c) => (c.some((l) => l.v.id === v.id) ? c.map((l) => (l.v.id === v.id ? { ...l, qty: l.qty + 1 } : l)) : [...c, { v, qty: 1, disc: '' }]))
+    setCart((c) => (c.some((l) => l.v.id === v.id) ? c.map((l) => (l.v.id === v.id ? { ...l, qty: l.qty + 1 } : l)) : [...c, { key: newKey(), v, qty: 1, disc: '' }]))
     setQ(''); setResults([])
     scanRef.current?.focus()
   }
+  /** A scanned piece joins the one row of its variant (a new row only for the first piece). Bunch rows are never added to. */
+  function addPiece(v: SellableVariant, serial: string) {
+    setMsg(null)
+    setCart((c) => (c.some((l) => l.v.id === v.id && l.serials && !l.bunch)
+      ? c.map((l) => (l.v.id === v.id && l.serials && !l.bunch ? { ...l, serials: [...l.serials, serial], qty: l.qty + 1 } : l))
+      : [...c, { key: newKey(), v, qty: 1, disc: '', serials: [serial] }]))
+    setQ(''); setResults([])
+    scanRef.current?.focus()
+  }
+  const piecesOnBill = () => cart.flatMap((l) => (l.serials ?? []).map((serial) => ({ variantId: l.v.id, serial })))
+  /** The bunch: the pieces are picked in the main process (the scanned one first); it becomes its own row with its own barcode. */
+  async function makeBunch(key: string, n: number): Promise<boolean> {
+    const line = cart.find((l) => l.key === key)
+    const first = line?.serials?.[line.serials.length - 1]
+    if (!line || !first) return false
+    const others = cart.filter((l) => l.v.id === line.v.id).flatMap((l) => l.serials ?? []).filter((s) => s !== first)
+    const b = await run(() => window.api.billing.makeBunch(line.v.id, n, others, first))
+    if (!b) return false
+    setCart((c) => [
+      ...c.map((l) => (l.key === key ? { ...l, serials: l.serials!.filter((s) => s !== first), qty: l.qty - 1 } : l)).filter((l) => !l.serials || l.serials.length > 0),
+      { key: newKey(), v: line.v, qty: b.serials.length, disc: '', serials: b.serials, bunch: b.code }
+    ])
+    return true
+  }
   function setQty(i: number, d: number) {
     const l = cart[i]
-    if (!l) return
+    if (!l || l.serials) return // a piece you have scanned stays: to change it, remove the whole row and scan again
     const next = Math.max(1, l.qty + d)
     if (next > l.v.stock) return setMsg({ ok: false, text: `Only ${l.v.stock} of ${l.v.label} in stock.` })
     setMsg(null)
@@ -124,8 +158,8 @@ export function Billing({ user }: { user: StaffPublic }) {
   const setLineDisc = (i: number, v: string) => setCart((c) => c.map((l, j) => (j === i ? { ...l, disc: v } : l)))
   const remove = (i: number) => {
     const id = cart[i]?.v.id
-    if (id) setAlts((a) => { const { [id]: _gone, ...rest } = a; return rest })
-    setCart((c) => c.filter((_, j) => j !== i))
+    if (id && !cart.some((l, j) => j !== i && l.v.id === id)) setAlts((a) => { const { [id]: _gone, ...rest } = a; return rest })
+    setCart((c) => c.filter((_, j) => j !== i)) // all its pieces become free at once
   }
 
   function clearBill() {
@@ -138,6 +172,10 @@ export function Billing({ user }: { user: StaffPublic }) {
   async function scanEnter(typed: string) {
     // the box's own value, not the last render's: a fast scanner can press Enter before React has re-rendered
     const q = typed
+    // a sticker of a serial item (barcode + serial): the piece itself, with the rules checked in the main process
+    const piece = await run(() => window.api.billing.scanPiece(q, piecesOnBill()))
+    if (piece === undefined) { setQ(''); setResults([]); return } // refused: the message is on screen; empty the box for the next scan
+    if (piece) return addPiece(piece.variant, piece.serial)
     const found = await run(() => window.api.billing.search(q))
     if (!found) return
     if (found.length === 1) add(found[0]!)
@@ -189,7 +227,7 @@ export function Billing({ user }: { user: StaffPublic }) {
     for (const n of notes) { if (rest <= 0) break; const a = Math.min(n.balance, rest); creditNotes.push({ id: n.id, amount: a }); rest -= a }
     try {
       const bill = await window.api.billing.create({
-        lines: cart.map((l) => ({ variantId: l.v.id, qty: l.qty, disc: toPaise(l.disc) })),
+        lines: cart.map((l) => lineInput(l, toPaise(l.disc))),
         customerId: customer?.id ?? null, billDisc: toPaise(billDisc), coinsUsed: coinsN, salesBy, payments, creditNotes, approval: approval.current,
         alterations: Object.entries(alts).map(([vid, a]) => billAlteration(vid, a.form, a.mode))
       })
@@ -206,7 +244,7 @@ export function Billing({ user }: { user: StaffPublic }) {
   /* ----- hold / resume ----- */
   async function hold() {
     if (!cart.length) return setMsg({ ok: false, text: 'Nothing to hold.' })
-    const ok = await attempt(() => window.api.billing.hold({ lines: cart.map((l) => ({ variantId: l.v.id, qty: l.qty, disc: toPaise(l.disc) })), customerId: customer?.id ?? null, customerMobile: customer?.mobile ?? null, billDisc: toPaise(billDisc), salesBy: salesBy || null }))
+    const ok = await attempt(() => window.api.billing.hold({ lines: cart.map((l) => lineInput(l, toPaise(l.disc))), customerId: customer?.id ?? null, customerMobile: customer?.mobile ?? null, billDisc: toPaise(billDisc), salesBy: salesBy || null }))
     const hadAlts = Object.keys(alts).length > 0
     if (ok) { clearBill(); void loadHeld(); setMsg({ ok: true, text: hadAlts ? 'Bill held. The alteration requests are not kept: add them again after resuming.' : 'Bill held. Find it under "Held".' }) }
   }
@@ -221,13 +259,15 @@ export function Billing({ user }: { user: StaffPublic }) {
     // Stock may have changed while the bill was held: keep only what can still be sold, and say so.
     const notes: string[] = []
     const back: CartLine[] = []
+    notes.push(...payload.notes)
     for (const l of payload.lines) {
       const v = byId.get(l.variantId)
       if (!v) { notes.push('an item that is no longer available was removed'); continue }
+      if (l.serials?.length) { back.push({ key: newKey(), v, qty: l.serials.length, disc: l.disc ? String(l.disc / 100) : '', serials: l.serials, ...(l.bunch ? { bunch: l.bunch } : {}) }); continue }
       const qty = Math.min(l.qty, v.stock)
       if (qty <= 0) { notes.push(`${v.label} is out of stock and was removed`); continue }
       if (qty < l.qty) notes.push(`${v.label} reduced to ${qty} (all that is in stock)`)
-      back.push({ v, qty, disc: l.disc ? String(l.disc / 100) : '' })
+      back.push({ key: newKey(), v, qty, disc: l.disc ? String(l.disc / 100) : '' })
     }
     setCart(back)
     if (payload.billDisc) setBillDisc(String(payload.billDisc / 100))
@@ -287,14 +327,16 @@ export function Billing({ user }: { user: StaffPublic }) {
                   {totals.lines.slice(0, cart.length).map((l, i) => {
                     const line = cart[i]!
                     return (
-                      <tr key={line.v.id}>
+                      <tr key={line.key}>
                         <td>
                           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                             <div className="thumb" aria-hidden={!photos[line.v.id]}>{photos[line.v.id] ? <img src={photos[line.v.id]!} alt={`${line.v.name} ${line.v.colour}`} /> : null}</div>
                             <div>
                               <b>{line.v.name}</b>
-                              <div className="sub">{line.v.colour} · {line.v.size} · <span className="mono">{line.v.barcode}</span> · {line.v.stock} in stock</div>
+                              <div className="sub">{line.v.colour} · {line.v.size} · <span className="mono">{line.bunch ?? line.v.barcode}</span>{line.bunch ? ' · bunch' : ''} · {line.v.stock} in stock</div>
+                              {line.serials && <div className="sub mono" aria-label="Serial numbers">Serial {line.serials.join(', ')}</div>}
                               <div style={{ marginTop: 4 }}>
+                                {line.serials && !line.bunch && <button className="btn sm" style={{ marginRight: 6 }} onClick={() => setDlg({ t: 'bunch', key: line.key })}>Add as bunch</button>}
                                 {alts[line.v.id]
                                   ? <button className="chip good" style={{ border: 0, cursor: 'pointer' }} onClick={() => openAlt(line.v.id)}>✂ Alteration: {alts[line.v.id]!.form.work.join(', ')}</button>
                                   : <button className="btn sm" onClick={() => openAlt(line.v.id)}>✂ Alteration</button>}
@@ -302,7 +344,9 @@ export function Billing({ user }: { user: StaffPublic }) {
                             </div>
                           </div>
                         </td>
-                        <td><span className="qty"><button aria-label="Less" onClick={() => setQty(i, -1)}>−</button><span className="num">{line.qty}</span><button aria-label="More" onClick={() => setQty(i, 1)}>+</button></span></td>
+                        <td>{line.serials
+                          ? <span className="num"><b>{line.qty}</b></span>
+                          : <span className="qty"><button aria-label="Less" onClick={() => setQty(i, -1)}>−</button><span className="num">{line.qty}</span><button aria-label="More" onClick={() => setQty(i, 1)}>+</button></span>}</td>
                         <td className="r num">{formatRupees(line.v.price)}</td>
                         <td className="r"><input type="number" min="0" aria-label="Line discount" value={line.disc} onChange={(e) => setLineDisc(i, e.target.value)} /></td>
                         <td className="r num">{l.rate}%</td>
@@ -400,6 +444,10 @@ export function Billing({ user }: { user: StaffPublic }) {
           onSave={(d) => { setAlts((a) => ({ ...a, [line.v.id]: d })); setDlg(null) }}
           onRemove={() => { setAlts((a) => { const { [line.v.id]: _gone, ...rest } = a; return rest }); setDlg(null) }} />
       })()}
+      {dlg?.t === 'bunch' && (() => {
+        const line = cart.find((l) => l.key === dlg.key)
+        return line ? <BunchModal label={line.v.label} onClose={() => setDlg(null)} onMake={async (n) => { if (await makeBunch(dlg.key, n)) setDlg(null) }} /> : null
+      })()}
       {dlg?.t === 'held' && <HeldModal onClose={() => setDlg(null)} onResume={(h) => void resume(h)} />}
       {dlg?.t === 'customer' && <CustomerModal mobile={mobile} onClose={() => setDlg(null)} onSaved={(c) => { setCustomer(c); setMobile(c.mobile); setMiss(false); setDlg(null) }} />}
       {dlg?.t === 'receipt' && ctx && <ReceiptModal bill={dlg.bill} ctx={ctx} onNew={() => { setDlg(null); clearBill(); void loadCtx(); void loadHeld() }} />}
@@ -495,6 +543,23 @@ function PayModal({ grand, creditBalance, error, onBack, onSave }: { grand: numb
       </div>
       <div className="err" role="alert">{error ?? ''}</div>
       <div className="mfoot"><button className="btn" onClick={onBack}>Back</button><button className="btn p lg" disabled={left !== 0 || busy} onClick={() => void save()}>Save bill</button></div>
+    </Modal>
+  )
+}
+
+/** "Add as bunch": how many pieces of this variant the customer takes in all (the scanned piece is one of them). */
+function BunchModal({ label, onClose, onMake }: { label: string; onClose: () => void; onMake: (n: number) => Promise<void> }) {
+  const [n, setN] = useState('')
+  const [busy, setBusy] = useState(false)
+  const ok = Number.isInteger(Number(n)) && Number(n) >= 2
+  const go = async () => { if (!ok) return; setBusy(true); await onMake(Number(n)); setBusy(false) }
+  return (
+    <Modal title="Add as bunch" onClose={onClose}>
+      <p style={{ margin: 0 }}>{label}</p>
+      <div className="f"><label htmlFor="bn">How many pieces in the bunch?</label>
+        <input id="bn" type="number" min="2" className="big" autoFocus value={n} onChange={(e) => setN(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void go()} /></div>
+      <div className="hint">The scanned piece is one of them. The bunch becomes one line with its own barcode and cannot be made smaller: to change it, remove the line and add a new bunch.</div>
+      <div className="mfoot"><button className="btn" onClick={onClose}>Cancel</button><button className="btn p" disabled={!ok || busy} onClick={() => void go()}>Add bunch</button></div>
     </Modal>
   )
 }

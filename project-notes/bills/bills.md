@@ -8,6 +8,7 @@
 - **Status:** **done** (2026-11-13). The reprint prints to the receipt printer (**Print** in the duplicate receipt).
 - **Code:** screen `src/renderer/screens/Bills.tsx` · service `src/main/services/bills.ts` (+ `getBill` in `billing.ts`) · shapes `src/shared/bills.ts` · receipt `src/shared/receipt.ts` · tests `src/main/services/bills.test.ts`.
 
+- **Serial numbers (2026-11-18):** Cancelling a bill puts every **serial-numbered piece** of it back in stock: see [Serial numbers](../serials/serials.md).
 ## 2. Screen controls
 
 | Control | Type | What it does |

@@ -8,6 +8,7 @@
 - **Status:** **done** (2026-11-13). Receipts print from the done dialog. Coins earned on the value returned are taken back (see Coins). Cancelling a bill and the Bills list are in the Bills module.
 - **Code:** screen `src/renderer/screens/Returns.tsx` · service `src/main/services/returns.ts` (+ `createBill` in `billing.ts`, which now accepts credit notes and an exchange settle hook) · shapes and the split rule `src/shared/returns.ts` · receipt wording `src/shared/receipt.ts` · tests `src/main/services/returns.test.ts`.
 
+- **Serial numbers (2026-11-18):** A line with **serial numbers** returns exactly the pieces chosen by serial; exchange items with serials are scanned: see [Serial numbers](../serials/serials.md).
 ## 2. Screen controls
 
 | Control | Type | What it does |

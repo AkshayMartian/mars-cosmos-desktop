@@ -10,6 +10,7 @@
 
 **Core idea:** stock is **never stored as a number**. It is the sum of `stock_moves.qty` (view `v_stock`). Every change (opening, purchase, sale, stock out, adjust, count, later returns) is one row, so the History tab can always explain the number.
 
+- **Serial numbers (2026-11-18):** Items with **serial numbers**: adjust and stock count work piece by piece, and a piece's history can be looked up: see [Serial numbers](../serials/serials.md).
 ## 2. Screen controls
 
 **Tabs:** Stock levels · Stock count · Recent moves.

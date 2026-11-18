@@ -40,6 +40,8 @@ export interface ProductDetail {
   brand: string
   categoryId: string
   active: boolean
+  /** every piece has its own serial number (Billing then scans pieces, not just barcodes) */
+  trackSerials: boolean
   variants: VariantDto[]
 }
 
@@ -52,6 +54,8 @@ export interface NewProductInput {
   cost: Paise
   sizes: string[]
   colours: string[]
+  /** give every piece its own serial number */
+  trackSerials?: boolean
   /** opening stock keyed "colour|size" */
   opening: Record<string, number>
   /** photo per colour: { colour: file name returned by the photo chooser }. Optional; every colour may have its own */
@@ -65,11 +69,18 @@ export interface VariantSearchRow {
   salePrice: Paise
   cost: Paise
   stock: number
+  /** serial numbers are on: pieces are chosen by scanning their stickers */
+  tracked: boolean
 }
+
+/** A piece found by scanning its sticker in Stock out / Adjust. */
+export interface PieceScan { variant: VariantSearchRow; serial: string }
 
 export interface StockRow {
   variantId: string
   label: string
+  /** serial numbers are on for this item */
+  tracked: boolean
   barcode: string
   qty: number
   minStock: number

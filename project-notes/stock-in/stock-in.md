@@ -8,6 +8,7 @@
 - **Status:** **done** (2026-11-12). Not included: printing stickers for the received pieces (the **Stickers** button next to each recent purchase opens Print stickers with it loaded).
 - **Code:** screen `src/renderer/screens/StockIn.tsx` · service `src/main/services/stock.ts` (`stockIn`, `createSupplier`, `listSuppliers`, `recentPurchases`, `searchVariants`, `addMove`) · shapes `src/shared/catalogue.ts` · tests `src/main/services/services.test.ts` (stock in group).
 
+- **Serial numbers (2026-11-18):** Receiving stock of an item with **serial numbers** creates one serial per piece: see [Serial numbers](../serials/serials.md).
 ## 2. Screen controls
 
 | Control | Type | What it does |

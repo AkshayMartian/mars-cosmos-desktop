@@ -10,6 +10,7 @@
 - **Status:** **done** (2026-11-13). The Products screen's *Print stickers* buttons still show a message. Test sticker is in Settings → Printers.
 - **Code:** screen `Stickers.tsx` · services `src/main/services/stickers.ts` (data, checks, settings) and `src/main/print.ts` (the actual print, Electron) · label drawing and EAN-13 bars `src/shared/stickers.ts` · tests `src/main/services/stickers.test.ts`.
 
+- **Serial numbers (2026-11-18):** Items with **serial numbers** print one sticker per piece with a Code 128 barcode (barcode + serial): see [Serial numbers](../serials/serials.md).
 ## 2. Screen controls
 
 | Control | Type | What it does |

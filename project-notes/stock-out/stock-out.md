@@ -8,6 +8,7 @@
 - **Status:** **done** (2026-11-12). Not included: online-order pick lists, branch transfers, a printed challan (later modules).
 - **Code:** screen `src/renderer/screens/StockOut.tsx`, `Billing.tsx` (exports `ApprovalModal`) · service `src/main/services/stock.ts` (`stockOut`) · `approval.ts` · shapes `src/shared/stockops.ts` · tests `src/main/services/stockops.test.ts`.
 
+- **Serial numbers (2026-11-18):** Items with **serial numbers** go out by scanning the exact pieces: see [Serial numbers](../serials/serials.md).
 ## 2. Screen controls
 
 | Control | Type | What it does |

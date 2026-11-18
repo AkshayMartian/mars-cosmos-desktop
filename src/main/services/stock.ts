@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { getDb } from '../db'
 import {
   DUPLICATE_PURCHASE, variantLabel,
-  type MoveRow, type PurchaseRow, type StockInInput, type StockRow, type SupplierDto, type VariantSearchRow
+  type MoveRow, type PieceScan, type PurchaseRow, type StockInInput, type StockRow, type SupplierDto, type VariantSearchRow
 } from '@shared/catalogue'
 import type {
   AdjustInput, AdjustReason, ApprovalInput, CountDto, CountLineDto, MoveFullRow, OutType, StockOutInput
@@ -10,6 +10,8 @@ import type {
 import { checkApprover, isManager } from './approval'
 import { audit } from './auth'
 import { requireRole } from './session'
+import { createPieces, findPiece, isTracked, movePieces, pieceProblem, receivePieces, resolveSticker, takeFree } from './serials'
+import { SERIAL_MSG, type PieceStatus } from '@shared/serials'
 
 export type MoveType =
   | 'opening' | 'purchase' | 'sale' | 'sale_return' | 'cancel' | 'supplier_return'
@@ -25,12 +27,35 @@ export function addMove(m: { variantId: string; qty: number; type: MoveType; ref
 export const stockOf = (variantId: string): number =>
   ((getDb().prepare('SELECT COALESCE(SUM(qty),0) AS q FROM stock_moves WHERE variant_id=?').get(variantId) as { q: number }).q)
 
-const SEARCH_SELECT = `SELECT v.id,p.name,v.colour,v.size,v.barcode,v.sale_price AS salePrice,v.cost,COALESCE(s.qty,0) AS stock
+const SEARCH_SELECT = `SELECT v.id,p.name,v.colour,v.size,v.barcode,v.sale_price AS salePrice,v.cost,COALESCE(s.qty,0) AS stock,p.track_serials AS tracked
   FROM variants v JOIN products p ON p.id=v.product_id JOIN categories c ON c.id=p.category_id
   LEFT JOIN v_stock s ON s.variant_id=v.id WHERE p.active=1 AND c.is_service=0`
 
-type SearchRaw = Omit<VariantSearchRow, 'label'> & { name: string; colour: string; size: string }
-const toSearchRow = ({ name, colour, size, ...r }: SearchRaw): VariantSearchRow => ({ ...r, label: variantLabel(name, colour, size) })
+type SearchRaw = Omit<VariantSearchRow, 'label' | 'tracked'> & { name: string; colour: string; size: string; tracked: number }
+const toSearchRow = ({ name, colour, size, tracked, ...r }: SearchRaw): VariantSearchRow => ({ ...r, tracked: !!tracked, label: variantLabel(name, colour, size) })
+
+/**
+ * A scanned sticker in Stock out / Adjust → the piece. `want` = 'free' for pieces that leave stock (must be in stock, not
+ * on a held bill) or 'gone' for lost / damaged pieces that come back. null = not a sticker of a serial item.
+ * `inList` = pieces already on the screen's list.
+ */
+export function scanPiece(code: string, inList: { variantId: string; serial: string }[], want: 'free' | 'gone' = 'free'): PieceScan | null {
+  requireRole('owner', 'manager', 'store')
+  const s = resolveSticker(code)
+  if (!s || !isTracked(s.variantId)) return null
+  const piece = findPiece(s.variantId, s.serial)
+  if (piece && inList.some((p) => p.variantId === s.variantId && p.serial === s.serial)) throw new Error(SERIAL_MSG.already)
+  if (want === 'free') {
+    const bad = pieceProblem(piece)
+    if (bad) throw new Error(bad)
+  } else {
+    if (!piece) throw new Error(SERIAL_MSG.unknown)
+    if (!['damaged', 'lost', 'other_out'].includes(piece.status)) throw new Error('This piece is not lost or damaged.')
+  }
+  const row = getDb().prepare(`${SEARCH_SELECT} AND v.id=?`).get(s.variantId) as SearchRaw | undefined
+  if (!row) throw new Error(SERIAL_MSG.unknown)
+  return { variant: toSearchRow(row), serial: s.serial }
+}
 
 /** Scanner input (exact barcode or brand barcode) wins; otherwise a name/brand/colour/size search. */
 export function searchVariants(q: string): VariantSearchRow[] {
@@ -49,7 +74,7 @@ export function stockLevels(q = '', lowOnly = false): StockRow[] {
   const like = `%${q.trim()}%`
   const rows = getDb()
     .prepare(
-      `SELECT v.id AS variantId,p.name,v.colour,v.size,v.barcode,COALESCE(s.qty,0) AS qty,v.min_stock AS minStock,v.cost
+      `SELECT v.id AS variantId,p.name,v.colour,v.size,v.barcode,COALESCE(s.qty,0) AS qty,v.min_stock AS minStock,v.cost,p.track_serials AS tracked
        FROM variants v JOIN products p ON p.id=v.product_id JOIN categories c ON c.id=p.category_id
        LEFT JOIN v_stock s ON s.variant_id=v.id
        WHERE p.active=1 AND c.is_service=0
@@ -57,9 +82,9 @@ export function stockLevels(q = '', lowOnly = false): StockRow[] {
          AND (@low=0 OR COALESCE(s.qty,0)<=v.min_stock)
        ORDER BY p.name, v.rowid`
     )
-    .all({ q: q.trim(), like, low: lowOnly ? 1 : 0 }) as { variantId: string; name: string; colour: string; size: string; barcode: string; qty: number; minStock: number; cost: number }[]
+    .all({ q: q.trim(), like, low: lowOnly ? 1 : 0 }) as { variantId: string; name: string; colour: string; size: string; barcode: string; qty: number; minStock: number; cost: number; tracked: number }[]
   return rows.map((r) => ({
-    variantId: r.variantId, label: variantLabel(r.name, r.colour, r.size), barcode: r.barcode,
+    variantId: r.variantId, label: variantLabel(r.name, r.colour, r.size), tracked: !!r.tracked, barcode: r.barcode,
     qty: r.qty, minStock: r.minStock, costValue: Math.max(0, r.qty) * r.cost
   }))
 }
@@ -122,6 +147,7 @@ export function stockIn(input: StockInInput): { purchaseId: string; qty: number 
       line.run(id, l.variantId, l.qty, l.cost)
       cost.run(l.cost, l.variantId)
       addMove({ variantId: l.variantId, qty: l.qty, type: 'purchase', ref, staffId: actor.id, at })
+      receivePieces(l.variantId, l.qty, { staffId: actor.id, ref, purchaseId: id, at }) // serial numbers: one piece per unit
     }
     audit(actor.id, 'stock_in', { id, qty, total })
   })()
@@ -142,6 +168,7 @@ export function recentPurchases(limit = 5): PurchaseRow[] {
 
 const OUT_MOVE: Record<OutType, MoveType> = { supplier_return: 'supplier_return', damage: 'damage', dispatch: 'dispatch', other: 'other_out' }
 const OUTS: OutType[] = ['supplier_return', 'damage', 'dispatch', 'other']
+const OUT_PIECE: Record<OutType, PieceStatus> = { supplier_return: 'supplier_return', damage: 'damaged', dispatch: 'dispatched', other: 'other_out' }
 
 /** Stock leaves without a bill: returned to a supplier, damaged, dispatched or otherwise. Going below zero needs approval. */
 export function stockOut(input: StockOutInput): { id: string; qty: number } {
@@ -155,9 +182,17 @@ export function stockOut(input: StockOutInput): { id: string; qty: number } {
   if (!input.lines.length) throw new Error('Add at least one item.')
 
   const want = new Map<string, number>()
+  const outPieces = new Map<string, ReturnType<typeof takeFree>>()
   for (const l of input.lines) {
     if (!Number.isInteger(l.qty) || l.qty <= 0) throw new Error('Quantities must be whole numbers above zero.')
     if (!db.prepare('SELECT 1 FROM variants WHERE id=?').get(l.variantId)) throw new Error('An item on this list no longer exists.')
+    if (isTracked(l.variantId)) {
+      // serial numbers: the exact pieces going out, not a typed number
+      const s = l.serials ?? []
+      if (s.length !== l.qty) throw new Error('Scan the pieces that go out: this item uses serial numbers.')
+      const all = [...(outPieces.get(l.variantId) ?? []).map((p) => p.serial), ...s]
+      outPieces.set(l.variantId, takeFree(l.variantId, all))
+    }
     want.set(l.variantId, (want.get(l.variantId) ?? 0) + l.qty)
   }
   const below = [...want].some(([v, q]) => stockOf(v) - q < 0)
@@ -173,6 +208,8 @@ export function stockOut(input: StockOutInput): { id: string; qty: number } {
     for (const [variantId, q] of want) {
       line.run(id, variantId, q)
       addMove({ variantId, qty: -q, type: OUT_MOVE[input.type], ref: 'stock out', reason: reason || undefined, staffId: actor.id, at })
+      const ps = outPieces.get(variantId)
+      if (ps) movePieces(ps.map((p) => p.id), OUT_PIECE[input.type], input.type, { ref: reason || 'stock out', staffId: actor.id, at })
     }
     audit(actor.id, 'stock_out', { id, type: input.type, qty, approvedBy })
   })()
@@ -184,19 +221,33 @@ export function stockOut(input: StockOutInput): { id: string; qty: number } {
 const REASONS: AdjustReason[] = ['damaged', 'lost', 'found', 'correction']
 
 /** Fix one item's stock (damaged, lost, found, correction). Store staff need a manager or owner to approve. */
-export function adjustStock(input: AdjustInput): { stock: number } {
+export function adjustStock(input: AdjustInput): { stock: number; newSerials?: string[] } {
   const actor = requireRole('owner', 'manager', 'store')
   if (!Number.isInteger(input.change) || input.change === 0) throw new Error('Enter a change other than 0.')
   if (!REASONS.includes(input.reason)) throw new Error('Choose a reason.')
   if (!getDb().prepare('SELECT 1 FROM variants WHERE id=?').get(input.variantId)) throw new Error('Item not found.')
   const now = stockOf(input.variantId)
   if (now + input.change < 0) throw new Error(`Stock cannot go below zero (now ${now}).`)
+  const tracked = isTracked(input.variantId)
+  const serials = input.serials ?? []
+  if (tracked && input.change < 0 && serials.length !== -input.change) throw new Error('Scan the pieces that are removed: this item uses serial numbers.')
+  if (tracked && input.change > 0 && serials.length && serials.length !== input.change) throw new Error('The serial numbers do not match the change.')
+  if (!tracked && serials.length) throw new Error('This item does not use serial numbers.')
+  // checked before the approval PIN is used, so a bad serial never burns an approval
+  const out = tracked && input.change < 0 ? takeFree(input.variantId, serials) : []
+  const back = tracked && input.change > 0 && serials.length ? serials.map((s) => findPiece(input.variantId, s)) : []
+  for (const [i, p] of back.entries()) if (!p || !['damaged', 'lost', 'other_out'].includes(p.status)) throw new Error(`Serial ${serials[i]} is not a lost or damaged piece.`)
   const approvedBy = isManager(actor) ? null : checkApprover(input.approval)
+  let newSerials: string[] | undefined
   getDb().transaction(() => {
-    addMove({ variantId: input.variantId, qty: input.change, type: 'adjust', ref: 'adjust', reason: input.reason, staffId: actor.id })
+    const at = new Date().toISOString()
+    addMove({ variantId: input.variantId, qty: input.change, type: 'adjust', ref: 'adjust', reason: input.reason, staffId: actor.id, at })
+    if (out.length) movePieces(out.map((p) => p.id), input.reason === 'damaged' ? 'damaged' : 'lost', 'adjust', { ref: input.reason, staffId: actor.id, at })
+    else if (back.length) movePieces(back.map((p) => p!.id), 'in_stock', 'found', { ref: input.reason, staffId: actor.id, at })
+    else if (tracked && input.change > 0) newSerials = createPieces(input.variantId, input.change, { staffId: actor.id, ref: 'adjust: ' + input.reason, at })
     audit(actor.id, 'stock_adjust', { variantId: input.variantId, change: input.change, reason: input.reason, approvedBy })
   })()
-  return { stock: now + input.change }
+  return { stock: now + input.change, ...(newSerials ? { newSerials } : {}) }
 }
 
 /* ---------- stock count ---------- */
@@ -211,7 +262,15 @@ function countLines(countId: string): CountLineDto[] {
     .all(countId)
     .map((r) => {
       const x = r as { variantId: string; name: string; colour: string; size: string; barcode: string; system: number; counted: number }
-      return { variantId: x.variantId, label: variantLabel(x.name, x.colour, x.size), barcode: x.barcode, system: x.system, counted: x.counted }
+      const line: CountLineDto = { variantId: x.variantId, label: variantLabel(x.name, x.colour, x.size), barcode: x.barcode, system: x.system, counted: x.counted }
+      if (isTracked(x.variantId)) {
+        // serial numbers: every piece is scanned; what is in stock but not scanned is listed by serial as missing
+        line.tracked = true
+        line.missing = (getDb()
+          .prepare("SELECT serial FROM pieces WHERE variant_id=? AND status='in_stock' AND id NOT IN (SELECT piece_id FROM stock_count_pieces WHERE count_id=?) ORDER BY id")
+          .all(x.variantId, countId) as { serial: string }[]).map((p) => p.serial)
+      }
+      return line
     })
 }
 
@@ -247,6 +306,21 @@ export function countScan(code: string): { variantId: string; label: string; cou
   const c = openCountRow()
   if (!c) throw new Error('Start a stock count first.')
   const q = code.trim()
+  // serial numbers: a sticker counts that one piece, once
+  const st = resolveSticker(q)
+  if (st && isTracked(st.variantId)) {
+    const line = getDb().prepare('SELECT 1 FROM stock_count_lines WHERE count_id=? AND variant_id=?').get(c.id, st.variantId)
+    if (!line) throw new Error(`No item with barcode ${q} in this count.`)
+    const piece = findPiece(st.variantId, st.serial)
+    if (!piece) throw new Error(SERIAL_MSG.unknown)
+    if (getDb().prepare('SELECT 1 FROM stock_count_pieces WHERE count_id=? AND piece_id=?').get(c.id, piece.id)) throw new Error('Already counted')
+    getDb().transaction(() => {
+      getDb().prepare('INSERT INTO stock_count_pieces (count_id,piece_id) VALUES (?,?)').run(c.id, piece.id)
+      getDb().prepare('UPDATE stock_count_lines SET counted_qty=(SELECT COUNT(*) FROM stock_count_pieces sp JOIN pieces p ON p.id=sp.piece_id WHERE sp.count_id=? AND p.variant_id=?) WHERE count_id=? AND variant_id=?').run(c.id, st.variantId, c.id, st.variantId)
+    })()
+    const l = countLines(c.id).find((x) => x.variantId === st.variantId)!
+    return { variantId: l.variantId, label: l.label, counted: l.counted }
+  }
   const v = getDb()
     .prepare(
       `SELECT l.variant_id AS variantId FROM stock_count_lines l JOIN variants v ON v.id=l.variant_id
@@ -254,6 +328,7 @@ export function countScan(code: string): { variantId: string; label: string; cou
     )
     .get(c.id, q, q) as { variantId: string } | undefined
   if (!v) throw new Error(`No item with barcode ${q} in this count.`)
+  if (isTracked(v.variantId)) throw new Error(SERIAL_MSG.noSerial)
   getDb().prepare('UPDATE stock_count_lines SET counted_qty=counted_qty+1 WHERE count_id=? AND variant_id=?').run(c.id, v.variantId)
   const line = countLines(c.id).find((l) => l.variantId === v.variantId)!
   return { variantId: line.variantId, label: line.label, counted: line.counted }
@@ -264,6 +339,7 @@ export function countSet(variantId: string, counted: number): void {
   const c = openCountRow()
   if (!c) throw new Error('Start a stock count first.')
   if (!Number.isInteger(counted) || counted < 0) throw new Error('Enter a whole number, 0 or more.')
+  if (isTracked(variantId)) throw new Error('This item uses serial numbers: scan each piece instead of typing a number.')
   getDb().prepare('UPDATE stock_count_lines SET counted_qty=? WHERE count_id=? AND variant_id=?').run(counted, c.id, variantId)
 }
 
@@ -281,10 +357,25 @@ export function approveCount(approval?: ApprovalInput): { adjusted: number } {
   const c = openCountRow()
   if (!c) throw new Error('There is no open count.')
   const approvedBy = isManager(actor) ? actor.id : checkApprover(approval)
-  const diffs = countLines(c.id).filter((l) => l.counted !== l.system)
+  const lines = countLines(c.id)
   const at = new Date().toISOString()
+  const diffs: CountLineDto[] = []
   getDb().transaction(() => {
-    for (const l of diffs) addMove({ variantId: l.variantId, qty: l.counted - l.system, type: 'count', ref: 'stock count', staffId: actor.id, at })
+    for (const l of lines) {
+      if (!l.tracked) {
+        if (l.counted !== l.system) { diffs.push(l); addMove({ variantId: l.variantId, qty: l.counted - l.system, type: 'count', ref: 'stock count', staffId: actor.id, at }) }
+        continue
+      }
+      // serial numbers: pieces not scanned are missing (lost); a scanned piece that was not in stock is found again.
+      // The stock move brings the stock to the pieces that were counted.
+      const missing = (getDb().prepare("SELECT id FROM pieces WHERE variant_id=? AND status='in_stock' AND id NOT IN (SELECT piece_id FROM stock_count_pieces WHERE count_id=?)").all(l.variantId, c.id) as { id: number }[]).map((p) => p.id)
+      const found = (getDb().prepare("SELECT p.id FROM stock_count_pieces sp JOIN pieces p ON p.id=sp.piece_id WHERE sp.count_id=? AND p.variant_id=? AND p.status<>'in_stock'").all(c.id, l.variantId) as { id: number }[]).map((p) => p.id)
+      if (!missing.length && !found.length) continue
+      diffs.push(l)
+      movePieces(missing, 'lost', 'missing in stock count', { ref: 'stock count', staffId: actor.id, at })
+      movePieces(found, 'in_stock', 'found in stock count', { ref: 'stock count', staffId: actor.id, at })
+      addMove({ variantId: l.variantId, qty: found.length - missing.length, type: 'count', ref: 'stock count', staffId: actor.id, at })
+    }
     getDb().prepare("UPDATE stock_counts SET status='approved',approved_by=? WHERE id=?").run(approvedBy, c.id)
     audit(actor.id, 'count_approve', { id: c.id, adjusted: diffs.length, approvedBy })
   })()

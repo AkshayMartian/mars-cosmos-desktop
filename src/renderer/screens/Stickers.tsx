@@ -36,6 +36,14 @@ export function Stickers({ intent }: { intent?: string }) {
       let next = [...ls]
       for (const it of items) {
         const add = qtyOf(it)
+        if (it.serials) {
+          // an item with serial numbers: one sticker per piece, each piece once
+          const have = next.find((l) => l.item.variantId === it.variantId)
+          const all = [...new Set([...(have?.item.serials ?? []), ...it.serials])]
+          const merged = { ...it, serials: all, qty: all.length }
+          next = have ? next.map((l) => (l === have ? { item: merged, qty: String(all.length) } : l)) : [...next, { item: merged, qty: String(all.length) }]
+          continue
+        }
         next = next.some((l) => l.item.variantId === it.variantId)
           ? next.map((l) => (l.item.variantId === it.variantId ? { ...l, qty: String(num(l.qty) + add) } : l))
           : [...next, { item: it, qty: String(add) }]
@@ -47,12 +55,19 @@ export function Stickers({ intent }: { intent?: string }) {
 
   async function add(v: VariantSearchRow) {
     setQ(''); setResults([])
-    const items = await run(() => window.api.stickers.items([v.id]))
-    if (items) { setMsg(null); put(items, () => 1) }
+    // an item with serial numbers: a sticker for every piece in stock (each carries its own serial)
+    const items = await run(() => (v.tracked ? window.api.stickers.stock([v.id]) : window.api.stickers.items([v.id])))
+    if (items) {
+      if (v.tracked && !items.length) setMsg({ ok: false, text: `${v.label} has no pieces in stock to print stickers for.` })
+      else { setMsg(null); put(items, () => 1) }
+    }
     scan.current?.focus()
   }
 
   async function onEnter() {
+    // a typed or scanned sticker code: print that one piece's sticker again
+    const piece = await window.api.stickers.piece(q).catch(() => null)
+    if (piece) { setQ(''); setResults([]); setMsg(null); return put([piece], () => 1) }
     if (results.length === 1) return void add(results[0]!)
     if (!results.length && q.trim()) { setMsg({ ok: false, text: `No item found for "${q.trim()}".` }); setQ("") }
   }
@@ -71,15 +86,16 @@ export function Stickers({ intent }: { intent?: string }) {
     setMsg({ ok: true, text: `Added the ${items.length} item${items.length === 1 ? '' : 's'} of the purchase, one sticker per piece received.` })
   }
 
-  const total = lines.reduce((n, l) => n + Math.max(0, Math.floor(num(l.qty))), 0)
-  const bad = lines.find((l) => !Number.isInteger(num(l.qty)) || num(l.qty) < 1 || num(l.qty) > MAX_PER_ITEM)
+  const count = (l: Line): number => (l.item.serials ? l.item.serials.length : Math.max(0, Math.floor(num(l.qty))))
+  const total = lines.reduce((n, l) => n + count(l), 0)
+  const bad = lines.find((l) => (l.item.serials ? l.item.serials.length > MAX_PER_ITEM : !Number.isInteger(num(l.qty)) || num(l.qty) < 1 || num(l.qty) > MAX_PER_ITEM))
   const shown = lines.find((l) => l.item.variantId === sel) ?? lines[0]
   const size = labelSize(ctx?.sizeId ?? '50x25')
 
   async function print() {
     if (bad) return setMsg({ ok: false, text: `Enter 1 to ${MAX_PER_ITEM} stickers for ${bad.item.name}.` })
     setBusy(true)
-    const r = await run(() => window.api.stickers.print(lines.map((l) => ({ variantId: l.item.variantId, qty: num(l.qty) }))))
+    const r = await run(() => window.api.stickers.print(lines.map((l) => ({ variantId: l.item.variantId, qty: count(l), ...(l.item.serials ? { serials: l.item.serials } : {}) }))))
     setBusy(false)
     if (r) setMsg({ ok: true, text: `Sent ${r.printed} sticker${r.printed === 1 ? '' : 's'} to the printer.` })
   }
@@ -114,8 +130,10 @@ export function Stickers({ intent }: { intent?: string }) {
                 <tr key={l.item.variantId} className={l.item.variantId === shown?.item.variantId ? 'sel' : ''} onClick={() => setSel(l.item.variantId)}>
                   <td>{l.item.name} · {l.item.colour} · {l.item.size}</td>
                   <td className="mono">{l.item.barcode}</td>
-                  <td><input type="number" min="1" max={MAX_PER_ITEM} aria-label={`Stickers for ${l.item.name} ${l.item.size}`} style={{ width: 90 }} value={l.qty}
-                    onChange={(e) => setLines((ls) => ls.map((x) => (x.item.variantId === l.item.variantId ? { ...x, qty: e.target.value } : x)))} /></td>
+                  <td>{l.item.serials
+                    ? <span title={l.item.serials.join(', ')}><b className="num">{l.item.serials.length}</b> <span className="sub mono">{l.item.serials.length > 1 ? `${l.item.serials[0]} … ${l.item.serials[l.item.serials.length - 1]}` : l.item.serials[0]}</span></span>
+                    : <input type="number" min="1" max={MAX_PER_ITEM} aria-label={`Stickers for ${l.item.name} ${l.item.size}`} style={{ width: 90 }} value={l.qty}
+                      onChange={(e) => setLines((ls) => ls.map((x) => (x.item.variantId === l.item.variantId ? { ...x, qty: e.target.value } : x)))} />}</td>
                   <td><button className="btn sm" aria-label={`Remove ${l.item.name} ${l.item.size}`} onClick={(e) => { e.stopPropagation(); setLines((ls) => ls.filter((x) => x.item.variantId !== l.item.variantId)) }}>✕</button></td>
                 </tr>
               ))}</tbody>
@@ -126,7 +144,7 @@ export function Stickers({ intent }: { intent?: string }) {
         <div className="panel">
           <h2>Preview · {size.wMm} × {size.hMm} mm</h2>
           {shown
-            ? <div className="lblprev" aria-label="Sticker preview" dangerouslySetInnerHTML={{ __html: labelHtml(shown.item, size) }} />
+            ? <div className="lblprev" aria-label="Sticker preview" dangerouslySetInnerHTML={{ __html: labelHtml(shown.item, size, shown.item.serials?.[0]) }} />
             : <div className="empty">The label appears here.</div>}
           <button className="btn p lg block" disabled={!lines.length || busy || !ctx} onClick={() => void print()}>{busy ? 'Printing…' : `Print ${total} sticker${total === 1 ? '' : 's'}`}</button>
           <div className="sub printer-line"><span>Printer: {ctx ? (ctx.printer || 'ask when printing') : '…'}</span>{ctx?.canManage && <><button className="btn sm" onClick={() => setSettings(true)}>Change</button></>}</div>

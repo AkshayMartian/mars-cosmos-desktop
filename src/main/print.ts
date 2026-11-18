@@ -45,7 +45,7 @@ function textJob(text: string, chars: number): Job {
 
 /* ---------- stickers ---------- */
 
-export async function printStickers(lines: { variantId: string; qty: number }[]): Promise<StickerPrintResult> {
+export async function printStickers(lines: { variantId: string; qty: number; serials?: string[] }[]): Promise<StickerPrintResult> {
   const items = prepareJob(lines)
   const cfg = stickerContext()
   const size = labelSize(cfg.sizeId)

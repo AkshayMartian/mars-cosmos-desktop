@@ -18,6 +18,25 @@ export interface SellableVariant {
   price: Paise
   stock: number
   gst: GstRule
+  /** serial numbers are on for this product: every piece is scanned by its own sticker */
+  tracked: boolean
+}
+
+/** A piece found by scanning its sticker. */
+export interface ScannedPiece { variant: SellableVariant; serial: string }
+
+/** A bunch: many pieces of one variant sold together as one line with its own barcode. */
+export interface BunchDto { code: string; serials: string[] }
+
+/** One line of a bill as the screen sends it. Tracked items carry the serials of their pieces (qty = how many). */
+export interface BillLineInput {
+  variantId: string
+  qty: number
+  /** line discount, paise */
+  disc: Paise
+  serials?: string[]
+  /** the bunch barcode, when the line is a bunch */
+  bunch?: string
 }
 
 export interface ShopInfo {
@@ -72,7 +91,7 @@ export interface NewCustomerInput {
 export type PayMode = 'cash' | 'upi' | 'card'
 
 export interface NewBillInput {
-  lines: { variantId: string; qty: number; /** line discount, paise */ disc: Paise }[]
+  lines: BillLineInput[]
   customerId: string | null
   billDisc: Paise
   /** coins the customer spends on this bill (needs a customer; checked against balance and the max % of the bill) */
@@ -122,7 +141,7 @@ export interface HeldBillDto {
 }
 
 export interface HeldPayload {
-  lines: { variantId: string; qty: number; disc: Paise }[]
+  lines: BillLineInput[]
   customerId: string | null
   /** kept so a resumed bill comes back exactly as it was left (older held bills do not have these) */
   customerMobile?: string | null

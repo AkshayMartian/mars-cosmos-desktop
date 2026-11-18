@@ -8,6 +8,7 @@
 - **Status:** **done** (2026-11-12). Not included: "Print stickers" (waits for printing), product delete (by design: archive).
 - **Code:** screens `src/renderer/screens/Products.tsx`, `ProductForm.tsx`, `CategoriesModal.tsx`, `ImportModal.tsx`; services `src/main/services/catalogue.ts`, `importer.ts`, `importTemplate.ts`; photo files `src/main/photoStore.ts`; file dialogs `src/main/dialogs.ts`; shapes `src/shared/catalogue.ts`; EAN-13 `src/shared/barcode.ts`; script `scripts/make-import-template.ts`, `scripts/sample-products.ts`; tests `services.test.ts` (catalogue group), `importer.test.ts`, `photo.test.ts`.
 
+- **Serial numbers (2026-11-18):** A product can be switched to **serial numbers** (checkbox on Add / Edit product): see [Serial numbers](../serials/serials.md).
 ## 2. Screen controls
 
 **Products list**

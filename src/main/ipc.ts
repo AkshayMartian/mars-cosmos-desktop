@@ -18,6 +18,7 @@ import { exportExcel, exportPdf } from './reportExport'
 import { listPrinters, printDayEnd, openDrawer, printAlteration, printReceipt, printStickers, testReceipt, testSticker } from './print'
 import { restoreFromFile, restoreListed } from './restore'
 import * as stock from './services/stock'
+import { pieceHistory } from './services/serials'
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string }
 
@@ -52,6 +53,7 @@ export function registerIpc(): void {
   h('cat:update', cat.updateProduct)
   h('cat:prices', cat.updatePrices)
   h('cat:brandBarcode', cat.setBrandBarcode)
+  h('cat:trackSerials', cat.setTrackSerials)
   h('cat:archive', cat.archiveProduct)
   h('cat:restore', cat.restoreProduct)
 
@@ -63,6 +65,8 @@ export function registerIpc(): void {
   h('billing:context', billing.billingContext)
   h('billing:search', billing.sellableSearch)
   h('billing:archived', billing.archivedMatches)
+  h('billing:scanPiece', billing.scanPiece)
+  h('billing:makeBunch', billing.makeBunch)
   h('billing:variants', billing.sellableByIds)
   h('billing:photo', cat.variantPhoto)
   h('billing:openDay', billing.openDay)
@@ -108,6 +112,7 @@ export function registerIpc(): void {
   h('stickers:items', stickers.stickerItems)
   h('stickers:lastPurchase', stickers.lastPurchaseItems)
   h('stickers:stock', stickers.stockItems)
+  h('stickers:piece', stickers.pieceSticker)
   h('stickers:printers', listPrinters)
   h('stickers:savePrefs', stickers.saveStickerPrefs)
   h('stickers:print', printStickers)
@@ -136,6 +141,7 @@ export function registerIpc(): void {
   h('import:commit', commitImport)
 
   h('stock:search', stock.searchVariants)
+  h('stock:scanPiece', stock.scanPiece)
   h('stock:levels', stock.stockLevels)
   h('stock:history', stock.stockHistory)
   h('stock:suppliers', stock.listSuppliers)
@@ -152,4 +158,5 @@ export function registerIpc(): void {
   h('count:discard', stock.discardCount)
   h('count:approve', stock.approveCount)
   h('app:approvers', listApprovers)
+  h('serials:history', pieceHistory)
 }

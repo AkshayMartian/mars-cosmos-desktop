@@ -27,6 +27,8 @@ export interface ReturnLine {
   service: boolean
   /** what the customer paid for the whole line (after discounts, GST included) */
   total: Paise
+  /** serial numbers of the pieces on this bill line that can still come back (empty = the line is not tracked by serial) */
+  pieces: string[]
 }
 
 export interface BillForReturn {
@@ -46,9 +48,10 @@ export interface BillForReturn {
 
 export interface ReturnInput {
   billId: string
-  lines: { lineId: number; qty: number }[]
-  /** exchange: new items taken instead (priced and checked for stock again in the main process) */
-  newLines: { variantId: string; qty: number }[]
+  /** a line with serial numbers returns exactly the pieces in `serials` (qty = how many) */
+  lines: { lineId: number; qty: number; serials?: string[] }[]
+  /** exchange: new items taken instead (priced and checked for stock again in the main process); serial items list their pieces */
+  newLines: { variantId: string; qty: number; serials?: string[] }[]
   /** when the customer is owed money: a credit note (needs a customer on the bill) or cash from the drawer */
   settle: 'credit_note' | 'cash'
   /** when the customer owes the difference */

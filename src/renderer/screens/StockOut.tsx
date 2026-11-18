@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import type { SupplierDto, VariantSearchRow } from '@shared/catalogue'
 import { OUT_TYPES, type ApprovalInput, type ApproverDto, type OutType } from '@shared/stockops'
 import type { StaffPublic } from '@shared/types'
+import { SERIAL_MSG } from '@shared/serials'
 import { num, useMsg, useScanFocus } from '../ui'
 import { ApprovalModal } from './Billing'
 
-interface Line { v: VariantSearchRow; qty: string }
+/** serials = the exact pieces going out (items with serial numbers); qty is then how many of them */
+interface Line { v: VariantSearchRow; qty: string; serials?: string[] }
 
 export function StockOut({ user }: { user: StaffPublic }) {
   const [type, setType] = useState<OutType>('supplier_return')
@@ -34,13 +36,28 @@ export function StockOut({ user }: { user: StaffPublic }) {
     return () => { stale = true }
   }, [q])
 
+  function addPiece(v: VariantSearchRow, serial: string) {
+    setMsg(null)
+    setLines((ls) => (ls.some((l) => l.v.id === v.id)
+      ? ls.map((l) => (l.v.id === v.id ? { ...l, serials: [...(l.serials ?? []), serial], qty: String((l.serials ?? []).length + 1) } : l))
+      : [...ls, { v, qty: '1', serials: [serial] }]))
+    setQ(''); setResults([])
+    scan.current?.focus()
+  }
+
   function add(v: VariantSearchRow) {
+    if (v.tracked) { setMsg({ ok: false, text: SERIAL_MSG.noSerial }); setQ(''); setResults([]); return }
     setLines((ls) => (ls.some((l) => l.v.id === v.id) ? ls.map((l) => (l.v.id === v.id ? { ...l, qty: String(num(l.qty) + 1) } : l)) : [...ls, { v, qty: '1' }]))
     setQ(''); setResults([])
     scan.current?.focus()
   }
 
   async function scanEnter() {
+    const code = q
+    // a sticker of a serial item: that exact piece
+    const piece = await run(() => window.api.stock.scanPiece(code, lines.flatMap((l) => (l.serials ?? []).map((serial) => ({ variantId: l.v.id, serial })))))
+    if (piece === undefined) return setQ('')
+    if (piece) return addPiece(piece.variant, piece.serial)
     const found = await run(() => window.api.stock.search(q))
     if (!found) return
     if (found.length) add(found[0]!)
@@ -54,7 +71,7 @@ export function StockOut({ user }: { user: StaffPublic }) {
     setBusy(true)
     const r = await run(() => window.api.stock.out({
       type, supplierId: type === 'supplier_return' ? supplierId || null : null, reason,
-      lines: lines.map((l) => ({ variantId: l.v.id, qty: num(l.qty) })), approval
+      lines: lines.map((l) => ({ variantId: l.v.id, qty: l.serials ? l.serials.length : num(l.qty), ...(l.serials ? { serials: l.serials } : {}) })), approval
     }))
     setBusy(false)
     if (!r) return // the error is shown (inside the approval dialog if it is open)
@@ -110,16 +127,19 @@ export function StockOut({ user }: { user: StaffPublic }) {
                 <tbody>
                   {lines.map((l, i) => (
                     <tr key={l.v.id}>
-                      <td>{l.v.label}<div className="sub mono">{l.v.barcode}</div></td>
+                      <td>{l.v.label}<div className="sub mono">{l.v.barcode}</div>
+                        {l.serials && <div className="sub mono" aria-label="Serial numbers">Serial {l.serials.join(', ')}</div>}</td>
                       <td className="r num">{l.v.stock}</td>
-                      <td><input type="number" min="1" aria-label="Quantity" value={l.qty} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, qty: e.target.value } : x)))} /></td>
+                      <td>{l.serials
+                        ? <b className="num">{l.serials.length}</b>
+                        : <input type="number" min="1" aria-label="Quantity" value={l.qty} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, qty: e.target.value } : x)))} />}</td>
                       <td><button className="btn sm" aria-label="Remove" onClick={() => setLines(lines.filter((_, j) => j !== i))}>✕</button></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          ) : <div className="empty">Scan or search items to add them.</div>}
+          ) : <div className="empty">Scan or search items to add them. Items with serial numbers are added by scanning each piece's sticker.</div>}
         </div>
         <div className="panel">
           <div className="tot"><span>Pieces going out</span><span className="g">{pieces}</span></div>

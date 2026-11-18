@@ -3,6 +3,7 @@ import { formatRupees } from '@shared/money'
 import type { MoveRow, StockRow } from '@shared/catalogue'
 import { ADJUST_REASONS, type AdjustReason, type ApprovalInput, type ApproverDto, type CountDto, type MoveFullRow } from '@shared/stockops'
 import type { StaffPublic } from '@shared/types'
+import { PIECE_STATUS_LABEL, SERIAL_MSG, type PieceHistoryDto } from '@shared/serials'
 import { fmtDate, Modal, useMsg, useScanFocus } from '../ui'
 import { ApprovalModal } from './Billing'
 
@@ -36,9 +37,18 @@ function Levels({ user }: { user: StaffPublic }) {
   const [tick, setTick] = useState(0)
   const [hist, setHist] = useState<StockRow | null>(null)
   const [adj, setAdj] = useState<StockRow | null>(null)
+  const [piece, setPiece] = useState<PieceHistoryDto | null>(null)
+  const [pcode, setPcode] = useState('')
   const { run, setMsg, node } = useMsg()
 
   useEffect(() => { void run(() => window.api.stock.levels(q, low)).then((r) => r && setRows(r)) }, [q, low, tick, run])
+
+  async function lookup() {
+    const text = pcode
+    setPcode('')
+    const p = await run(() => window.api.stock.pieceHistory(text))
+    if (p) setPiece(p)
+  }
 
   return (
     <>
@@ -46,6 +56,8 @@ function Levels({ user }: { user: StaffPublic }) {
       <div className="row">
         <div className="f"><label htmlFor="stq">Search</label><input id="stq" value={q} onChange={(e) => setQ(e.target.value)} /></div>
         <label className="check"><input type="checkbox" checked={low} onChange={(e) => setLow(e.target.checked)} /> Low stock only</label>
+        <div className="f"><label htmlFor="stp">Look up a piece (scan its sticker)</label>
+          <input id="stp" autoComplete="off" placeholder="barcode + serial" value={pcode} onChange={(e) => setPcode(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && pcode.trim()) { e.preventDefault(); void lookup() } }} /></div>
       </div>
       {rows.length ? (
         <div className="tw">
@@ -54,7 +66,7 @@ function Levels({ user }: { user: StaffPublic }) {
             <tbody>
               {rows.map((r) => (
                 <tr key={r.variantId}>
-                  <td>{r.label}</td><td className="mono">{r.barcode}</td>
+                  <td>{r.label}{r.tracked && <span className="chip muted" style={{ marginLeft: 6 }} title="Every piece has its own serial number">serials</span>}</td><td className="mono">{r.barcode}</td>
                   <td className="r num">{r.qty <= r.minStock ? <span className={`chip ${r.qty <= 0 ? 'bad' : 'warn'}`}>{r.qty}</span> : r.qty}</td>
                   <td className="r num">{r.minStock}</td><td className="r num">{formatRupees(r.costValue)}</td>
                   <td><div className="row"><button className="btn sm" onClick={() => setHist(r)}>History</button><button className="btn sm" onClick={() => setAdj(r)}>Adjust</button></div></td>
@@ -65,8 +77,23 @@ function Levels({ user }: { user: StaffPublic }) {
         </div>
       ) : <div className="empty">{low ? 'Nothing is low. Good.' : 'No items yet.'}</div>}
       {hist && <HistoryModal row={hist} onClose={() => setHist(null)} />}
+      {piece && <PieceModal p={piece} onClose={() => setPiece(null)} />}
       {adj && <AdjustModal row={adj} user={user} onClose={() => setAdj(null)} onDone={(text) => { setAdj(null); setTick((t) => t + 1); setMsg({ ok: true, text }) }} />}
     </>
+  )
+}
+
+/** The life of one piece: bought on, sold on bill number, returned on, ... */
+function PieceModal({ p, onClose }: { p: PieceHistoryDto; onClose: () => void }) {
+  return (
+    <Modal title={`${p.label} · No. ${p.serial}`} wide onClose={onClose}>
+      <div className="sub">Status: <b>{PIECE_STATUS_LABEL[p.status]}</b>{p.bill ? <> · on bill <span className="mono">{p.bill}</span></> : null}</div>
+      <div className="tw"><table>
+        <thead><tr><th>When</th><th>What happened</th><th>Ref</th><th>By</th></tr></thead>
+        <tbody>{p.events.map((e, i) => <tr key={i}><td>{fmtDate(e.at)}</td><td>{e.event}</td><td className="mono">{e.ref ?? ''}</td><td>{e.staff ?? ''}</td></tr>)}</tbody>
+      </table></div>
+      <div className="mfoot"><button className="btn p" onClick={onClose}>Close</button></div>
+    </Modal>
   )
 }
 
@@ -91,6 +118,9 @@ function HistoryModal({ row, onClose }: { row: StockRow; onClose: () => void }) 
 
 function AdjustModal({ row, user, onClose, onDone }: { row: StockRow; user: StaffPublic; onClose: () => void; onDone: (text: string) => void }) {
   const [change, setChange] = useState('-1')
+  const [serials, setSerials] = useState<string[]>([]) // items with serial numbers: the exact pieces
+  const [mode, setMode] = useState<'remove' | 'add'>('remove')
+  const [scanCode, setScanCode] = useState('')
   const [reason, setReason] = useState<AdjustReason>('damaged')
   const [asking, setAsking] = useState(false)
   const [approvers, setApprovers] = useState<ApproverDto[]>([])
@@ -98,11 +128,23 @@ function AdjustModal({ row, user, onClose, onDone }: { row: StockRow; user: Staf
   useEffect(() => { if (user.role === 'store') void window.api.stock.approvers().then(setApprovers, () => undefined) }, [user.role])
 
   async function submit(approval?: ApprovalInput) {
-    const r = await run(() => window.api.stock.adjust({ variantId: row.variantId, change: Number(change), reason, approval }))
-    if (r) onDone(`Stock adjusted. ${row.label} is now ${r.stock}.`)
+    const n = row.tracked && mode === 'remove' ? -serials.length : Number(change)
+    const r = await run(() => window.api.stock.adjust({ variantId: row.variantId, change: row.tracked && mode === 'add' && serials.length ? serials.length : n, reason, approval, ...(row.tracked && serials.length ? { serials } : {}) }))
+    if (r) onDone(`Stock adjusted. ${row.label} is now ${r.stock}.${r.newSerials?.length ? ` New serial numbers ${r.newSerials.join(', ')}: print their stickers.` : ''}`)
+  }
+
+  async function scanPiece() {
+    const text = scanCode
+    setScanCode('')
+    const p = await run(() => window.api.stock.scanPiece(text, serials.map((serial) => ({ variantId: row.variantId, serial })), mode === 'remove' ? 'free' : 'gone'))
+    if (p === undefined) return
+    if (!p) return setMsg({ ok: false, text: SERIAL_MSG.noSerial })
+    if (p.variant.id !== row.variantId) return setMsg({ ok: false, text: 'That piece is a different item.' })
+    setMsg(null); setSerials((s) => [...s, p.serial])
   }
   function save() {
     setMsg(null)
+    if (row.tracked && mode === 'remove' && !serials.length) return setMsg({ ok: false, text: 'Scan the pieces that are removed.' })
     if (user.role === 'store') setAsking(true)
     else void submit()
   }
@@ -115,8 +157,20 @@ function AdjustModal({ row, user, onClose, onDone }: { row: StockRow; user: Staf
     <Modal title="Adjust stock" onClose={onClose}>
       <div>{row.label} · in stock <b>{row.qty}</b></div>
       {node}
+      {row.tracked && (
+        <>
+          <div className="f"><label htmlFor="aj-m">This item uses serial numbers</label>
+            <select id="aj-m" value={mode} onChange={(e) => { setMode(e.target.value as 'remove' | 'add'); setSerials([]); setMsg(null) }}>
+              <option value="remove">Remove pieces (scan their stickers)</option>
+              <option value="add">Add pieces (new serial numbers, or scan lost / damaged ones found again)</option>
+            </select></div>
+          <div className="f"><label htmlFor="aj-s">Scan a piece</label>
+            <input id="aj-s" autoFocus autoComplete="off" value={scanCode} onChange={(e) => setScanCode(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && scanCode.trim()) { e.preventDefault(); void scanPiece() } }} /></div>
+          {serials.length > 0 && <div className="sub mono">Serial {serials.join(', ')} <button className="btn sm" onClick={() => setSerials([])}>Clear</button></div>}
+        </>
+      )}
       <div className="row">
-        <div className="f"><label htmlFor="aj-q">Change (+ or −)</label><input id="aj-q" type="number" autoFocus value={change} onChange={(e) => setChange(e.target.value)} /></div>
+        {(!row.tracked || (mode === 'add' && !serials.length)) && <div className="f"><label htmlFor="aj-q">{row.tracked ? 'How many new pieces' : 'Change (+ or −)'}</label><input id="aj-q" type="number" autoFocus={!row.tracked} value={change} onChange={(e) => setChange(e.target.value)} /></div>}
         <div className="f"><label htmlFor="aj-r">Reason</label>
           <select id="aj-r" value={reason} onChange={(e) => setReason(e.target.value as AdjustReason)}>{ADJUST_REASONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}</select>
         </div>
@@ -147,7 +201,10 @@ function Count({ user }: { user: StaffPublic }) {
     const text = code
     setCode('')
     const r = await run(() => window.api.count.scan(text))
-    if (r) setCount((c) => c && { ...c, lines: c.lines.map((l) => (l.variantId === r.variantId ? { ...l, counted: r.counted } : l)) })
+    if (r) {
+      setCount((c) => c && { ...c, lines: c.lines.map((l) => (l.variantId === r.variantId ? { ...l, counted: r.counted } : l)) })
+      if (count?.lines.find((l) => l.variantId === r.variantId)?.tracked) void load() // the list of missing serials changed
+    }
     scan.current?.focus()
   }
 
@@ -182,6 +239,7 @@ function Count({ user }: { user: StaffPublic }) {
   const diffs = count.lines.filter((l) => l.counted !== l.system)
   const scanned = count.lines.reduce((a, l) => a + l.counted, 0)
   const shown = count.lines.filter((l) => l.counted > 0).concat(count.lines.filter((l) => l.counted === 0 && l.system > 0).slice(0, 8))
+  const missingSerials = count.lines.filter((l) => l.tracked && l.missing?.length)
 
   return (
     <>
@@ -209,7 +267,9 @@ function Count({ user }: { user: StaffPublic }) {
               return (
                 <tr key={l.variantId}>
                   <td>{l.label}</td><td className="r num">{l.system}</td>
-                  <td><input type="number" min="0" aria-label={`Counted ${l.label}`} defaultValue={l.counted} key={l.counted} onBlur={(e) => Number(e.target.value || 0) !== l.counted && void setCounted(l.variantId, e.target.value)} /></td>
+                  <td>{l.tracked
+                    ? <span className="num" title="Counted by scanning each piece">{l.counted}</span>
+                    : <input type="number" min="0" aria-label={`Counted ${l.label}`} defaultValue={l.counted} key={l.counted} onBlur={(e) => Number(e.target.value || 0) !== l.counted && void setCounted(l.variantId, e.target.value)} />}</td>
                   <td className="r num">{d ? <span className={`chip ${d < 0 ? 'bad' : 'warn'}`}>{d > 0 ? '+' : ''}{d}</span> : '0'}</td>
                 </tr>
               )
@@ -218,6 +278,13 @@ function Count({ user }: { user: StaffPublic }) {
         </table>
       </div>
       <div className="hint">Showing scanned items and some not yet scanned. Items never scanned count as 0 when you approve.</div>
+      {missingSerials.length > 0 && (
+        <div className="panel" style={{ background: 'var(--sunk)', border: 0 }} aria-label="Missing pieces">
+          <b>Not scanned yet (by serial number)</b>
+          {missingSerials.map((l) => <div key={l.variantId} className="sub">{l.label}: <span className="mono">{l.missing!.length > 40 ? `${l.missing!.slice(0, 40).join(', ')} … and ${l.missing!.length - 40} more` : l.missing!.join(', ')}</span></div>)}
+          <div className="hint">Pieces still on this list when you approve are marked lost.</div>
+        </div>
+      )}
       <div className="row">
         <button className="btn danger" onClick={() => setConfirmDiscard(true)}>Discard count</button>
         <button className="btn p" onClick={() => (user.role === 'store' ? setAsking(true) : void approve())}>Approve {diffs.length} adjustment{diffs.length === 1 ? '' : 's'}</button>

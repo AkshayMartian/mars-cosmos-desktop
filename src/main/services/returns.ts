@@ -8,6 +8,7 @@ import { createBill, getBill, nextBillNo, openSessionRow } from './billing'
 import { requireRole } from './session'
 import { getSetting } from './settings'
 import { addMove } from './stock'
+import { createPieces, isTracked, movePieces } from './serials'
 import { reverseForReturn } from './coins'
 
 const WHO = ['owner', 'manager', 'cashier'] as const
@@ -60,13 +61,15 @@ export function getBillForReturn(billId: string): BillForReturn {
   const c = b.customer_id ? (getDb().prepare('SELECT id,name FROM customers WHERE id=?').get(b.customer_id) as { id: string; name: string } | undefined) : undefined
   const lines = getDb()
     .prepare('SELECT id,variant_id AS variantId,name,colour,size,qty,returned_qty AS returned,total,' + SVC + ' AS service FROM bill_lines WHERE bill_id=? ORDER BY id')
-    .all(billId) as (Omit<ReturnLine, 'returnable' | 'service'> & { service: number })[]
+    .all(billId) as (Omit<ReturnLine, 'returnable' | 'service' | 'pieces'> & { service: number })[]
+  const soldPieces = (variantId: string): string[] =>
+    (getDb().prepare("SELECT serial FROM pieces WHERE bill_id=? AND variant_id=? AND status='sold' ORDER BY id").all(billId, variantId) as { serial: string }[]).map((p) => p.serial)
   const age = ageDays(b.at)
   const win = windowDays()
   return {
     id: b.id, no: b.no, at: b.at, ageDays: age, windowDays: win, overWindow: age > win, needsApproval: age > win && !isManager(actor),
     customerId: c?.id ?? null, customerName: c?.name ?? null, grand: b.grand,
-    lines: lines.map((l) => ({ ...l, service: !!l.service, returnable: l.service ? 0 : l.qty - l.returned }))
+    lines: lines.map((l) => ({ ...l, service: !!l.service, returnable: l.service ? 0 : l.qty - l.returned, pieces: l.service ? [] : soldPieces(l.variantId) }))
   }
 }
 
@@ -91,9 +94,11 @@ export function doReturn(input: ReturnInput): ReturnResult {
   const orig = loadBill(input.billId)
 
   const picked = new Map<number, number>()
+  const pickedSerials = new Map<number, string[]>()
   for (const l of input.lines) {
     if (!Number.isInteger(l.qty) || l.qty < 0) throw new Error('Return quantities must be whole numbers.')
     if (l.qty > 0) picked.set(l.lineId, (picked.get(l.lineId) ?? 0) + l.qty)
+    if (l.qty > 0 && l.serials?.length) pickedSerials.set(l.lineId, [...(pickedSerials.get(l.lineId) ?? []), ...l.serials])
   }
   if (!picked.size) throw new Error('Choose at least one item to return.')
   const lines = db
@@ -106,6 +111,23 @@ export function doReturn(input: ReturnInput): ReturnResult {
     if ((db.prepare('SELECT ' + SVC + ' AS s FROM bill_lines WHERE id=?').get(id) as { s: number }).s)
       throw new Error('An alteration charge cannot be returned.')
     if (q > l.qty - l.returned) throw new Error(`Only ${l.qty - l.returned} of ${l.name} ${l.colour} ${l.size} can still be returned.`)
+  }
+  // serial numbers: a piece comes back by its serial, and only a piece that was sold on THIS bill
+  const piecesBack = new Map<number, { id: number }[]>()
+  for (const [lineId, q] of picked) {
+    const l = byId.get(lineId)!
+    const onBill = db.prepare("SELECT id,serial FROM pieces WHERE bill_id=? AND variant_id=? AND status='sold'").all(orig.id, l.variantId) as { id: number; serial: string }[]
+    const given = pickedSerials.get(lineId) ?? []
+    if (!onBill.length) {
+      if (given.length) throw new Error('This item has no serial numbers on this bill.')
+      continue // sold before serial numbers were switched on: handled by the stock move below
+    }
+    if (given.length !== q || new Set(given).size !== q) throw new Error(`Choose the ${q} piece(s) of ${l.name} ${l.colour} ${l.size} that come back by their serial numbers.`)
+    piecesBack.set(lineId, given.map((s) => {
+      const p = onBill.find((x) => x.serial === s)
+      if (!p) throw new Error(`Serial ${s} was not sold on this bill (or it was already returned).`)
+      return p
+    }))
   }
   if (!['cash', 'upi', 'card'].includes(input.payMode)) throw new Error('Choose how the customer pays.')
   if (!['credit_note', 'cash'].includes(input.settle)) throw new Error('Choose how to give the money back.')
@@ -144,6 +166,10 @@ export function doReturn(input: ReturnInput): ReturnResult {
       insLine.run(id, p.l.variantId, p.l.name, p.l.size, p.l.colour, p.l.hsn, p.q, p.l.mrp, -Math.round(p.total / p.q), -p.taxable, p.l.rate, -p.cgst, -p.sgst, -p.total)
       db.prepare('UPDATE bill_lines SET returned_qty=returned_qty+? WHERE id=?').run(p.q, p.l.id)
       addMove({ variantId: p.l.variantId, qty: p.q, type: 'sale_return', ref: no, staffId: actor.id, at })
+      const back = piecesBack.get(p.l.id)
+      if (back) movePieces(back.map((x) => x.id), 'in_stock', 'returned', { ref: no, staffId: actor.id, at })
+      // a tracked item sold before serial numbers were switched on: the returned pieces get new serials (new stickers needed)
+      else if (isTracked(p.l.variantId)) createPieces(p.l.variantId, p.q, { staffId: actor.id, ref: no, event: 'returned (no serial on the bill)', at })
     }
 
     // The coins earned on what comes back are taken back (never more than the customer still has).
@@ -155,7 +181,7 @@ export function doReturn(input: ReturnInput): ReturnResult {
     let customerPaid = 0
     if (input.newLines.length) {
       sale = createBill(
-        { lines: input.newLines.map((l) => ({ variantId: l.variantId, qty: l.qty, disc: 0 })), customerId: orig.customer_id, billDisc: 0, salesBy: null, payments: [] },
+        { lines: input.newLines.map((l) => ({ variantId: l.variantId, qty: l.qty, disc: 0, ...(l.serials?.length ? { serials: l.serials } : {}) })), customerId: orig.customer_id, billDisc: 0, salesBy: null, payments: [] },
         {
           settle: (grand) => {
             applied = Math.min(refund, grand)

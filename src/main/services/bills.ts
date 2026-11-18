@@ -5,6 +5,7 @@ import { checkApprover, isManager } from './approval'
 import { getBill, openSessionRow } from './billing'
 import { requireRole } from './session'
 import { addMove } from './stock'
+import { movePieces } from './serials'
 import { reverseForCancel } from './coins'
 
 const WHO = ['owner', 'manager', 'cashier'] as const
@@ -99,6 +100,9 @@ export function cancelBill(input: CancelInput): BillDetail {
       db.prepare("INSERT INTO alteration_history (alteration_id,status,staff_id,at) VALUES (?,'cancelled',?,?)").run(j.id, actor.id, at)
     }
     for (const l of lines) addMove({ variantId: l.v, qty: l.qty, type: 'cancel', ref: b.no, reason, staffId: actor.id, at })
+    // serial numbers: every piece of the bill goes back to stock at once
+    const sold = db.prepare("SELECT id FROM pieces WHERE bill_id=? AND status='sold'").all(input.billId) as { id: number }[]
+    movePieces(sold.map((p) => p.id), 'in_stock', 'bill cancelled', { ref: b.no, staffId: actor.id, at })
     const cn = db.prepare("SELECT credit_note_id AS id,amount FROM payments WHERE bill_id=? AND mode='credit_note' AND credit_note_id IS NOT NULL").all(input.billId) as { id: string; amount: number }[]
     for (const p of cn) db.prepare('UPDATE credit_notes SET balance=balance+? WHERE id=?').run(p.amount, p.id)
     const coins = reverseForCancel(input.billId, at)
