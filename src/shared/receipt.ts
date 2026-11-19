@@ -3,7 +3,8 @@ import { formatPlain, formatRupees } from './money'
 import type { GstScheme } from './types'
 
 /** Characters per line: 36 on an 80 mm receipt, 32 on 58 mm. */
-export const receiptWidth = (shop: { width?: string }): number => (shop.width === '58 mm' ? 32 : 36)
+/** Characters per line, like a thermal printer's Font A: 48 on an 80 mm roll, 32 on a 58 mm roll. */
+export const receiptWidth = (shop: { width?: string }): number => (shop.width === '58 mm' ? 32 : 48)
 
 export function receiptText(b: BillDto, shop: ShopInfo, scheme: GstScheme, copy = false): string {
   const W = receiptWidth(shop)

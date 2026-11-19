@@ -58,6 +58,8 @@ export interface NewProductInput {
   trackSerials?: boolean
   /** GST % for this product (0 to 28). Left out / null = follow the category's rule */
   gstRate?: number | null
+  /** pieces per bunch (2 or more): the opening stock is packed into bunches of this size, each with ONE barcode; any rest stays single pieces */
+  bunchSize?: number | null
   /** opening stock keyed "colour|size" */
   opening: Record<string, number>
   /** photo per colour: { colour: file name returned by the photo chooser }. Optional; every colour may have its own */
@@ -109,7 +111,7 @@ export interface StockInInput {
   supplierId: string | null
   billNo: string
   billDate: string
-  lines: { variantId: string; qty: number; cost: Paise }[]
+  lines: { variantId: string; qty: number; cost: Paise; /** pack the pieces received into bunches of this size (2 or more) */ bunchSize?: number }[]
   /** the same supplier bill number was already entered: save anyway (the owner confirmed) */
   allowDuplicate?: boolean
 }

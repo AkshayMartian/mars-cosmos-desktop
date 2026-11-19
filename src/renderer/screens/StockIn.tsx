@@ -3,7 +3,7 @@ import { formatRupees, toPaise } from '@shared/money'
 import { DUPLICATE_PURCHASE, type PurchaseRow, type SupplierDto, type VariantSearchRow } from '@shared/catalogue'
 import { fmtDay, Modal, num, useMsg, useScanFocus } from '../ui'
 
-interface Line { v: VariantSearchRow; qty: string; cost: string }
+interface Line { v: VariantSearchRow; qty: string; cost: string; bunch?: string }
 const today = (): string => {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -58,7 +58,7 @@ export function StockIn({ onNewProduct, canAddProduct, onStickers }: { onNewProd
 
   async function save() {
     setBusy(true)
-    const input = { supplierId: supplierId || null, billNo, billDate, lines: lines.map((l) => ({ variantId: l.v.id, qty: num(l.qty), cost: toPaise(l.cost) })) }
+    const input = { supplierId: supplierId || null, billNo, billDate, lines: lines.map((l) => ({ variantId: l.v.id, qty: num(l.qty), cost: toPaise(l.cost), ...(num(l.bunch ?? '') >= 2 ? { bunchSize: Math.floor(num(l.bunch ?? '')) } : {}) })) }
     // the same supplier bill number again: ask before saving it twice
     const r = await run(async () => {
       try { return await window.api.stock.in(input) } catch (e) {
@@ -110,13 +110,17 @@ export function StockIn({ onNewProduct, canAddProduct, onStickers }: { onNewProd
           {lines.length ? (
             <div className="tw">
               <table>
-                <thead><tr><th>Item</th><th className="r">In stock</th><th>Qty</th><th>Cost ₹</th><th /></tr></thead>
+                <thead><tr><th>Item</th><th className="r">In stock</th><th>Qty</th><th>Bunch of</th><th>Cost ₹</th><th /></tr></thead>
                 <tbody>
                   {lines.map((l, i) => (
                     <tr key={l.v.id}>
                       <td>{l.v.label}<div className="sub mono">{l.v.barcode}</div></td>
                       <td className="r num">{l.v.stock}</td>
                       <td><input type="number" min="1" aria-label="Quantity" value={l.qty} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, qty: e.target.value } : x)))} /></td>
+                      <td>
+                        <input type="number" min="2" max="500" placeholder="single" aria-label="Pieces per bunch" value={l.bunch ?? ''} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, bunch: e.target.value } : x)))} />
+                        {num(l.bunch ?? '') >= 2 && <div className="sub">{Math.floor(num(l.qty) / Math.floor(num(l.bunch ?? '')))} bunch(es) + {num(l.qty) % Math.floor(num(l.bunch ?? ''))} single</div>}
+                      </td>
                       <td><input type="number" min="0" aria-label="Cost" value={l.cost} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, cost: e.target.value } : x)))} /></td>
                       <td><button className="btn sm" aria-label="Remove" onClick={() => setLines(lines.filter((_, j) => j !== i))}>✕</button></td>
                     </tr>

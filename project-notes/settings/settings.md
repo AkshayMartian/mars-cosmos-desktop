@@ -67,7 +67,7 @@ No new table. Writes `settings` keys `shop` (name, phone, address, gstin, state)
 | Edit, deactivate, owner protected | owner stays owner and active | pass | 2026-11-16 |
 | Owner sets a PIN | weak or wrong length refused; login works | pass | 2026-11-16 |
 | Backup folder and back up now | file written, listed | pass | 2026-11-16 |
-| Receipt settings on the receipt | footer, policy, review link, 32 or 36 characters wide | pass | 2026-11-16 |
+| Receipt settings on the receipt | footer, policy, review link, 32 or 48 characters wide (58 / 80 mm) | pass | 2026-11-16 |
 | Restore checks | real backup accepted; junk, missing and newer files refused | pass | 2026-11-16 |
 | Real print (receipt, tag, sticker) and a real restore + restart | works on the shop PC | not tested | n/a |
 
@@ -84,3 +84,4 @@ No new table. Writes `settings` keys `shop` (name, phone, address, gstin, state)
 | 2026-11-17 | Staff: the "Can cancel bills without approval" option is removed (cancelling by a cashier always needs a manager PIN) | uncommitted |
 | 2026-11-17 | Printers tab warns when the chosen receipt printer is not a real printer (OneNote, PDF, XPS, Fax): bills "print" there but nothing comes out of the roll printer | uncommitted |
 | 2026-11-17 | Receipts, slips and day-end slips print in Arial Black, 11 pt on 80 mm paper and 9 pt on 58 mm (`src/shared/rollPrint.ts`). Columns are laid out by line shape because Arial Black is not fixed-width; long lines wrap | uncommitted |
+| 2026-11-19 | **Bills print in JetBrains Mono (the on-screen receipt font), bold, sized like a thermal printer's Font A**: 48 characters on an 80 mm roll (72 mm printable, 7.09 pt) and 32 on a 58 mm roll (48 mm, 7.09 pt). It replaces the Arial Black layout of 2026-11-17 (`src/shared/rollPrint.ts`; the font file the app was built with is put inside the print page by `print.ts`). Slips and tags built for 36 columns are scaled up to fill the roll. | |

@@ -1,5 +1,8 @@
 import { BrowserWindow } from 'electron'
+import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { tagLines, slipText } from '@shared/alterations'
+import { receiptWidth } from '@shared/receipt'
 import { rollDoc } from '@shared/rollPrint'
 import { labelSize, printDocument, LABEL_CSS, type StickerItem, type StickerPrintResult } from '@shared/stickers'
 import { getAltJob } from './services/alterations'
@@ -37,15 +40,32 @@ async function sendToPrinter(j: Job): Promise<void> {
 const receiptPrinter = (): string => getSetting<{ receipt?: string }>('printers', {}).receipt ?? ''
 const esc = (s: string): string => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!)
 
-/** Plain receipt text on a roll, in Arial Black, as wide as the paper and as tall as the text. */
+/**
+ * The font of the on-screen receipt (JetBrains Mono, bold) for the print window. The window cannot read the app's files, so
+ * the font file the app was built with is put inside the page. Without it the page falls back to Consolas / Courier New.
+ */
+let monoFace: string | undefined
+function monoFontFace(): string {
+  if (monoFace !== undefined) return monoFace
+  try {
+    const dir = join(__dirname, '../renderer/assets')
+    const file = readdirSync(dir).find((n) => /^jetbrains-mono-latin-600-normal-.*\.woff2$/.test(n))
+    monoFace = file ? `@font-face{font-family:"JetBrains Mono";font-weight:600;src:url(data:font/woff2;base64,${readFileSync(join(dir, file)).toString('base64')}) format("woff2")}` : ''
+  } catch {
+    monoFace = ''
+  }
+  return monoFace
+}
+
+/** Plain receipt text on a roll, as wide as the paper and as tall as the text. */
 function textJob(text: string, chars: number): Job {
-  const d = rollDoc(text, chars)
+  const d = rollDoc(text, chars, monoFontFace())
   return { html: d.html, printer: receiptPrinter(), wMm: d.wMm, hMm: d.hMm }
 }
 
 /* ---------- stickers ---------- */
 
-export async function printStickers(lines: { variantId: string; qty: number; serials?: string[] }[]): Promise<StickerPrintResult> {
+export async function printStickers(lines: { variantId: string; qty: number; serials?: string[]; bunch?: string }[]): Promise<StickerPrintResult> {
   const items = prepareJob(lines)
   const cfg = stickerContext()
   const size = labelSize(cfg.sizeId)
@@ -73,7 +93,7 @@ export async function printReceipt(billId: string, copy = false): Promise<void> 
 
 export async function testReceipt(): Promise<void> {
   requireRole('owner')
-  const width = getSetting<{ width?: string }>('receipt', {}).width === '58 mm' ? 32 : 36
+  const width = receiptWidth(getSetting<{ width?: string }>('receipt', {}))
   const shop = getSetting<{ name?: string }>('shop', {}).name || 'Your Shop'
   const line = '-'.repeat(width)
   await sendToPrinter(textJob([shop.toUpperCase(), 'TEST RECEIPT', line, 'If you can read this, the receipt', 'printer is working.', line, new Date().toLocaleString('en-IN')].join('\n'), width))
@@ -81,7 +101,7 @@ export async function testReceipt(): Promise<void> {
 
 /** The day-end slip of a closed day, on the receipt printer. */
 export async function printDayEnd(sessionId: string): Promise<void> {
-  const width = getSetting<{ width?: string }>('receipt', {}).width === '58 mm' ? 32 : 36
+  const width = receiptWidth(getSetting<{ width?: string }>('receipt', {}))
   await sendToPrinter(textJob(daySlip(sessionId, width), width))
 }
 

@@ -117,7 +117,7 @@ export function commitImport(token: string): ImportResult {
   getDb().transaction(() => {
     for (const group of byProduct.values()) {
       const first = group[0]!
-      variantIds.push(...insertProduct(actor.id, { name: first.product, brand: first.brand, categoryId: first.categoryId }, group.map((g) => g.spec), 'import').variantIds)
+      variantIds.push(...insertProduct(actor.id, { name: first.product, brand: first.brand, categoryId: first.categoryId, trackSerials: true }, group.map((g) => g.spec), 'import').variantIds)
       items += group.length
     }
   })()

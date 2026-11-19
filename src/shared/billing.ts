@@ -25,8 +25,8 @@ export interface SellableVariant {
 /** A piece found by scanning its sticker. */
 export interface ScannedPiece { variant: SellableVariant; serial: string }
 
-/** A bunch: many pieces of one variant sold together as one line with its own barcode. */
-export interface BunchDto { code: string; serials: string[] }
+/** A bunch scanned at the counter: pieces of one variant packed together (made in Add product / Stock in) with one barcode. */
+export interface BunchScan { code: string; variant: SellableVariant; serials: string[] }
 
 /** One line of a bill as the screen sends it. Tracked items carry the serials of their pieces (qty = how many). */
 export interface BillLineInput {

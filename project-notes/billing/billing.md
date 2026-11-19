@@ -8,7 +8,7 @@
 - **Status:** **done** for Phase 1 scope (2026-11-12). Not included: printing the receipt, coins (credit-note payment is now on the payment dialog and alteration jobs are made from the cart line: see the Returns and Alterations notes; cancelling a bill is the Bills module).
 - **Code:** screen `src/renderer/screens/Billing.tsx` · service `src/main/services/billing.ts` (+ `customers.ts` for the two customer calls, `approval.ts`) · maths `src/shared/calc.ts` · receipt `src/shared/receipt.ts` · shapes `src/shared/billing.ts` · tests `src/main/services/billing.test.ts`, `src/shared/calc.test.ts`.
 
-- **Serial numbers (2026-11-18):** Items with **serial numbers** are scanned piece by piece (no − / +, "Already added", Add as bunch, held bills reserve pieces): see [Serial numbers](../serials/serials.md).
+- **Serial numbers (2026-11-18):** Items with **serial numbers** are scanned piece by piece (no − / +, "Already added", scan a bunch barcode to add a whole bunch, held bills reserve pieces): see [Serial numbers](../serials/serials.md).
 ## 2. Screen controls
 
 | Control | Type | What it does |
@@ -243,7 +243,7 @@ INSERT INTO payments (bill_id,mode,amount) VALUES (?,?,?);
 - **Salesperson** for commission: chosen staff if active, else the person billing. "My sales today" uses this.
 - **A day must be open** to bill; a closed day cannot take bills (Day end).
 - **Archived products** are never sold; the search hints when a match is archived.
-- **Receipt:** 36 characters wide (`shared/receipt.ts`), same text will go to the printer later.
+- **Receipt:** 48 characters wide on 80 mm paper and 32 on 58 mm, like a thermal printer's Font A (`shared/receipt.ts`); the same text goes to the printer.
 
 ## 7. Test cases
 

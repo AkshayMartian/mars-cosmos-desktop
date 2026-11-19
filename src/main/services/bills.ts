@@ -103,6 +103,7 @@ export function cancelBill(input: CancelInput): BillDetail {
     // serial numbers: every piece of the bill goes back to stock at once
     const sold = db.prepare("SELECT id FROM pieces WHERE bill_id=? AND status='sold'").all(input.billId) as { id: number }[]
     movePieces(sold.map((p) => p.id), 'in_stock', 'bill cancelled', { ref: b.no, staffId: actor.id, at })
+    db.prepare('UPDATE bunches SET bill_id=NULL WHERE bill_id=?').run(input.billId) // its bunches are whole again, with their barcode
     const cn = db.prepare("SELECT credit_note_id AS id,amount FROM payments WHERE bill_id=? AND mode='credit_note' AND credit_note_id IS NOT NULL").all(input.billId) as { id: string; amount: number }[]
     for (const p of cn) db.prepare('UPDATE credit_notes SET balance=balance+? WHERE id=?').run(p.amount, p.id)
     const coins = reverseForCancel(input.billId, at)

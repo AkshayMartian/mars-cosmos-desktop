@@ -10,7 +10,7 @@ import type {
 import { checkApprover, isManager } from './approval'
 import { audit } from './auth'
 import { requireRole } from './session'
-import { createPieces, findPiece, isTracked, movePieces, pieceProblem, receivePieces, resolveSticker, takeFree } from './serials'
+import { createPieces, findBunch, bunchSerials, findPiece, isTracked, movePieces, pieceProblem, receiveBunches, resolveSticker, takeFree } from './serials'
 import { SERIAL_MSG, type PieceStatus } from '@shared/serials'
 
 export type MoveType =
@@ -121,6 +121,7 @@ export function stockIn(input: StockInInput): { purchaseId: string; qty: number 
   const db = getDb()
   if (!input.lines.length) throw new Error('Add at least one item.')
   for (const l of input.lines) {
+    if (l.bunchSize != null && (!Number.isInteger(l.bunchSize) || l.bunchSize < 2 || l.bunchSize > 500)) throw new Error('Pieces per bunch: a whole number from 2 to 500.')
     if (!Number.isInteger(l.qty) || l.qty <= 0) throw new Error('Quantities must be whole numbers above zero.')
     if (!(l.cost >= 0)) throw new Error('Cost cannot be negative.')
     if (!db.prepare('SELECT 1 FROM variants WHERE id=?').get(l.variantId)) throw new Error('An item on this list no longer exists.')
@@ -147,7 +148,7 @@ export function stockIn(input: StockInInput): { purchaseId: string; qty: number 
       line.run(id, l.variantId, l.qty, l.cost)
       cost.run(l.cost, l.variantId)
       addMove({ variantId: l.variantId, qty: l.qty, type: 'purchase', ref, staffId: actor.id, at })
-      receivePieces(l.variantId, l.qty, { staffId: actor.id, ref, purchaseId: id, at }) // serial numbers: one piece per unit
+      receiveBunches(l.variantId, l.qty, l.bunchSize, { staffId: actor.id, ref, purchaseId: id, at }) // serial numbers: one piece per unit; full bunches get one barcode
     }
     audit(actor.id, 'stock_in', { id, qty, total })
   })()
@@ -306,6 +307,21 @@ export function countScan(code: string): { variantId: string; label: string; cou
   const c = openCountRow()
   if (!c) throw new Error('Start a stock count first.')
   const q = code.trim()
+  // a bunch barcode counts every piece packed in it, once
+  const bn = findBunch(q)
+  if (bn) {
+    const db = getDb()
+    if (!db.prepare('SELECT 1 FROM stock_count_lines WHERE count_id=? AND variant_id=?').get(c.id, bn.variantId)) throw new Error(`No item with barcode ${q} in this count.`)
+    const ids = bunchSerials(bn).map((s) => findPiece(bn.variantId, s)!.id)
+    const fresh = ids.filter((pid) => !db.prepare('SELECT 1 FROM stock_count_pieces WHERE count_id=? AND piece_id=?').get(c.id, pid))
+    if (!fresh.length) throw new Error('Already counted')
+    db.transaction(() => {
+      for (const pid of fresh) db.prepare('INSERT INTO stock_count_pieces (count_id,piece_id) VALUES (?,?)').run(c.id, pid)
+      db.prepare('UPDATE stock_count_lines SET counted_qty=(SELECT COUNT(*) FROM stock_count_pieces sp JOIN pieces p ON p.id=sp.piece_id WHERE sp.count_id=? AND p.variant_id=?) WHERE count_id=? AND variant_id=?').run(c.id, bn.variantId, c.id, bn.variantId)
+    })()
+    const l = countLines(c.id).find((x) => x.variantId === bn.variantId)!
+    return { variantId: l.variantId, label: l.label, counted: l.counted }
+  }
   // serial numbers: a sticker counts that one piece, once
   const st = resolveSticker(q)
   if (st && isTracked(st.variantId)) {

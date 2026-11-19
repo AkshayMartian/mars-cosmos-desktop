@@ -4,7 +4,7 @@ import { requireRole } from './session'
 import { getSetting } from './settings'
 import { LABEL_SIZES, MAX_PER_ITEM, type StickerContext, type StickerItem } from '@shared/stickers'
 import { SERIAL_MSG } from '@shared/serials'
-import { findPiece, inStockSerials, isTracked, resolveSticker } from './serials'
+import { bunchesInStock, bunchSerials, findBunch, findPiece, inStockSerials, isTracked, resolveSticker, type BunchRow } from './serials'
 
 const shopName = (): string => getSetting<{ name?: string }>('shop', {}).name || 'Your Shop'
 const prefs = (): { size: string; printer: string } => ({ size: '50x25', printer: '', ...getSetting<{ size?: string; printer?: string }>('stickers', {}) })
@@ -32,6 +32,14 @@ const toItem = (r: Row, shop: string): StickerItem => ({ ...r, shop, qty: Math.m
 /** An item with serial numbers prints one sticker per piece: these serials. */
 const withSerials = (it: StickerItem, serials: string[]): StickerItem => ({ ...it, serials, qty: serials.length })
 
+/** One bunch: ONE sticker for all its pieces. `barcode` is the bunch code; qty = copies to print (1). */
+const withBunch = (it: StickerItem, b: BunchRow): StickerItem => ({ ...it, barcode: b.code, serials: undefined, qty: 1, bunch: { code: b.code, qty: b.qty } })
+/** Pieces in stock that are not packed in a whole bunch (those get their own stickers). */
+function looseSerials(variantId: string): string[] {
+  const packed = new Set(bunchesInStock(variantId).flatMap(bunchSerials))
+  return inStockSerials(variantId).filter((s) => !packed.has(s))
+}
+
 /** Items by id with their label data (price from the database, never from the screen). */
 export function stickerItems(ids: string[]): StickerItem[] {
   requireRole('owner', 'manager', 'store')
@@ -49,8 +57,8 @@ export function stockItems(ids: string[]): StickerItem[] {
   const shop = shopName()
   return rows.flatMap((r) => {
     if (!isTracked(r.variantId)) return [toItem(r, shop)]
-    const s = inStockSerials(r.variantId)
-    return s.length ? [withSerials(toItem(r, shop), s)] : []
+    const loose = looseSerials(r.variantId)
+    return [...(loose.length ? [withSerials(toItem(r, shop), loose)] : []), ...bunchesInStock(r.variantId).map((b) => withBunch(toItem(r, shop), b))]
   })
 }
 
@@ -64,14 +72,18 @@ export function lastPurchaseItems(purchaseId?: string): StickerItem[] {
   if (!last) return []
   const rows = db.prepare(`${BASE},pl.qty AS qty FROM purchase_lines pl JOIN variants v ON v.id=pl.variant_id JOIN products p ON p.id=v.product_id WHERE pl.purchase_id=? ORDER BY p.name,v.rowid`).all(last.id) as Row[]
   const shop = shopName()
-  return rows.map((r) => {
-    const s = (db.prepare('SELECT serial FROM pieces WHERE purchase_id=? AND variant_id=? ORDER BY id').all(last.id, r.variantId) as { serial: string }[]).map((p) => p.serial)
-    return s.length ? withSerials(toItem(r, shop), s) : toItem(r, shop)
+  return rows.flatMap((r) => {
+    // pieces packed in a bunch are not listed one by one: the bunch has one sticker
+    const s = (db.prepare('SELECT serial FROM pieces WHERE purchase_id=? AND variant_id=? AND bunch_id IS NULL ORDER BY id').all(last.id, r.variantId) as { serial: string }[]).map((p) => p.serial)
+    const inPurchase = new Set((db.prepare('SELECT DISTINCT bunch_id AS b FROM pieces WHERE purchase_id=? AND variant_id=? AND bunch_id IS NOT NULL').all(last.id, r.variantId) as { b: number }[]).map((x) => x.b))
+    const bunches = bunchesInStock(r.variantId).filter((b) => inPurchase.has(b.id)).map((b) => withBunch(toItem(r, shop), b))
+    const own = s.length ? [withSerials(toItem(r, shop), s)] : bunches.length ? [] : [toItem(r, shop)]
+    return [...own, ...bunches]
   })
 }
 
 /** Checks a print request and rebuilds each label from the database (the screen's prices are never trusted). */
-export function prepareJob(lines: { variantId: string; qty: number; serials?: string[] }[]): StickerItem[] {
+export function prepareJob(lines: { variantId: string; qty: number; serials?: string[]; bunch?: string }[]): StickerItem[] {
   requireRole('owner', 'manager', 'store')
   if (!lines.length) throw new Error('Add at least one item to print.')
   const items = stickerItems(lines.map((l) => l.variantId))
@@ -80,9 +92,15 @@ export function prepareJob(lines: { variantId: string; qty: number; serials?: st
     if (!it) throw new Error('An item on the list no longer exists.')
     if (!Number.isInteger(l.qty) || l.qty < 1) throw new Error(`Enter how many stickers for ${it.name}.`)
     if (l.qty > MAX_PER_ITEM) throw new Error(`At most ${MAX_PER_ITEM} stickers per item at a time.`)
+    if (l.bunch) {
+      // a bunch sticker: one barcode for the whole bunch, as many copies as asked
+      const b = findBunch(l.bunch)
+      if (!b || b.variantId !== l.variantId || !bunchesInStock(l.variantId).some((x) => x.id === b.id)) throw new Error(SERIAL_MSG.bunchNotFree)
+      return { ...withBunch(it, b), qty: l.qty }
+    }
     if (!isTracked(l.variantId)) return { ...it, qty: l.qty }
     // serial numbers: the label of each piece carries its serial. No serials given = the pieces in stock, lowest serial first.
-    const serials = l.serials?.length ? l.serials : inStockSerials(l.variantId).slice(0, l.qty)
+    const serials = l.serials?.length ? l.serials : looseSerials(l.variantId).slice(0, l.qty)
     if (!serials.length) throw new Error(`${it.name} has no pieces in stock to print stickers for.`)
     if (new Set(serials).size !== serials.length || serials.length > MAX_PER_ITEM) throw new Error(`Check the serial numbers for ${it.name}.`)
     for (const s of serials) if (!findPiece(l.variantId, s)) throw new Error(`${SERIAL_MSG.unknown} (${s}).`)
@@ -93,6 +111,12 @@ export function prepareJob(lines: { variantId: string; qty: number; serials?: st
 /** The sticker of one piece (a scanned or typed sticker code): to print its label again. */
 export function pieceSticker(code: string): StickerItem {
   requireRole('owner', 'manager', 'store')
+  const bn = findBunch(code)
+  if (bn) {
+    const bit = stickerItems([bn.variantId])[0]
+    if (!bit || !bunchesInStock(bn.variantId).some((x) => x.id === bn.id)) throw new Error(SERIAL_MSG.bunchNotFree)
+    return withBunch(bit, bn)
+  }
   const s = resolveSticker(code)
   const it = s && stickerItems([s.variantId])[0]
   if (!s || !it || !findPiece(s.variantId, s.serial)) throw new Error(SERIAL_MSG.unknown)

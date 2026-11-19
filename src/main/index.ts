@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { resolveDbPath } from './config'
 import { openDb } from './db'
 import { registerIpc } from './ipc'
+import { enableSerialsEverywhere } from './services/catalogue'
 import { purgeTemp, setPhotoDir } from './photoStore'
 import { autoBackupIfDue, setBackupDir } from './services/backup'
 
@@ -42,6 +43,7 @@ app.whenReady().then(() => {
   const dbPath = resolveDbPath(app.getPath('userData'))
   console.log(`[mars-pos] database: ${dbPath}`)
   openDb(dbPath)
+  enableSerialsEverywhere() // every product has serial numbers; stock already in the shop gets its serials once
   setPhotoDir(join(app.getPath('userData'), 'photos'))
   purgeTemp(24 * 60 * 60 * 1000) // photos chosen but never saved
   setBackupDir(join(app.getPath('userData'), 'backups')) // until a USB / second-disk folder is chosen in Settings

@@ -2,14 +2,14 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { stickerCode } from '@shared/serials'
 import type { NewBillInput } from '@shared/billing'
 import { getDb, openDb } from '../db'
-import { billingContext, createBill, holdBill, makeBunch, openDay, resumeHeld, scanPiece } from './billing'
+import { billingContext, createBill, holdBill, openDay, pickPiece, resumeHeld, scanBunch, scanPiece } from './billing'
 import { cancelBill } from './bills'
-import { createProduct, getProduct, listCategories, setTrackSerials } from './catalogue'
+import { createProduct, enableSerialsEverywhere, getProduct, listCategories, setTrackSerials } from './catalogue'
 import { doReturn, getBillForReturn } from './returns'
 import { inStockSerials, pieceHistory } from './serials'
 import { setCurrent } from './session'
 import { adjustStock, approveCount, countScan, countSet, getOpenCount, startCount, stockIn, stockLevels, stockOut } from './stock'
-import { prepareJob, stockItems } from './stickers'
+import { pieceSticker, prepareJob, stockItems } from './stickers'
 
 const id = (role: string) => (getDb().prepare('SELECT id FROM staff WHERE role=?').get(role) as { id: string }).id
 const as = (role: string) => setCurrent(id(role))
@@ -100,37 +100,114 @@ describe('serials: billing rules', () => {
   })
 })
 
-describe('serials: bunches', () => {
-  it('picks the pieces (the scanned one first), gives the bunch its own barcode, and sells it as one line', () => {
-    const { shirt } = shop()
-    cashier()
-    const bn = makeBunch(shirt.id, 4, [], '0003')
-    expect(bn.serials).toEqual(['0003', '0001', '0002', '0004'])
-    expect(bn.code).toMatch(/^21\d{11}$/)
-    const b = createBill(bill([{ variantId: shirt.id, qty: 4, disc: 0, serials: bn.serials, bunch: bn.code }], 400_000))
-    expect(b.lines).toHaveLength(1)
-    expect(b.lines[0]!.qty).toBe(4)
-    expect(qtyOf(shirt.id)).toBe(2)
-    expect(getDb().prepare('SELECT qty FROM bunches WHERE code=?').get(bn.code)).toEqual({ qty: 4 })
-    expect(() => createBill(bill([{ variantId: shirt.id, qty: 2, disc: 0, serials: ['0005', '0006'], bunch: bn.code }], 200_000))).toThrow('already on a bill')
+/** Slim Shirt Blue M: 7 pieces received packed in bunches of 3, so 2 bunches (0001-0003, 0004-0006) and 1 loose piece (0007). */
+function bunchShop() {
+  as('owner')
+  const cat = listCategories().find((c) => c.name === 'Shirts')!.id
+  const p = createProduct({ name: 'Bunch Shirt', brand: 'Own', categoryId: cat, mrp: 100_000, salePrice: 100_000, cost: 50_000, sizes: ['M'], colours: ['Blue'], opening: { 'Blue|M': 7 }, trackSerials: true, bunchSize: 3 })
+  const v = getProduct(p.id).variants[0]!
+  const codes = (getDb().prepare('SELECT code FROM bunches WHERE variant_id=? ORDER BY id').all(v.id) as { code: string }[]).map((r) => r.code)
+  return { v, codes }
+}
+
+describe('serials: bunches are made in Add product / Stock in and sold by scanning one barcode', () => {
+  it('Add product packs the opening stock: one barcode per bunch, the rest stay single pieces, stock is still the pieces', () => {
+    const { v, codes } = bunchShop()
+    expect(codes).toHaveLength(2)
+    for (const c of codes) expect(c).toMatch(/^21\d{11}$/)
+    expect(new Set(codes).size).toBe(2)
+    expect(qtyOf(v.id)).toBe(7)
+    expect(piecesIn(v.id)).toBe(7)
+    expect(getDb().prepare('SELECT COUNT(*) AS n FROM pieces WHERE variant_id=? AND bunch_id IS NULL').get(v.id)).toEqual({ n: 1 })
   })
-  it('says how many are free when there are not enough, counting what is already on the bill', () => {
-    const { shirt } = shop()
-    cashier()
-    expect(() => makeBunch(shirt.id, 7, [])).toThrow('Only 6 are free')
-    expect(() => makeBunch(shirt.id, 6, ['0001', '0002'])).toThrow('Only 4 are free')
-    expect(() => makeBunch(shirt.id, 1, [])).toThrow('2 or more')
+  it('refuses a bunch size that is not a whole number from 2 to 500', () => {
+    as('owner')
+    const cat = listCategories().find((c) => c.name === 'Shirts')!.id
+    for (const [i, n] of [1, 2.5, 501].entries())
+      expect(() => createProduct({ name: 'B' + i, brand: 'x', categoryId: cat, mrp: 1000, salePrice: 1000, cost: 1, sizes: ['M'], colours: ['Blue'], opening: { 'Blue|M': 5 }, trackSerials: true, bunchSize: n })).toThrow('Pieces per bunch')
   })
-  it('a normal line and a bunch line of the same variant can be on one bill', () => {
-    const { shirt } = shop()
+  it('scanning the bunch barcode gives the whole bunch; a packed piece cannot be scanned alone, a loose one can', () => {
+    const { v, codes } = bunchShop()
     cashier()
-    const bn = makeBunch(shirt.id, 3, ['0001'])
-    const b = createBill(bill([
-      { variantId: shirt.id, qty: 1, disc: 0, serials: ['0001'] },
-      { variantId: shirt.id, qty: 3, disc: 0, serials: bn.serials, bunch: bn.code }
-    ], 400_000))
-    expect(b.lines[0]!.qty).toBe(4)
-    expect(qtyOf(shirt.id)).toBe(2)
+    const bn = scanBunch(codes[0]!, [])!
+    expect(bn.serials).toEqual(['0001', '0002', '0003'])
+    expect(bn.variant.id).toBe(v.id)
+    expect(() => scanPiece(code(v.barcode, '0002'), [])).toThrow('inside a bunch')
+    expect(scanPiece(code(v.barcode, '0007'), [])!.serial).toBe('0007')
+    expect(scanBunch(v.barcode, [])).toBeNull() // not a bunch code
+    expect(() => scanBunch(codes[0]!, bn.serials.map((serial) => ({ variantId: v.id, serial })))).toThrow('Already added')
+  })
+  it('sells the bunch as one line with its quantity; it cannot be sold twice; its pieces cannot be sold alone', () => {
+    const { v, codes } = bunchShop()
+    cashier()
+    const bn = scanBunch(codes[0]!, [])!
+    expect(() => createBill(bill([{ variantId: v.id, qty: 1, disc: 0, serials: ['0004'] }], 100_000))).toThrow('inside a bunch')
+    const b = createBill(bill([{ variantId: v.id, qty: 3, disc: 0, serials: bn.serials, bunch: bn.code }, { variantId: v.id, qty: 1, disc: 0, serials: ['0007'] }], 400_000))
+    expect(b.lines.reduce((n, l) => n + l.qty, 0)).toBe(4)
+    expect(qtyOf(v.id)).toBe(3)
+    expect(getDb().prepare('SELECT bill_id FROM bunches WHERE code=?').get(codes[0])).toEqual({ bill_id: b.id })
+    expect(() => scanBunch(codes[0]!, [])).toThrow('This bunch is not in stock')
+    expect(() => createBill(bill([{ variantId: v.id, qty: 3, disc: 0, serials: bn.serials, bunch: bn.code }], 300_000))).toThrow()
+    // the wrong pieces under a real bunch code are refused
+    expect(() => createBill(bill([{ variantId: v.id, qty: 3, disc: 0, serials: ['0004', '0005', '0007'], bunch: codes[1] }], 300_000))).toThrow()
+    expect(qtyOf(v.id)).toBe(3)
+  })
+  it('cancelling the bill puts the bunch together again, ready to scan', () => {
+    const { v, codes } = bunchShop()
+    cashier()
+    const bn = scanBunch(codes[1]!, [])!
+    const b = createBill(bill([{ variantId: v.id, qty: 3, disc: 0, serials: bn.serials, bunch: bn.code }], 300_000))
+    as('owner')
+    cancelBill({ billId: b.id, reason: 'mistake' })
+    expect(qtyOf(v.id)).toBe(7)
+    as('cashier')
+    expect(scanBunch(codes[1]!, [])!.serials).toEqual(['0004', '0005', '0006'])
+  })
+  it('a bunch that lost a piece is not whole any more: it cannot be scanned and its other pieces sell singly', () => {
+    const { v, codes } = bunchShop()
+    stockOut({ type: 'damage', supplierId: null, reason: 'torn', lines: [{ variantId: v.id, qty: 1, serials: ['0005'] }] })
+    cashier()
+    expect(() => scanBunch(codes[1]!, [])).toThrow('This bunch is not in stock')
+    expect(scanPiece(code(v.barcode, '0004'), [])!.serial).toBe('0004')
+  })
+  it('a bunch in a held bill is reserved', () => {
+    const { v, codes } = bunchShop()
+    cashier()
+    const bn = scanBunch(codes[0]!, [])!
+    holdBill({ lines: [{ variantId: v.id, qty: 3, disc: 0, serials: bn.serials, bunch: bn.code }], customerId: null })
+    expect(() => scanBunch(codes[0]!, [])).toThrow('another bill on hold')
+    const held = (getDb().prepare('SELECT id FROM held_bills').get() as { id: string }).id
+    expect(resumeHeld(held).lines[0]!.bunch).toBe(bn.code)
+    expect(scanBunch(codes[0]!, [])!.serials).toHaveLength(3)
+  })
+  it('Stock in can pack the pieces received into bunches too', () => {
+    const { v } = bunchShop()
+    stockIn({ supplierId: null, billNo: 'S9', billDate: '', lines: [{ variantId: v.id, qty: 5, cost: 1, bunchSize: 2 }] })
+    expect(getDb().prepare('SELECT COUNT(*) AS n FROM bunches WHERE variant_id=?').get(v.id)).toEqual({ n: 4 }) // 2 from Add product + 2 now
+    expect(qtyOf(v.id)).toBe(12)
+    expect(() => stockIn({ supplierId: null, billNo: 'S10', billDate: '', lines: [{ variantId: v.id, qty: 5, cost: 1, bunchSize: 1 }] })).toThrow('Pieces per bunch')
+  })
+  it('stickers: one sticker per bunch (its barcode), single pieces keep their serial stickers, a bunch can be reprinted by its code', () => {
+    const { v, codes } = bunchShop()
+    const items = stockItems([v.id])
+    expect(items).toHaveLength(3)
+    expect(items[0]!.serials).toEqual(['0007'])
+    expect(items.slice(1).map((i) => i.bunch)).toEqual([{ code: codes[0], qty: 3 }, { code: codes[1], qty: 3 }])
+    expect(items[1]!.barcode).toBe(codes[0])
+    const job = prepareJob([{ variantId: v.id, qty: 2, bunch: codes[0] }])[0]!
+    expect(job.bunch?.qty).toBe(3)
+    expect(job.qty).toBe(2) // two copies of the bunch sticker
+    expect(prepareJob([{ variantId: v.id, qty: 5 }])[0]!.serials).toEqual(['0007']) // loose pieces only
+    expect(pieceSticker(codes[1]!).bunch?.code).toBe(codes[1])
+    expect(() => prepareJob([{ variantId: v.id, qty: 1, bunch: 'nope' }])).toThrow('not in stock')
+  })
+  it('a stock count scans a bunch barcode and counts every piece in it', () => {
+    const { v, codes } = bunchShop()
+    startCount()
+    countScan(codes[0]!)
+    expect(() => countScan(codes[0]!)).toThrow('Already counted')
+    countScan(code(v.barcode, '0007'))
+    expect(getOpenCount()!.lines.find((l) => l.variantId === v.id)).toMatchObject({ counted: 4, system: 7, missing: ['0004', '0005', '0006'] })
   })
 })
 
@@ -141,8 +218,6 @@ describe('serials: held bills', () => {
     holdBill({ lines: [{ variantId: shirt.id, qty: 2, disc: 0, serials: ['0001', '0002'] }], customerId: null })
     expect(() => scanPiece(code(shirt.barcode, '0001'), [])).toThrow('This piece is in another bill on hold')
     expect(() => createBill(bill([{ variantId: shirt.id, qty: 1, disc: 0, serials: ['0002'] }], 100_000))).toThrow('another bill on hold')
-    expect(makeBunch(shirt.id, 4, []).serials).toEqual(['0003', '0004', '0005', '0006'])
-    expect(() => makeBunch(shirt.id, 5, [])).toThrow('Only 4 are free')
     const held = (getDb().prepare('SELECT id FROM held_bills').get() as { id: string }).id
     const back = resumeHeld(held)
     expect(back.lines[0]!.serials).toEqual(['0001', '0002'])
@@ -265,5 +340,49 @@ describe('serials: history and stickers', () => {
   it('billing context still works', () => {
     shop(); cashier()
     expect(billingContext().session).not.toBeNull()
+  })
+})
+
+describe('serial numbers are the rule for every product', () => {
+  it('switches every product on at start, gives existing stock its serials, keeps the stock numbers, and does nothing the second time', () => {
+    const { shirt, jeans } = shop(false) // shirt untracked here, jeans untracked
+    expect(inStockSerials(shirt.id)).toEqual([])
+    expect(enableSerialsEverywhere()).toEqual({ products: 2, newSerials: 11 })
+    expect(inStockSerials(shirt.id)).toHaveLength(6)
+    expect(inStockSerials(jeans.id)).toHaveLength(5)
+    expect(qtyOf(shirt.id)).toBe(6)
+    expect(qtyOf(jeans.id)).toBe(5)
+    expect(getProduct(getDb().prepare('SELECT product_id AS p FROM variants WHERE id=?').pluck().get(jeans.id) as string).trackSerials).toBe(true)
+    expect(enableSerialsEverywhere()).toEqual({ products: 0, newSerials: 0 })
+    // after that a plain barcode cannot be added, and the same sticker twice says Already added
+    cashier()
+    expect(scanPiece(shirt.barcode, [])).toBeNull()
+    expect(() => scanPiece(code(shirt.barcode, '0001'), [{ variantId: shirt.id, serial: '0001' }])).toThrow('Already added')
+  })
+})
+
+describe('serials: a plain barcode (no serial on the sticker) picks the next free piece', () => {
+  it('takes the lowest free single piece, skipping those on the bill and in held bills', () => {
+    const { shirt } = shop()
+    cashier()
+    expect(pickPiece(shirt.id, []).serial).toBe('0001')
+    expect(pickPiece(shirt.id, [{ variantId: shirt.id, serial: '0001' }]).serial).toBe('0002')
+    holdBill({ lines: [{ variantId: shirt.id, qty: 2, disc: 0, serials: ['0001', '0002'] }], customerId: null })
+    expect(pickPiece(shirt.id, [{ variantId: shirt.id, serial: '0003' }]).serial).toBe('0004')
+    // what it picked sells like any scanned piece
+    const b = createBill(bill([{ variantId: shirt.id, qty: 1, disc: 0, serials: [pickPiece(shirt.id, []).serial] }], 100_000))
+    expect(b.lines[0]!.qty).toBe(1)
+    expect(qtyOf(shirt.id)).toBe(5)
+  })
+  it('never picks a piece packed in a bunch, and says so when nothing single is left', () => {
+    const { v } = bunchShop() // 0001-0006 in bunches, 0007 single
+    cashier()
+    expect(pickPiece(v.id, []).serial).toBe('0007')
+    expect(() => pickPiece(v.id, [{ variantId: v.id, serial: '0007' }])).toThrow('No free piece')
+  })
+  it('refuses an item without serial numbers (those sell by quantity)', () => {
+    const { jeans } = shop()
+    cashier()
+    expect(() => pickPiece(jeans.id, [])).toThrow('does not use serial numbers')
   })
 })

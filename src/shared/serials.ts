@@ -9,7 +9,10 @@ export const SERIAL_MSG = {
   notInStock: 'This piece is not in stock',
   onHold: 'This piece is in another bill on hold',
   unknown: 'This serial number is not in the stock records',
-  noSerial: 'This sticker has no serial number. Stick one of our own stickers on the piece first.',
+  noSerial: 'This barcode has no serial number. Scan the sticker on the piece. Old sticker? Print a new one in Print stickers.',
+  inBunch: 'This piece is inside a bunch: scan the bunch barcode',
+  bunchNotFree: 'This bunch is not in stock',
+  bunchNotOnBill: 'This bunch is not on this bill',
   notOnBill: 'This piece is not on this bill',
   removeNotSticker: 'Scan the sticker of the piece to remove',
   only: (n: number): string => `Only ${n} are free`
@@ -43,17 +46,22 @@ export function parseStickerCode(raw: string): { barcode: string; serial: string
  * Scan to remove: takes one scanned piece off the bill, from whichever row holds it (a variant row or a bunch row).
  * A row left with no pieces goes away. Returns the new rows, or the message to show when the piece is not on the bill.
  */
-export function removeScannedPiece<L extends { v: { barcode: string; id: string }; qty: number; serials?: string[] }>(
+export function removeScannedPiece<L extends { v: { barcode: string; id: string }; qty: number; serials?: string[]; bunch?: string }>(
   lines: L[], code: string
-): { lines: L[]; serial: string; rowGone: boolean } | { error: string } {
-  const s = parseStickerCode(code)
+): { lines: L[]; serial: string; rowGone: boolean; variantId: string } | { error: string } {
+  const c = code.trim()
+  // a bunch is taken off as a whole: scan its barcode
+  const bunchRow = lines.find((l) => l.bunch && l.bunch === c)
+  if (bunchRow) return { lines: lines.filter((l) => l !== bunchRow), serial: c, rowGone: true, variantId: bunchRow.v.id }
+  const s = parseStickerCode(c)
   if (!s) return { error: SERIAL_MSG.removeNotSticker }
   const hit = lines.find((l) => l.v.barcode === s.barcode && l.serials?.includes(s.serial))
   if (!hit) return { error: SERIAL_MSG.notOnBill }
+  if (hit.bunch) return { error: SERIAL_MSG.inBunch }
   const next = lines
     .map((l) => (l === hit ? { ...l, serials: l.serials!.filter((x) => x !== s.serial), qty: l.qty - 1 } : l))
     .filter((l) => !l.serials || l.serials.length > 0)
-  return { lines: next, serial: s.serial, rowGone: hit.serials!.length === 1 }
+  return { lines: next, serial: s.serial, rowGone: hit.serials!.length === 1, variantId: hit.v.id }
 }
 
 /** One piece on a piece list (history, return, stock out). */

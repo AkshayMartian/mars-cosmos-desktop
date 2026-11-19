@@ -16,7 +16,7 @@ import { fmtDate, Modal, useMsg, useScanFocus } from '../ui'
 
 /**
  * One row of the bill. An item with serial numbers keeps the serial of every piece (qty = how many, never typed):
- * all pieces of a variant share one row, and a bunch is its own row with its own barcode.
+ * all single pieces of a variant share one row, and a bunch (pieces packed at Add product / Stock in, one barcode) is its own row.
  */
 interface CartLine { key: string; v: SellableVariant; qty: number; disc: string; serials?: string[]; bunch?: string }
 let lineSeq = 0
@@ -28,7 +28,6 @@ type Dlg =
   | { t: 'pay' }
   | { t: 'approval'; reasons: string[]; error?: string }
   | { t: 'held' }
-  | { t: 'bunch'; key: string }
   | { t: 'customer' }
   | { t: 'alt'; variantId: string }
   | { t: 'receipt'; bill: BillDto }
@@ -51,7 +50,9 @@ export function Billing({ user }: { user: StaffPublic }) {
   const [salesBy, setSalesBy] = useState('')
   const [dlg, setDlg] = useState<Dlg>(null)
   /** Scan to remove: while on, a scanned sticker takes that one piece off the bill instead of adding it. */
-  const [removing, setRemoving] = useState(false)
+  const [scanMode, setScanMode] = useState<'normal' | 'add' | 'remove'>('normal')
+  const removing = scanMode === 'remove'
+  const pickMode = (m: 'normal' | 'add' | 'remove') => { setScanMode(m); setMsg(null); scanRef.current?.focus() }
   const [heldCount, setHeldCount] = useState(0)
   const [notes, setNotes] = useState<CreditNoteDto[]>([])
   const [altCtx, setAltCtx] = useState<AltContext | null>(null)
@@ -117,8 +118,13 @@ export function Billing({ user }: { user: StaffPublic }) {
 
   /* ----- cart ----- */
   /** Nothing without stock goes on a bill, and never more than the stock. */
-  function add(v: SellableVariant) {
-    if (v.tracked) { setMsg({ ok: false, text: SERIAL_MSG.noSerial }); setQ(''); setResults([]); scanRef.current?.focus(); return }
+  async function add(v: SellableVariant) {
+    // an item with serial numbers scanned by its plain barcode: the next free piece goes on the bill
+    if (v.tracked) {
+      const p = await run(() => window.api.billing.pickPiece(v.id, piecesOnBill()))
+      if (p === undefined) { setQ(''); setResults([]); scanRef.current?.focus(); return } // refused: the message is on screen
+      return addPiece(p.variant, p.serial)
+    }
     const inCart = cart.find((l) => l.v.id === v.id)?.qty ?? 0
     if (v.stock <= 0) { setMsg({ ok: false, text: `${v.label} is out of stock.` }); setQ(''); setResults([]); scanRef.current?.focus(); return }
     if (inCart + 1 > v.stock) { setMsg({ ok: false, text: `Only ${v.stock} of ${v.label} in stock.` }); setQ(''); setResults([]); scanRef.current?.focus(); return }
@@ -137,19 +143,12 @@ export function Billing({ user }: { user: StaffPublic }) {
     scanRef.current?.focus()
   }
   const piecesOnBill = () => cart.flatMap((l) => (l.serials ?? []).map((serial) => ({ variantId: l.v.id, serial })))
-  /** The bunch: the pieces are picked in the main process (the scanned one first); it becomes its own row with its own barcode. */
-  async function makeBunch(key: string, n: number): Promise<boolean> {
-    const line = cart.find((l) => l.key === key)
-    const first = line?.serials?.[line.serials.length - 1]
-    if (!line || !first) return false
-    const others = cart.filter((l) => l.v.id === line.v.id).flatMap((l) => l.serials ?? []).filter((s) => s !== first)
-    const b = await run(() => window.api.billing.makeBunch(line.v.id, n, others, first))
-    if (!b) return false
-    setCart((c) => [
-      ...c.map((l) => (l.key === key ? { ...l, serials: l.serials!.filter((s) => s !== first), qty: l.qty - 1 } : l)).filter((l) => !l.serials || l.serials.length > 0),
-      { key: newKey(), v: line.v, qty: b.serials.length, disc: '', serials: b.serials, bunch: b.code }
-    ])
-    return true
+  /** A scanned bunch barcode: the whole bunch goes on the bill as its own row (quantity = its pieces). */
+  function addBunch(bn: { code: string; variant: SellableVariant; serials: string[] }) {
+    setMsg(null)
+    setCart((c) => [...c, { key: newKey(), v: bn.variant, qty: bn.serials.length, disc: '', serials: bn.serials, bunch: bn.code }])
+    setQ(''); setResults([])
+    scanRef.current?.focus()
   }
   function setQty(i: number, d: number) {
     const l = cart[i]
@@ -167,7 +166,7 @@ export function Billing({ user }: { user: StaffPublic }) {
   }
 
   function clearBill() {
-    setCart([]); setRemoving(false); setAlts({}); setQ(''); setResults([]); setMobile(''); setCustomer(null); setMiss(false); setBillDisc(''); setCoinsUse(''); setSalesBy(ctx?.meId ?? '')
+    setCart([]); setScanMode('normal'); setAlts({}); setQ(''); setResults([]); setMobile(''); setCustomer(null); setMiss(false); setBillDisc(''); setCoinsUse(''); setSalesBy(ctx?.meId ?? '')
     approval.current = undefined
     setMsg(null)
     scanRef.current?.focus()
@@ -180,17 +179,18 @@ export function Billing({ user }: { user: StaffPublic }) {
       const r = removeScannedPiece(cart, q)
       setQ(''); setResults([]); scanRef.current?.focus()
       if ('error' in r) return setMsg({ ok: false, text: r.error })
-      if (r.rowGone) {
-        const gone = cart.find((l) => l.serials?.includes(r.serial) && q.includes(l.v.barcode))
-        if (gone && !r.lines.some((l) => l.v.id === gone.v.id)) setAlts((a) => { const { [gone.v.id]: _gone, ...rest } = a; return rest })
-      }
+      if (r.rowGone && !r.lines.some((l) => l.v.id === r.variantId)) setAlts((a) => { const { [r.variantId]: _gone, ...rest } = a; return rest })
       setCart(r.lines)
-      return setMsg({ ok: true, text: `Removed piece ${r.serial}` })
+      return setMsg({ ok: true, text: r.serial === q.trim() && cart.some((l) => l.bunch === r.serial) ? 'Removed the bunch' : `Removed piece ${r.serial}` })
     }
     // a sticker of a serial item (barcode + serial): the piece itself, with the rules checked in the main process
     const piece = await run(() => window.api.billing.scanPiece(q, piecesOnBill()))
     if (piece === undefined) { setQ(''); setResults([]); return } // refused: the message is on screen; empty the box for the next scan
     if (piece) return addPiece(piece.variant, piece.serial)
+    // a bunch barcode (made in Add product / Stock in): all its pieces go on the bill as one row
+    const bn = await run(() => window.api.billing.scanBunch(q, piecesOnBill()))
+    if (bn === undefined) { setQ(''); setResults([]); return }
+    if (bn) return addBunch(bn)
     const found = await run(() => window.api.billing.search(q))
     if (!found) return
     if (found.length === 1) add(found[0]!)
@@ -320,13 +320,17 @@ export function Billing({ user }: { user: StaffPublic }) {
       <div className="cols">
         <div className="panel">
           <div className="f">
-            {removing && (
-              <div className="banner" role="status" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, padding: '8px 10px', border: '1px solid var(--bad)', borderRadius: 8 }}>
-                <b>Scan to remove: scan each piece to take off the bill</b>
-                <button className="btn sm p" onClick={() => { setRemoving(false); setMsg(null); scanRef.current?.focus() }}>Done</button>
+            {scanMode !== 'normal' && (
+              <div className="banner" role="status" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8, padding: '8px 10px', border: `1px solid ${removing ? 'var(--bad)' : 'var(--good)'}`, borderRadius: 8 }}>
+                <b>{removing ? 'Scan to remove: scan each piece to take off the bill' : 'Scan to add: scan each piece to put on the bill'}</b>
+                <span style={{ display: 'flex', gap: 6 }}>
+                  <button className={`btn sm${removing ? '' : ' p'}`} aria-pressed={!removing} onClick={() => pickMode('add')}>Scan to add</button>
+                  <button className={`btn sm${removing ? ' p' : ''}`} aria-pressed={removing} onClick={() => pickMode('remove')}>Scan to remove</button>
+                  <button className="btn sm" onClick={() => pickMode('normal')}>Done</button>
+                </span>
               </div>
             )}
-            <label htmlFor="scan">{removing ? 'Scan the piece to remove' : 'Scan barcode or type item name'}</label>
+            <label htmlFor="scan">{removing ? 'Scan the piece to remove' : scanMode === 'add' ? 'Scan the piece to add' : 'Scan barcode or type item name'}</label>
             <input id="scan" ref={scanRef} onFocus={(e) => e.target.select()} className="big" autoFocus autoComplete="off" placeholder="2000000000015 or 'shirt'" value={q}
               onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void scanEnter(e.currentTarget.value) } }} />
           </div>
@@ -349,16 +353,16 @@ export function Billing({ user }: { user: StaffPublic }) {
                     const line = cart[i]!
                     return (
                       <tr key={line.key}>
-                        <td>
-                          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                        <td style={{ minWidth: 300 }}>
+                          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                             <div className="thumb" aria-hidden={!photos[line.v.id]}>{photos[line.v.id] ? <img src={photos[line.v.id]!} alt={`${line.v.name} ${line.v.colour}`} /> : null}</div>
                             <div>
                               <b>{line.v.name}</b>
-                              <div className="sub">{line.v.colour} · {line.v.size} · <span className="mono">{line.bunch ?? line.v.barcode}</span>{line.bunch ? ' · bunch' : ''} · {line.v.stock} in stock</div>
+                              <div className="sub">{line.v.colour} · {line.v.size} · <span className="mono">{line.bunch ?? line.v.barcode}</span>{line.bunch ? ` · bunch of ${line.qty}` : ''} · {line.v.stock} in stock</div>
                               {line.serials && <div className="sub mono" aria-label="Serial numbers">Serial {line.serials.join(', ')}</div>}
-                              <div style={{ marginTop: 4 }}>
-                                {line.serials && <button className="btn sm" style={{ marginRight: 6 }} onClick={() => { setRemoving(true); setMsg(null); scanRef.current?.focus() }}>Scan to remove</button>}
-                                {line.serials && !line.bunch && <button className="btn sm" style={{ marginRight: 6 }} onClick={() => setDlg({ t: 'bunch', key: line.key })}>Add as bunch</button>}
+                              <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                                {line.serials && <button className="btn sm" onClick={() => pickMode('add')}>Scan to add</button>}
+                                {line.serials && <button className="btn sm" onClick={() => pickMode('remove')}>Scan to remove</button>}
                                 {alts[line.v.id]
                                   ? <button className="chip good" style={{ border: 0, cursor: 'pointer' }} onClick={() => openAlt(line.v.id)}>✂ Alteration: {alts[line.v.id]!.form.work.join(', ')}</button>
                                   : <button className="btn sm" onClick={() => openAlt(line.v.id)}>✂ Alteration</button>}
@@ -466,10 +470,6 @@ export function Billing({ user }: { user: StaffPublic }) {
           onSave={(d) => { setAlts((a) => ({ ...a, [line.v.id]: d })); setDlg(null) }}
           onRemove={() => { setAlts((a) => { const { [line.v.id]: _gone, ...rest } = a; return rest }); setDlg(null) }} />
       })()}
-      {dlg?.t === 'bunch' && (() => {
-        const line = cart.find((l) => l.key === dlg.key)
-        return line ? <BunchModal label={line.v.label} onClose={() => setDlg(null)} onMake={async (n) => { if (await makeBunch(dlg.key, n)) setDlg(null) }} /> : null
-      })()}
       {dlg?.t === 'held' && <HeldModal onClose={() => setDlg(null)} onResume={(h) => void resume(h)} />}
       {dlg?.t === 'customer' && <CustomerModal mobile={mobile} onClose={() => setDlg(null)} onSaved={(c) => { setCustomer(c); setMobile(c.mobile); setMiss(false); setDlg(null) }} />}
       {dlg?.t === 'receipt' && ctx && <ReceiptModal bill={dlg.bill} ctx={ctx} onNew={() => { setDlg(null); clearBill(); void loadCtx(); void loadHeld() }} />}
@@ -565,23 +565,6 @@ function PayModal({ grand, creditBalance, error, onBack, onSave }: { grand: numb
       </div>
       <div className="err" role="alert">{error ?? ''}</div>
       <div className="mfoot"><button className="btn" onClick={onBack}>Back</button><button className="btn p lg" disabled={left !== 0 || busy} onClick={() => void save()}>Save bill</button></div>
-    </Modal>
-  )
-}
-
-/** "Add as bunch": how many pieces of this variant the customer takes in all (the scanned piece is one of them). */
-function BunchModal({ label, onClose, onMake }: { label: string; onClose: () => void; onMake: (n: number) => Promise<void> }) {
-  const [n, setN] = useState('')
-  const [busy, setBusy] = useState(false)
-  const ok = Number.isInteger(Number(n)) && Number(n) >= 2
-  const go = async () => { if (!ok) return; setBusy(true); await onMake(Number(n)); setBusy(false) }
-  return (
-    <Modal title="Add as bunch" onClose={onClose}>
-      <p style={{ margin: 0 }}>{label}</p>
-      <div className="f"><label htmlFor="bn">How many pieces in the bunch?</label>
-        <input id="bn" type="number" min="2" className="big" autoFocus value={n} onChange={(e) => setN(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void go()} /></div>
-      <div className="hint">The scanned piece is one of them. The bunch becomes one line with its own barcode and cannot be made smaller: to change it, remove the line and add a new bunch.</div>
-      <div className="mfoot"><button className="btn" onClick={onClose}>Cancel</button><button className="btn p" disabled={!ok || busy} onClick={() => void go()}>Add bunch</button></div>
     </Modal>
   )
 }

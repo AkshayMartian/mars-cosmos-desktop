@@ -163,8 +163,8 @@ describe('Receipt settings reach the receipt', () => {
     expect(long.every((l) => l === 'https://g.page/r/abc' || l.startsWith('Return'))).toBe(true)
     expect(receiptTextFor(b.id, true).text).toContain('DUPLICATE')
   })
-  it('is 36 wide on 80 mm paper', () => {
-    expect(receiptTextFor(bill().id).width).toBe(36)
+  it('is 48 wide on 80 mm paper (Font A)', () => {
+    expect(receiptTextFor(bill().id).width).toBe(48)
   })
 })
 

@@ -67,7 +67,7 @@ export function Returns() {
   function back() { setBill(null); setFound(null); approval.current = undefined; setMsg(null) }
 
   function addNew(v: SellableVariant) {
-    if (v.tracked) { setMsg({ ok: false, text: SERIAL_MSG.noSerial }); setNq(''); setResults([]); return }
+    if (v.tracked) { setMsg({ ok: false, text: `${v.label}: ${SERIAL_MSG.noSerial}` }); setNq(''); setResults([]); return }
     const have = newLines.find((n) => n.v.id === v.id)?.qty ?? 0
     if (v.stock <= 0) { setMsg({ ok: false, text: `${v.label} is out of stock.` }); return }
     if (have + 1 > v.stock) { setMsg({ ok: false, text: `Only ${v.stock} of ${v.label} in stock.` }); return }

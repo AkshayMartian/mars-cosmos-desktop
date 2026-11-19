@@ -6,7 +6,7 @@ import { assertTemp, promoteAs, readDataUrl, removeFile, saveTemp, slug } from '
 import { audit } from './auth'
 import { requireRole, current } from './session'
 import { addMove } from './stock'
-import { receivePieces, syncPieces } from './serials'
+import { receiveBunches, syncPieces } from './serials'
 
 export function listCategories(): CategoryDto[] {
   return getDb()
@@ -86,7 +86,7 @@ export const productNameTaken = (name: string): boolean =>
 /** One product + its variants + opening stock, all or nothing. Shared by the Add product form and Excel import. */
 export function insertProduct(
   actorId: string,
-  p: { name: string; brand: string; categoryId: string; trackSerials?: boolean; gstRate?: number | null },
+  p: { name: string; brand: string; categoryId: string; trackSerials?: boolean; gstRate?: number | null; bunchSize?: number | null },
   variants: VariantSpec[],
   source: 'product' | 'import' = 'product'
 ): { id: string; variantIds: string[] } {
@@ -103,7 +103,7 @@ export function insertProduct(
       variantIds.push(vid)
       if (v.qty > 0) {
         addMove({ variantId: vid, qty: v.qty, type: 'opening', ref: source, reason: source === 'import' ? 'Excel import' : 'Opening stock', staffId: actorId, at })
-        receivePieces(vid, v.qty, { staffId: actorId, ref: 'opening stock', at })
+        receiveBunches(vid, v.qty, p.bunchSize, { staffId: actorId, ref: 'opening stock', at })
       }
     }
     audit(actorId, source === 'import' ? 'product_import' : 'product_create', { id: pid, variants: variantIds.length })
@@ -123,6 +123,8 @@ export function createProduct(input: NewProductInput): { id: string; variantIds:
   if (!(input.mrp > 0)) throw new Error('Enter the MRP.')
   if (input.salePrice < 0 || input.cost < 0) throw new Error('Prices cannot be negative.')
   if (!db.prepare('SELECT 1 FROM categories WHERE id=? AND is_service=0').get(input.categoryId)) throw new Error('Choose a category.')
+  const bunchSize = input.bunchSize ?? null
+  if (bunchSize !== null && (!Number.isInteger(bunchSize) || bunchSize < 2 || bunchSize > 500)) throw new Error('Pieces per bunch: a whole number from 2 to 500.')
   const gstRate = input.gstRate ?? null
   if (gstRate !== null && !(Number.isInteger(gstRate) && gstRate >= 0 && gstRate <= 28)) throw new Error('GST must be a whole number from 0 to 28.')
   if (productNameTaken(name)) throw new Error('A product with this name already exists. Use a different name.')
@@ -137,7 +139,7 @@ export function createProduct(input: NewProductInput): { id: string; variantIds:
   for (const colour of colours)
     for (const size of sizes)
       variants.push({ size, colour, mrp: input.mrp, salePrice: input.salePrice, cost: input.cost, qty: Math.max(0, Math.floor(Number(input.opening[`${colour}|${size}`] ?? 0))) })
-  const made = insertProduct(actor.id, { name, brand: input.brand, categoryId: input.categoryId, trackSerials: !!input.trackSerials, gstRate }, variants)
+  const made = insertProduct(actor.id, { name, brand: input.brand, categoryId: input.categoryId, trackSerials: !!input.trackSerials, gstRate, bunchSize }, variants)
   for (const [colour, file] of photos) attachPhoto(made.id, colour, file)
   return made
 }
@@ -283,6 +285,26 @@ export function restoreProduct(id: string): void {
  * numbers stay the same); those pieces need new stickers before they can be sold by scanning. Switching off keeps the
  * pieces on record, and switching on again brings them back in line with the stock.
  */
+/**
+ * Serial numbers are the rule for every product (the paper, section 8): any product still on quantity-only is switched on and
+ * every piece in its stock gets a serial, so the stock numbers stay the same. Safe to run at every start: it does nothing
+ * once all products are on. Returns how many products were switched on.
+ */
+export function enableSerialsEverywhere(): { products: number; newSerials: number } {
+  const db = getDb()
+  const staffId = (db.prepare("SELECT id FROM staff WHERE role='owner' ORDER BY rowid LIMIT 1").get() as { id: string } | undefined)?.id ?? null
+  const off = db.prepare('SELECT id FROM products WHERE track_serials=0').all() as { id: string }[]
+  let created = 0
+  db.transaction(() => {
+    for (const p of off) {
+      db.prepare('UPDATE products SET track_serials=1 WHERE id=?').run(p.id)
+      for (const v of db.prepare('SELECT id FROM variants WHERE product_id=?').all(p.id) as { id: string }[]) created += syncPieces(v.id, staffId as string).created
+    }
+    if (off.length) audit(staffId, 'serials_everywhere', { products: off.length, created })
+  })()
+  return { products: off.length, newSerials: created }
+}
+
 export function setTrackSerials(productId: string, on: boolean): { newSerials: number } {
   const actor = requireRole('owner', 'manager')
   const db = getDb()

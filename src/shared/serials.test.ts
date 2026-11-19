@@ -57,14 +57,18 @@ describe('scan to remove', () => {
     expect(removeScannedPiece(r.lines, '20000000000150001')).toEqual({ error: 'This piece is not on this bill' })
     expect(removeScannedPiece(rows, '2000000000015')).toEqual({ error: 'Scan the sticker of the piece to remove' })
   })
-  it('works inside a bunch row and drops a row that runs empty', () => {
-    const bunch = { v, qty: 2, serials: ['0001', '0002'], bunch: 'B1' }
-    const r = removeScannedPiece([bunch], '20000000000150001')
+  it('a bunch comes off as a whole by its barcode; one piece of it cannot be taken out', () => {
+    const bunch = { v, qty: 2, serials: ['0001', '0002'], bunch: '2100000000013' }
+    const single = { v, qty: 1, serials: ['0007'] }
+    expect(removeScannedPiece([bunch, single], '20000000000150001')).toEqual({ error: 'This piece is inside a bunch: scan the bunch barcode' })
+    const r = removeScannedPiece([bunch, single], '2100000000013')
     if ('error' in r) throw new Error(r.error)
-    expect(r.lines[0]).toMatchObject({ qty: 1, serials: ['0002'], bunch: 'B1' })
-    const r2 = removeScannedPiece(r.lines, '20000000000150002')
+    expect(r.lines).toEqual([single])
+    expect(r.rowGone).toBe(true)
+    expect(r.variantId).toBe('a')
+    // a single piece next to a bunch of the same variant still comes off by its sticker
+    const r2 = removeScannedPiece([bunch, single], '20000000000150007')
     if ('error' in r2) throw new Error(r2.error)
-    expect(r2.lines).toEqual([])
-    expect(r2.rowGone).toBe(true)
+    expect(r2.lines).toEqual([bunch])
   })
 })

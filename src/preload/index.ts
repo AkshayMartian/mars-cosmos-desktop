@@ -12,7 +12,7 @@ import type { BillDetail, BillListRow, BillPeriod, CancelInput } from '@shared/b
 import type { BillForReturn, CreditNoteDto, ReturnBillRow, ReturnInput, ReturnResult } from '@shared/returns'
 import type { AdjustInput, ApprovalInput, ApproverDto, CountDto, MoveFullRow, StockOutInput } from '@shared/stockops'
 import type {
-  BillDto, BillingContext, BunchDto, CustomerDto, HeldBillDto, HeldPayload, NewBillInput, NewCustomerInput, ScannedPiece, SellableVariant
+  BillDto, BillingContext, BunchScan, CustomerDto, HeldBillDto, HeldPayload, NewBillInput, NewCustomerInput, ScannedPiece, SellableVariant
 } from '@shared/billing'
 import type {
   CategoryDto, ImportPreview, ImportResult, MoveRow, NewCategoryInput, NewProductInput, PieceScan, ProductPhotoDto, ProductDetail, ProductListRow, PurchaseRow,
@@ -56,7 +56,8 @@ const api = {
     search: (q: string) => call<SellableVariant[]>('billing:search', q),
     archived: (q: string) => call<string[]>('billing:archived', q),
     scanPiece: (code: string, inBill: { variantId: string; serial: string }[]) => call<ScannedPiece | null>('billing:scanPiece', code, inBill),
-    makeBunch: (variantId: string, qty: number, inBill: string[], first?: string) => call<BunchDto>('billing:makeBunch', variantId, qty, inBill, first),
+    pickPiece: (variantId: string, inBill: { variantId: string; serial: string }[]) => call<ScannedPiece>('billing:pickPiece', variantId, inBill),
+    scanBunch: (code: string, inBill: { variantId: string; serial: string }[]) => call<BunchScan | null>('billing:scanBunch', code, inBill),
     variants: (ids: string[]) => call<SellableVariant[]>('billing:variants', ids),
     photo: (variantId: string) => call<string | null>('billing:photo', variantId),
     openDay: (openingCash: number) => call<{ id: string }>('billing:openDay', openingCash),
@@ -116,7 +117,7 @@ const api = {
     piece: (code: string) => call<StickerItem>('stickers:piece', code),
     printers: () => call<string[]>('stickers:printers'),
     savePrefs: (p: { size: string; printer: string }) => call<StickerContext>('stickers:savePrefs', p),
-    print: (lines: { variantId: string; qty: number; serials?: string[] }[]) => call<StickerPrintResult>('stickers:print', lines)
+    print: (lines: { variantId: string; qty: number; serials?: string[]; bunch?: string }[]) => call<StickerPrintResult>('stickers:print', lines)
   },
   bills: {
     list: (period: BillPeriod, q = '') => call<BillListRow[]>('bills:list', period, q),

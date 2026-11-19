@@ -1,44 +1,34 @@
 /**
- * Receipt text on a paper roll in Arial Black. Arial Black is not a fixed-width font, so the spaces the receipt text uses
- * to line things up would drift. Instead each line is laid out by its shape: a rule becomes a dashed border, a line with
- * a gap ("Total      1,299.00") puts its parts at the left and right edges, a line with leading spaces is centred, and
- * anything else is plain text that wraps if it is too long for the paper.
+ * Receipt text on a paper roll in JetBrains Mono (the font of the on-screen receipt), sized like a thermal printer's
+ * "Font A": 48 characters across an 80 mm roll (576 dots at 203 dpi = 72 mm printable, 1.5 mm per character) and 32
+ * across a 58 mm roll (384 dots = 48 mm). The font has a fixed width, so the receipt text, which is padded with spaces
+ * to its width, lines up exactly as it does on screen. Text built for a narrower width (for example 36 columns) is made
+ * larger so it still fills the roll.
  */
 
 export interface RollDoc { html: string; wMm: number; hMm: number }
 
 const esc = (s: string): string => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!)
 const MM_PER_PT = 25.4 / 72
-const CHAR_EM = 0.72 // average width of an Arial Black character, in em (a little generous, so paper is never cut short)
+const ADVANCE = 0.6 // JetBrains Mono: every character is 0.6 em wide
+const LINE_HEIGHT = 1.45
 
-export function rollDoc(text: string, chars: number): RollDoc {
-  const wMm = chars <= 32 ? 58 : 80
-  const pt = chars <= 32 ? 9 : 11
-  const lineMm = pt * 1.3 * MM_PER_PT
-  const perLine = Math.floor((wMm - 6) / (pt * CHAR_EM * MM_PER_PT))
-  let rows = 0
-  const out: string[] = []
-  for (const raw of text.split('\n')) {
-    const line = raw.replace(/\s+$/, '')
-    if (/^[-=_*]{5,}$/.test(line.trim())) { out.push('<div class="sep"></div>'); rows += 0.5; continue }
-    if (!line.trim()) { out.push('<div class="l">&nbsp;</div>'); rows += 1; continue }
-    const lead = line.length - line.trimStart().length
-    const parts = line.trim().split(/\s{2,}/)
-    if (parts.length >= 2) {
-      const indent = lead > 0 ? ` style="padding-left:${Math.min(lead, 6) * 0.5}em"` : ''
-      out.push(`<div class="l c"${indent}>${parts.map((p) => `<span>${esc(p)}</span>`).join('')}</div>`)
-      rows += Math.max(1, Math.ceil(parts.join(' ').length / perLine))
-    } else if (lead >= 2) {
-      out.push(`<div class="l m">${esc(line.trim())}</div>`)
-      rows += Math.max(1, Math.ceil(line.trim().length / perLine))
-    } else {
-      out.push(`<div class="l">${esc(line)}</div>`)
-      rows += Math.max(1, Math.ceil(line.length / perLine))
-    }
-  }
-  const hMm = Math.ceil((rows + 1) * lineMm + 8)
-  const css = `@page{size:${wMm}mm ${hMm}mm;margin:0}body{margin:0;padding:2mm 3mm;color:#000;font:${pt}pt/1.3 "Arial Black","Arial",sans-serif}` +
-    `.l{margin:0;overflow-wrap:anywhere}.c{display:flex;justify-content:space-between;gap:2mm}.c span:last-child{text-align:right;flex:none}.m{text-align:center}` +
-    `.sep{border-top:.5mm dashed #000;margin:1.2mm 0}`
-  return { html: `<!doctype html><meta charset="utf-8"><style>${css}</style>${out.join('')}`, wMm, hMm }
+/** Fonts tried in order; the first is the bundled one (its @font-face is passed in by the main process). */
+export const MONO_FAMILY = '"JetBrains Mono","Consolas","Courier New",monospace'
+
+/** `fontFace`: an @font-face rule that makes "JetBrains Mono" available inside the print window (it has no access to the app's files). */
+export function rollDoc(text: string, chars: number, fontFace = ''): RollDoc {
+  const narrow = chars <= 32
+  const wMm = narrow ? 58 : 80
+  const printMm = narrow ? 48 : 72
+  const sideMm = (wMm - printMm) / 2
+  const fontMm = printMm / chars / ADVANCE
+  const pt = Math.round((fontMm / MM_PER_PT) * 100) / 100
+  const lines = text.split('\n').map((l) => l.replace(/\s+$/, ''))
+  const rows = lines.reduce((n, l) => n + Math.max(1, Math.ceil(l.length / chars)), 0) // a line longer than the paper wraps
+  const hMm = Math.ceil(rows * fontMm * LINE_HEIGHT + 8)
+  const css = `@page{size:${wMm}mm ${hMm}mm;margin:0}${fontFace}` +
+    `body{margin:0;padding:2mm ${sideMm}mm;color:#000;font:600 ${pt}pt/${LINE_HEIGHT} ${MONO_FAMILY}}` +
+    `pre{margin:0;font:inherit;white-space:pre-wrap;overflow-wrap:anywhere}`
+  return { html: `<!doctype html><meta charset="utf-8"><style>${css}</style><pre>${lines.map(esc).join('\n')}</pre>`, wMm, hMm }
 }

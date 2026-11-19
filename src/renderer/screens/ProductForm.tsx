@@ -51,9 +51,10 @@ export function NewProduct({ onDone }: { onDone: (notice?: string, stickers?: st
   const [grid, setGrid] = useState<Record<string, string>>({})
   const [photos, setPhotos] = useState<Record<string, { file: string; dataUrl: string; name: string }>>({}) // by colour
   const [busy, setBusy] = useState(false)
-  const [serials, setSerials] = useState(true)
   /** GST % typed for this product. Starts as the category's fixed rate; empty = follow the category (auto: by price) */
   const [gstIn, setGstIn] = useState('')
+  /** pieces per bunch: the opening stock is packed in bunches of this size, each with ONE barcode (empty = all single pieces) */
+  const [bunchIn, setBunchIn] = useState('')
   /** GST switch: on = the rate box can be edited; off = no GST on this product (0%) and the box is locked */
   const [gstOn, setGstOn] = useState(true)
   const { run, node } = useMsg()
@@ -69,6 +70,10 @@ export function NewProduct({ onDone }: { onDone: (notice?: string, stickers?: st
   const cat = cats.find((c) => c.id === f.categoryId)
   const gst = cat ? gstRate('regular', cat, toPaise(f.sale || f.mrp)) : 0
   useEffect(() => { setGstIn(cat?.mode === 'fixed' ? String(cat.rate) : ''); setGstOn(cat?.mode !== 'exempt') }, [cat?.id, cat?.mode, cat?.rate])
+  const bunchSize = Math.floor(num(bunchIn))
+  const cells = Object.values(grid).map((v) => Math.floor(num(v))).filter((n) => n > 0)
+  const bunches = bunchSize >= 2 ? cells.reduce((a, n) => a + Math.floor(n / bunchSize), 0) : 0
+  const singles = cells.reduce((a, n) => a + (bunchSize >= 2 ? n % bunchSize : n), 0)
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value })
 
   /** the rate to store on the product: only when typed and different from what the category already gives */
@@ -85,7 +90,7 @@ export function NewProduct({ onDone }: { onDone: (notice?: string, stickers?: st
     for (const [k, v] of Object.entries(grid)) if (num(v) > 0) opening[k] = Math.floor(num(v))
     const r = await run(() => window.api.catalogue.create({
       name: f.name, brand: f.brand, categoryId: f.categoryId, mrp: toPaise(f.mrp), salePrice: toPaise(f.sale || f.mrp),
-      cost: toPaise(f.cost), sizes, colours, opening, trackSerials: serials, gstRate: gstOverride(),
+      cost: toPaise(f.cost), sizes, colours, opening, trackSerials: true, gstRate: gstOverride(), bunchSize: bunchSize >= 2 ? bunchSize : null,
       photos: Object.fromEntries(colours.filter((c) => photos[c]).map((c) => [c, photos[c]!.file]))
     }))
     setBusy(false)
@@ -133,10 +138,7 @@ export function NewProduct({ onDone }: { onDone: (notice?: string, stickers?: st
             <div className="f"><label htmlFor="e-sizes">Sizes (comma separated)</label><input id="e-sizes" value={f.sizes} onChange={set('sizes')} /></div>
             <div className="f"><label htmlFor="e-cols">Colours (comma separated)</label><input id="e-cols" value={f.colours} onChange={set('colours')} /></div>
           </div>
-          <label className="radio-card" style={{ marginTop: 4 }}>
-            <input type="checkbox" checked={serials} onChange={(e) => setSerials(e.target.checked)} />
-            <span><b>Give every piece its own serial number</b><br /><span className="sub">Stickers carry the barcode and the serial. Billing then scans each piece, so a piece cannot be sold twice. Switch off for cheap items sold without stickers.</span></span>
-          </label>
+          <div className="hint" style={{ marginTop: 4 }}>Every piece gets its own serial number. Stickers carry the barcode and the serial, so Billing scans each piece and a piece cannot be sold twice.</div>
           <h2>Opening stock</h2>
           {sizes.length && colours.length ? (
             <>
@@ -156,6 +158,13 @@ export function NewProduct({ onDone }: { onDone: (notice?: string, stickers?: st
                 </table>
               </div>
               <div className="hint">{sizes.length * colours.length} items will be created.</div>
+              <div className="f" style={{ maxWidth: 320, marginTop: 8 }}>
+                <label htmlFor="e-bunch">Pieces per bunch (optional)</label>
+                <input id="e-bunch" type="number" min="2" max="500" placeholder="e.g. 6" value={bunchIn} onChange={(e) => setBunchIn(e.target.value)} />
+                <div className="hint">{bunchSize >= 2
+                  ? `Opening stock is packed in bunches of ${bunchSize}: ${bunches} bunch${bunches === 1 ? '' : 'es'} (one barcode each) and ${singles} single piece${singles === 1 ? '' : 's'}. Scanning a bunch in Billing adds all ${bunchSize} pieces.`
+                  : 'Leave empty to keep every piece single. With a number, each full bunch gets ONE barcode sticker and Billing adds the whole bunch when it is scanned.'}</div>
+              </div>
             </>
           ) : <div className="hint">Enter sizes and colours to see the grid.</div>}
         </div>
@@ -208,13 +217,6 @@ export function EditProduct({ id, canEdit, onDone }: { id: string; canEdit: bool
 
   async function removePhoto(colour: string) {
     if (await attempt(() => window.api.catalogue.removePhoto(id, colour))) { setMsg({ ok: true, text: `${colour} photo removed.` }); await load() }
-  }
-
-  async function toggleSerials(on: boolean) {
-    const r = await run(() => window.api.catalogue.trackSerials(id, on))
-    if (!r) return
-    setMsg({ ok: true, text: on ? (r.newSerials ? `Serial numbers are on. ${r.newSerials} pieces in stock got serials: print new stickers for them before selling by scanning.` : 'Serial numbers are on.') : 'Serial numbers are off. Billing sells this item by quantity again.' })
-    await load()
   }
 
   async function archive() {
@@ -271,12 +273,7 @@ export function EditProduct({ id, canEdit, onDone }: { id: string; canEdit: bool
               </select>
             </div>
           </div>
-          <label className="radio-card" style={{ marginBottom: 8 }}>
-            <input type="checkbox" disabled={!canEdit} checked={p.trackSerials} onChange={(e) => void toggleSerials(e.target.checked)} />
-            <span><b>Serial numbers</b><br /><span className="sub">{p.trackSerials
-              ? 'Every piece has its own serial. Stickers must carry it, and Billing scans each piece.'
-              : 'Off: Billing sells this item by quantity. Switch on to give every piece in stock its own serial (they then need new stickers).'}</span></span>
-          </label>
+          <div className="hint" style={{ marginBottom: 8 }}>Every piece has its own serial number. Stickers carry the barcode and the serial, and Billing scans each piece.</div>
           <div className="tw">
             <table>
               <thead><tr><th>Colour</th><th>Size</th><th>Barcode</th><th>Brand barcode</th><th className="r">Stock</th><th>MRP ₹</th><th>Sale ₹</th></tr></thead>

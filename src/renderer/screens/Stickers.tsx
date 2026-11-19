@@ -4,6 +4,8 @@ import { LABEL_CSS, LABEL_SIZES, MAX_PER_ITEM, labelHtml, labelSize, type Sticke
 import { Modal, num, useMsg, useScanFocus } from '../ui'
 
 interface Line { item: StickerItem; qty: string }
+/** A row is one item, or one bunch (a bunch has its own barcode and its own row). */
+const keyOf = (it: StickerItem): string => it.bunch?.code ?? it.variantId
 
 export function Stickers({ intent }: { intent?: string }) {
   const [ctx, setCtx] = useState<StickerContext | null>(null)
@@ -36,21 +38,26 @@ export function Stickers({ intent }: { intent?: string }) {
       let next = [...ls]
       for (const it of items) {
         const add = qtyOf(it)
+        if (it.bunch) {
+          // a bunch sticker: one row per bunch, copies start at 1
+          if (!next.some((l) => keyOf(l.item) === keyOf(it))) next = [...next, { item: it, qty: '1' }]
+          continue
+        }
         if (it.serials) {
           // an item with serial numbers: one sticker per piece, each piece once
-          const have = next.find((l) => l.item.variantId === it.variantId)
+          const have = next.find((l) => !l.item.bunch && l.item.variantId === it.variantId)
           const all = [...new Set([...(have?.item.serials ?? []), ...it.serials])]
           const merged = { ...it, serials: all, qty: all.length }
           next = have ? next.map((l) => (l === have ? { item: merged, qty: String(all.length) } : l)) : [...next, { item: merged, qty: String(all.length) }]
           continue
         }
-        next = next.some((l) => l.item.variantId === it.variantId)
-          ? next.map((l) => (l.item.variantId === it.variantId ? { ...l, qty: String(num(l.qty) + add) } : l))
+        next = next.some((l) => keyOf(l.item) === keyOf(it))
+          ? next.map((l) => (keyOf(l.item) === keyOf(it) ? { ...l, qty: String(num(l.qty) + add) } : l))
           : [...next, { item: it, qty: String(add) }]
       }
       return next
     })
-    if (items[0]) setSel(items[0].variantId)
+    if (items[0]) setSel(keyOf(items[0]))
   }
 
   async function add(v: VariantSearchRow) {
@@ -86,16 +93,19 @@ export function Stickers({ intent }: { intent?: string }) {
     setMsg({ ok: true, text: `Added the ${items.length} item${items.length === 1 ? '' : 's'} of the purchase, one sticker per piece received.` })
   }
 
-  const count = (l: Line): number => (l.item.serials ? l.item.serials.length : Math.max(0, Math.floor(num(l.qty))))
+  const count = (l: Line): number => Math.max(0, Math.floor(num(l.qty)))
+  /** the serials that will print: the lowest `count` of the pieces listed (an item with serial numbers prints one sticker per piece) */
+  const picked = (l: Line): string[] => (l.item.serials ?? []).slice(0, count(l))
+  const maxOf = (l: Line): number => (l.item.serials ? Math.min(l.item.serials.length, MAX_PER_ITEM) : MAX_PER_ITEM)
   const total = lines.reduce((n, l) => n + count(l), 0)
-  const bad = lines.find((l) => (l.item.serials ? l.item.serials.length > MAX_PER_ITEM : !Number.isInteger(num(l.qty)) || num(l.qty) < 1 || num(l.qty) > MAX_PER_ITEM))
-  const shown = lines.find((l) => l.item.variantId === sel) ?? lines[0]
+  const bad = lines.find((l) => !Number.isInteger(num(l.qty)) || num(l.qty) < 1 || num(l.qty) > maxOf(l))
+  const shown = lines.find((l) => keyOf(l.item) === sel) ?? lines[0]
   const size = labelSize(ctx?.sizeId ?? '50x25')
 
   async function print() {
-    if (bad) return setMsg({ ok: false, text: `Enter 1 to ${MAX_PER_ITEM} stickers for ${bad.item.name}.` })
+    if (bad) return setMsg({ ok: false, text: `Enter 1 to ${maxOf(bad)} stickers for ${bad.item.name}.` })
     setBusy(true)
-    const r = await run(() => window.api.stickers.print(lines.map((l) => ({ variantId: l.item.variantId, qty: count(l), ...(l.item.serials ? { serials: l.item.serials } : {}) }))))
+    const r = await run(() => window.api.stickers.print(lines.map((l) => ({ variantId: l.item.variantId, qty: count(l), ...(l.item.serials ? { serials: picked(l) } : {}), ...(l.item.bunch ? { bunch: l.item.bunch.code } : {}) }))))
     setBusy(false)
     if (r) setMsg({ ok: true, text: `Sent ${r.printed} sticker${r.printed === 1 ? '' : 's'} to the printer.` })
   }
@@ -127,14 +137,20 @@ export function Stickers({ intent }: { intent?: string }) {
             <div className="tw"><table>
               <thead><tr><th>Item</th><th>Barcode</th><th>Stickers</th><th /></tr></thead>
               <tbody>{lines.map((l) => (
-                <tr key={l.item.variantId} className={l.item.variantId === shown?.item.variantId ? 'sel' : ''} onClick={() => setSel(l.item.variantId)}>
-                  <td>{l.item.name} · {l.item.colour} · {l.item.size}</td>
+                <tr key={keyOf(l.item)} className={shown && keyOf(l.item) === keyOf(shown.item) ? 'sel' : ''} onClick={() => setSel(keyOf(l.item))}>
+                  <td>{l.item.name} · {l.item.colour} · {l.item.size}{l.item.bunch ? <div className="sub"><b>Bunch of {l.item.bunch.qty}</b> · one sticker for {l.item.bunch.qty} pieces</div> : null}</td>
                   <td className="mono">{l.item.barcode}</td>
-                  <td>{l.item.serials
-                    ? <span title={l.item.serials.join(', ')}><b className="num">{l.item.serials.length}</b> <span className="sub mono">{l.item.serials.length > 1 ? `${l.item.serials[0]} … ${l.item.serials[l.item.serials.length - 1]}` : l.item.serials[0]}</span></span>
-                    : <input type="number" min="1" max={MAX_PER_ITEM} aria-label={`Stickers for ${l.item.name} ${l.item.size}`} style={{ width: 90 }} value={l.qty}
-                      onChange={(e) => setLines((ls) => ls.map((x) => (x.item.variantId === l.item.variantId ? { ...x, qty: e.target.value } : x)))} />}</td>
-                  <td><button className="btn sm" aria-label={`Remove ${l.item.name} ${l.item.size}`} onClick={(e) => { e.stopPropagation(); setLines((ls) => ls.filter((x) => x.item.variantId !== l.item.variantId)) }}>✕</button></td>
+                  <td>
+                    <input type="number" min="1" max={maxOf(l)} aria-label={`Stickers for ${l.item.name} ${l.item.size}`} style={{ width: 90 }} value={l.qty}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => { setMsg(null); setLines((ls) => ls.map((x) => (keyOf(x.item) === keyOf(l.item) ? { ...x, qty: e.target.value } : x))) }} />
+                    {l.item.serials && (
+                      <div className="sub mono" title={picked(l).join(', ')}>
+                        of {l.item.serials.length}{picked(l).length ? ' · ' + (picked(l).length > 1 ? `${picked(l)[0]} … ${picked(l)[picked(l).length - 1]}` : picked(l)[0]) : ''}
+                      </div>
+                    )}
+                  </td>
+                  <td><button className="btn sm" aria-label={`Remove ${l.item.name} ${l.item.size}`} onClick={(e) => { e.stopPropagation(); setLines((ls) => ls.filter((x) => keyOf(x.item) !== keyOf(l.item))) }}>✕</button></td>
                 </tr>
               ))}</tbody>
             </table></div>

@@ -46,7 +46,7 @@ export function StockOut({ user }: { user: StaffPublic }) {
   }
 
   function add(v: VariantSearchRow) {
-    if (v.tracked) { setMsg({ ok: false, text: SERIAL_MSG.noSerial }); setQ(''); setResults([]); return }
+    if (v.tracked) { setMsg({ ok: false, text: `${v.label}: ${SERIAL_MSG.noSerial}` }); setQ(''); setResults([]); return }
     setLines((ls) => (ls.some((l) => l.v.id === v.id) ? ls.map((l) => (l.v.id === v.id ? { ...l, qty: String(num(l.qty) + 1) } : l)) : [...ls, { v, qty: '1' }]))
     setQ(''); setResults([])
     scan.current?.focus()

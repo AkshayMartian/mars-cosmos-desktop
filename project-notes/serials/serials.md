@@ -12,7 +12,7 @@
 
 | No. | Question | What was built |
 |---|---|---|
-| 1 | Brand barcode with no serial | Not sold by scanning: message "This sticker has no serial number. Stick one of our own stickers on the piece first." |
+| 1 | Brand barcode with no serial | Not sold by scanning: message "<item>: This barcode has no serial number. Scan the sticker on the piece. Old sticker? Print a new one in Print stickers." |
 | 2 | All products or per product | **Per product** (`products.track_serials`). **Off for existing products**; the Add product form has it ticked by default; Excel import leaves it off |
 | 3 | Bunch size, partial return | **No limit**; a return picks pieces by serial, so 2 of a bunch of 6 can come back later |
 | 4 | Serial look | **Running numbers**, 4 digits (`0001`), more digits after 9999 |
@@ -26,7 +26,7 @@
 | Edit product → *Serial numbers* | checkbox | Switches tracking on (every piece in stock gets a serial: "N pieces in stock got serials: print new stickers") or off (Billing sells by quantity again; pieces stay on record) |
 | Billing scan box | text | A sticker (`barcode` + `serial`, or typed `barcode-serial`) adds that piece. Same variant → same line, quantity +1. A plain barcode of a tracked item is refused (no serial) |
 | Billing line of a tracked item | row | Quantity is a number, **no − / + buttons**; serials listed under the item; **✕** removes the **whole line**; **Scan to remove** turns on a mode where each scanned sticker takes off just that piece (Done ends it) |
-| **Add as bunch** | button on a tracked line | Asks "how many pieces in all"; the last scanned piece is one of them; one new line with its own barcode (`21…`), fixed size |
+| **Scan a bunch barcode** | scan box | A bunch made earlier (Add product / Stock in) goes on the bill as ONE row "bunch of N" with all its pieces; no "Add as bunch" button any more (2026-11-19) |
 | Returns → pieces | checkboxes of serials | Choose exactly which pieces come back |
 | Returns → New items | scan box | Serial items are added by scanning; no − / + |
 | Stock out | scan box | Serial items go out by scanning each piece (not a typed number) |
@@ -41,7 +41,7 @@
 
 **Scan in Billing** → `billing.scanPiece(code, inBill)` → code is split into barcode + serial → checks, in this order: serial known (else *This serial number is not in the stock records*) · already on this bill (*Already added*) · piece not `in_stock` (*This piece is not in stock*) · piece in a held bill (*This piece is in another bill on hold*). `null` back = not a sticker of a serial item, the screen falls back to the normal barcode / name search.
 
-**Bunch** → `billing.makeBunch(variantId, qty, inBill, first)` → picks `qty` free pieces (the scanned one first, none already on the bill, none held) and a new bunch barcode, or refuses with *Only N are free*. The screen moves the scanned piece out of the normal line into the new bunch line.
+**Bunch** → `billing.scanBunch(code, inBill)` → the bunch made in Add product / Stock in: its variant and the serials of ALL its pieces; refuses with *This bunch is not in stock* (sold, or a piece has gone), *This piece is in another bill on hold* or *Already added*. A piece packed in a whole bunch cannot be scanned or sold alone (*This piece is inside a bunch: scan the bunch barcode*).
 
 **Save bill** → `billing.create` re-checks every serial (`takeFree`: exists, in stock, not held, no duplicates, quantity = number of serials) → bill, lines, `stock_moves` (`sale`) → each piece `sold` + `bill_id` (+ `bunches` row and `pieces.bunch_id` for a bunch) + event. The bill saved keeps **one line per item** (price and GST are the same for all its pieces); the pieces are linked through `pieces.bill_id`.
 
@@ -67,13 +67,18 @@ Roles: Billing calls owner / manager / cashier; Stock calls owner / manager / st
 - **Errors:** `Already added` · `This piece is not in stock` · `This piece is in another bill on hold` · `This serial number is not in the stock records`.
 - **Tables read:** `variants, pieces, held_bills`.
 
-### `window.api.billing.makeBunch(variantId, qty, inBill, first?)` · channel `billing:makeBunch`
-- **Request:** `{ "variantId":"9b1e…","qty":6,"inBill":["0004"],"first":"0003" }` → **Response:** `{ "code":"2100000000019","serials":["0003","0001","0002","0005","0006","0007"] }`
-- **Errors:** `A bunch is 2 or more pieces.` · `Only 4 are free` · `This item does not use serial numbers.`
-- **Writes:** `settings` (`bunch_seq` counter only). The bunch row is written when the bill is saved.
+### `window.api.billing.pickPiece(variantId, inBill)` · channel `billing:pickPiece`
+- **Request:** `{ "variantId":"9b1e…","inBill":[{"variantId":"9b1e…","serial":"0001"}] }` → **Response:** `{ "variant":{…},"serial":"0002" }` (the next free single piece).
+- **Errors:** `This item does not use serial numbers.` · `No free piece of … is left (the rest are on a bill, on hold or in a bunch).` · `… is out of stock.`
+- **Writes:** nothing. The piece is only sold when the bill is saved (`billing.create` checks it again).
+
+### `window.api.billing.scanBunch(code, inBill)` · channel `billing:scanBunch`
+- **Request:** `{ "code":"2100000000019","inBill":[{"variantId":"9b1e…","serial":"0004"}] }` → **Response:** `{ "code":"2100000000019","variant":{…},"serials":["0001","0002","0003"] }`, or `null` when the code is not a bunch barcode.
+- **Errors:** `Already added` · `This bunch is not in stock` · `This piece is in another bill on hold`.
+- **Writes:** nothing. Bunches are made when stock is received (`catalogue.create` with `bunchSize`, `stock.in` lines with `bunchSize`): each full bunch of N pieces gets a `bunches` row with ONE barcode (`21…`); the rest stay single pieces. Pieces keep `bunch_id`; selling the bunch sets `bunches.bill_id`, cancelling the bill clears it (the bunch is whole again).
 
 ### `window.api.billing.create(input)` · channel `billing:create` (serial parts)
-- `lines[]` may carry `serials` (required, same count as `qty`, for a tracked item) and `bunch` (the bunch barcode). A bunch needs 2+ pieces and a code not used before (`That bunch is already on a bill.`).
+- `lines[]` may carry `serials` (required, same count as `qty`, for a tracked item) and `bunch` (the bunch barcode). A bunch line must be a whole, unsold bunch made earlier: its code, variant and EXACT pieces are checked (`This bunch is not in stock`). Pieces packed in a whole bunch cannot be sold alone.
 - **Errors:** `Scan the sticker of every piece: this item uses serial numbers.` · the piece messages above (with the serial in brackets).
 
 ### `window.api.stock.scanPiece(code, inList, want)` · channel `stock:scanPiece`
@@ -130,3 +135,20 @@ Also: the main process never trusts the screen: serials, status, holds and dupli
 | Date | Change | Commit |
 |---|---|---|
 | 2026-11-18 | Serial numbers built (migration 6, billing, bunches, returns, stock out, adjust, count, stickers, history) | |
+
+## 2026-11-19: serial numbers are the rule for every product
+
+The per-product tick box is gone (Add product and Edit product just say every piece has its own serial). New products and Excel imports are always tracked. At every start `enableSerialsEverywhere()` (catalogue.ts) switches on any product still on quantity-only and gives its stock serials (0001...), keeping the stock numbers; it does nothing once all are on. Consequence (paper section 8): a plain barcode or an old sticker without a serial is refused in Billing ("This sticker has no serial number..."); print new stickers from Print stickers. The service still has `setTrackSerials` (used by tests); there is no screen to switch serials off.
+
+## Scan to add / Scan to remove (2026-11-19)
+
+Every serial row has **Scan to add** and **Scan to remove** buttons. Either one opens a banner with three buttons: *Scan to add*, *Scan to remove* (the cashier switches between them while scanning) and *Done* (back to normal scanning, which also adds by search). In add mode a scanned sticker is put on the bill (same piece again: "Already added"); in remove mode it takes just that piece off. Clear also goes back to normal.
+
+## 2026-11-19: bunches are made at receiving, not at the counter
+
+- The billing "Add as bunch" button and `billing:makeBunch` are gone. A bunch is now **pieces packed together when stock arrives**: Add product has *Pieces per bunch (optional)* (the opening stock is split into full bunches plus single pieces), and each Stock in line has *Bunch of*. Every full bunch gets ONE barcode (`21…`, EAN-13) and ONE sticker; its pieces keep their own serials in the database (history, returns by serial).
+- Billing: scan the bunch barcode and the row "bunch of N" goes on the bill with quantity N. The whole bunch only: to sell fewer, scan single-piece stickers. Scan to remove: scan the bunch barcode to take the whole bunch off; one piece of a bunch cannot be taken out.
+- Print stickers: a bunch is its own row ("Bunch of N", copies editable); single pieces keep their serial stickers; a bunch barcode typed or scanned in the search box adds that bunch.
+- Stock count: scanning the bunch barcode counts all its pieces once. Cancelling a bill puts its bunches together again. A bunch that loses a piece (damaged, lost) is no longer whole: it cannot be scanned and its other pieces sell singly (they then need their own stickers).
+- Not covered yet: Stock out / Adjust take pieces by serial only (a bunch barcode is not accepted there).
+- **Plain barcode (2026-11-19):** scanning the variant's plain barcode (an old sticker, no serial) no longer shows the "no serial number" refusal in Billing: `billing.pickPiece(variantId, inBill)` puts the **next free single piece** (lowest serial, not on the bill, not held, not in a bunch) on the bill as a normal scanned piece. Trade-off (paper question 1): the serial sold may not be the one on the piece in the customer's hand, and scanning the same plain barcode twice adds two pieces, because a plain barcode cannot tell pieces apart. Errors: `No free piece of … is left` · `… is out of stock.` Returns / Stock out still ask for the piece's own sticker.

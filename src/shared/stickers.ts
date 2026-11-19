@@ -5,7 +5,9 @@ import { code128Modules, stickerCode } from './serials'
  * One label's worth of data. `qty` is how many stickers of it to print. An item with serial numbers lists the
  * serials to print (one sticker per piece, `qty` = how many) and its barcode carries the serial too.
  */
-export interface StickerItem { variantId: string; shop: string; name: string; colour: string; size: string; barcode: string; mrp: number; qty: number; serials?: string[] }
+export interface StickerItem { variantId: string; shop: string; name: string; colour: string; size: string; barcode: string; mrp: number; qty: number; serials?: string[]
+  /** a bunch sticker: `barcode` is the bunch code (one barcode for `bunch.qty` pieces packed together) */
+  bunch?: { code: string; qty: number } }
 
 export interface LabelSize { id: string; label: string; wMm: number; hMm: number }
 export const LABEL_SIZES: LabelSize[] = [
@@ -67,13 +69,17 @@ const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', 
 export function labelHtml(i: StickerItem, size: LabelSize, serial?: string): string {
   const barH = Math.round(size.hMm * 0.3 * 10) / 10
   const bars = serial ? code128Svg(stickerCode(i.barcode, serial), `${size.wMm - 6}mm`, `${barH}mm`) : barcodeSvg(i.barcode, `${size.wMm - 6}mm`, `${barH}mm`)
-  const code = serial ? `${i.barcode} · No. ${serial}` : i.barcode
-  return `<div class="lbl" style="width:${size.wMm}mm;height:${size.hMm}mm"><b class="shop">${esc(i.shop)}</b><span>${esc(i.name)}</span><span>${esc(i.size)} · ${esc(i.colour)}</span>${bars}<span class="code">${esc(code)}</span><b class="mrp">MRP ${esc(formatRupees(i.mrp))} <small>incl. of all taxes</small></b></div>`
+  // the number under the bars is exactly what the bars say (barcode + this piece's serial), on one line
+  const code = serial ? stickerCode(i.barcode, serial) : i.barcode
+  // a bunch sticker says how many pieces it stands for and the price of one
+  const pack = i.bunch ? `<span><b>BUNCH × ${i.bunch.qty}</b></span>` : ''
+  const mrp = `MRP ${esc(formatRupees(i.mrp))} <small>${i.bunch ? 'each, incl. of all taxes' : 'incl. of all taxes'}</small>`
+  return `<div class="lbl" style="width:${size.wMm}mm;height:${size.hMm}mm"><b class="shop">${esc(i.shop)}</b><span>${esc(i.name)}</span><span>${esc(i.size)} · ${esc(i.colour)}</span>${pack}${bars}<span class="code">${esc(code)}</span><b class="mrp">${mrp}</b></div>`
 }
 
 export const LABEL_CSS =
   '*{box-sizing:border-box}.lbl{padding:1.5mm 3mm;overflow:hidden;display:flex;flex-direction:column;justify-content:center;gap:.2mm;font-family:Arial,sans-serif;font-size:7pt;line-height:1.15;background:#fff;color:#000}' +
-  '.lbl .shop{font-size:7.5pt}.lbl .code{font-family:monospace;font-size:6.5pt;letter-spacing:.3px}.lbl .mrp{font-size:8pt}.lbl small{font-weight:normal;font-size:6pt}.lbl svg{display:block}'
+  '.lbl .shop{font-size:7.5pt}.lbl .code{font-family:monospace;font-size:6.5pt;letter-spacing:.3px;white-space:nowrap}.lbl .mrp{font-size:8pt}.lbl small{font-weight:normal;font-size:6pt}.lbl svg{display:block}'
 
 /** A whole print job: every item repeated `qty` times, one label per page. */
 export function printDocument(items: StickerItem[], size: LabelSize): string {
