@@ -54,6 +54,8 @@ export function NewProduct({ onDone }: { onDone: (notice?: string, stickers?: st
   const [serials, setSerials] = useState(true)
   /** GST % typed for this product. Starts as the category's fixed rate; empty = follow the category (auto: by price) */
   const [gstIn, setGstIn] = useState('')
+  /** GST switch: on = the rate box can be edited; off = no GST on this product (0%) and the box is locked */
+  const [gstOn, setGstOn] = useState(true)
   const { run, node } = useMsg()
 
   useEffect(() => {
@@ -66,11 +68,12 @@ export function NewProduct({ onDone }: { onDone: (notice?: string, stickers?: st
   const photoRows: ColourPhoto[] = colours.map((c) => ({ colour: c, dataUrl: photos[c]?.dataUrl ?? null, fileName: photos[c]?.name ?? null }))
   const cat = cats.find((c) => c.id === f.categoryId)
   const gst = cat ? gstRate('regular', cat, toPaise(f.sale || f.mrp)) : 0
-  useEffect(() => { setGstIn(cat?.mode === 'fixed' ? String(cat.rate) : '') }, [cat?.id, cat?.mode, cat?.rate])
+  useEffect(() => { setGstIn(cat?.mode === 'fixed' ? String(cat.rate) : ''); setGstOn(cat?.mode !== 'exempt') }, [cat?.id, cat?.mode, cat?.rate])
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value })
 
   /** the rate to store on the product: only when typed and different from what the category already gives */
   function gstOverride(): number | null {
+    if (!gstOn) return cat?.mode === 'exempt' ? null : 0
     if (gstIn.trim() === '') return null
     const n = Number(gstIn)
     return cat?.mode === 'fixed' && n === cat.rate ? null : n
@@ -102,19 +105,25 @@ export function NewProduct({ onDone }: { onDone: (notice?: string, stickers?: st
             <div className="f"><label htmlFor="e-name">Product name</label><input id="e-name" autoFocus value={f.name} onChange={set('name')} /></div>
             <div className="f"><label htmlFor="e-brand">Brand</label><input id="e-brand" value={f.brand} onChange={set('brand')} /></div>
           </div>
-          <div className="row">
+          <div className="row" style={{ alignItems: 'flex-start' }}>
             <div className="f">
               <label htmlFor="e-cat">Category</label>
               <select id="e-cat" value={f.categoryId} onChange={set('categoryId')}>
                 {cats.map((c) => <option key={c.id} value={c.id}>{c.name} (HSN {c.hsn})</option>)}
               </select>
             </div>
-            <div className="f"><label htmlFor="e-gst">GST %</label>
-              <input id="e-gst" type="number" min="0" max="28" step="1" value={gstIn} onChange={(e) => setGstIn(e.target.value)}
+            <div className="f">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label htmlFor="e-gst">GST %</label>
+                <label htmlFor="e-gst-on" style={{ display: 'flex', gap: 6, alignItems: 'center', fontWeight: 500 }}>
+                  <input id="e-gst-on" type="checkbox" checked={gstOn} onChange={(e) => setGstOn(e.target.checked)} style={{ width: 'auto' }} /> GST applies
+                </label>
+              </div>
+              <input id="e-gst" type="number" min="0" max="28" step="1" disabled={!gstOn} value={gstOn ? gstIn : '0'} onChange={(e) => setGstIn(e.target.value)}
                 placeholder={cat?.mode === 'auto' ? `Auto: ${gst}% at this price` : cat?.mode === 'exempt' ? 'Exempt (0%)' : ''} />
-              <div className="hint">{cat?.mode === 'auto' ? 'Leave empty to follow the category: 5% up to ₹2,500 per piece, else 18%.' : 'Taken from the category. Change it only for this product.'}</div>
             </div>
           </div>
+          <div className="hint" style={{ marginTop: -4, marginBottom: 8 }}>{!gstOn ? 'No GST on this product: bills show it at 0%.' : cat?.mode === 'auto' ? 'Leave empty to follow the category: 5% up to ₹2,500 per piece, else 18%.' : 'Taken from the category. Change it only for this product.'}</div>
           <div className="row">
             <div className="f"><label htmlFor="e-mrp">MRP ₹</label><input id="e-mrp" type="number" min="0" value={f.mrp} onChange={set('mrp')} /></div>
             <div className="f"><label htmlFor="e-sale">Sale price ₹</label><input id="e-sale" type="number" min="0" value={f.sale} onChange={set('sale')} /></div>
