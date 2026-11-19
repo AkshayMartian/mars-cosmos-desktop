@@ -129,9 +129,10 @@ function Detail({ p, canDelete, onEdit, onDelete }: { p: CustomerProfile; canDel
 }
 
 /** Add / edit dialog, contact, birthday, anniversary, notes, GSTIN, consent. */
-function CustomerForm({ editing, onClose, onSaved }: { editing: CustomerProfile | null; onClose: () => void; onSaved: (c: CustomerProfile) => void }) {
+/** `mobile` pre-fills the number when adding from another screen (Billing, Alterations). */
+export function CustomerForm({ editing, mobile, onClose, onSaved }: { editing: CustomerProfile | null; mobile?: string; onClose: () => void; onSaved: (c: CustomerProfile) => void }) {
   const [f, setF] = useState({
-    mobile: editing?.mobile ?? '', name: editing?.name ?? '',
+    mobile: editing?.mobile ?? mobile ?? '', name: editing?.name ?? '',
     birthday: toDayMonth(editing?.birthday ?? null), anniversary: toDayMonth(editing?.anniversary ?? null),
     sizes: { ...NO_SIZES, ...(editing?.sizes ?? {}) } as CustomerSizes,
     notes: editing?.notes ?? '', gstin: editing?.gstin ?? '',
@@ -152,8 +153,8 @@ function CustomerForm({ editing, onClose, onSaved }: { editing: CustomerProfile 
   return (
     <Modal title={editing ? 'Edit customer' : 'Add customer'} wide onClose={onClose}>
       <div className="row">
-        <div className="f"><label htmlFor="cu-m">Mobile *</label><input id="cu-m" inputMode="numeric" maxLength={10} autoFocus={!editing} value={f.mobile} onChange={(e) => setF({ ...f, mobile: e.target.value.replace(/\D/g, '') })} /></div>
-        <div className="f"><label htmlFor="cu-n">Name *</label><input id="cu-n" value={f.name} onChange={text('name')} /></div>
+        <div className="f"><label htmlFor="cu-m">Mobile *</label><input id="cu-m" inputMode="numeric" maxLength={10} autoFocus={!editing && !mobile} value={f.mobile} onChange={(e) => setF({ ...f, mobile: e.target.value.replace(/\D/g, '') })} /></div>
+        <div className="f"><label htmlFor="cu-n">Name *</label><input id="cu-n" autoFocus={!editing && !!mobile} value={f.name} onChange={text('name')} /></div>
       </div>
       <div className="row">
         <div className="f"><label htmlFor="cu-b">Birthday (DD-MM)</label><input id="cu-b" placeholder="21-08" value={f.birthday} onChange={text('birthday')} /></div>

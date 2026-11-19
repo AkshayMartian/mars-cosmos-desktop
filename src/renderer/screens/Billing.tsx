@@ -10,6 +10,7 @@ import type { CreditNoteDto } from '@shared/returns'
 import type { AltContext, AltJobDto } from '@shared/alterations'
 import { AltFields, altFormError, billAlteration, emptyAltForm, TagModal, type AltForm } from './AlterationForm'
 import type { StaffPublic } from '@shared/types'
+import { CustomerForm } from './Customers'
 import { removeScannedPiece } from '@shared/serials'
 import { fmtDate, Modal, useMsg, useScanFocus } from '../ui'
 
@@ -600,25 +601,11 @@ function HeldModal({ onClose, onResume }: { onClose: () => void; onResume: (h: H
   )
 }
 
+/** Add customer from the bill: the same dialog as the Customers screen (contact, birthday, anniversary, notes, GSTIN, consent). */
 export function CustomerModal({ mobile, onClose, onSaved }: { mobile: string; onClose: () => void; onSaved: (c: CustomerDto) => void }) {
-  const [f, setF] = useState({ mobile, name: '', wa: false, offers: false })
-  const { run, node } = useMsg()
-  const save = async () => { const c = await run(() => window.api.customers.create({ mobile: f.mobile, name: f.name, waConsent: f.wa, offersConsent: f.offers })); if (c) onSaved(c) }
   return (
-    <Modal title="Add customer" onClose={onClose}>
-      {node}
-      <div className="row">
-        <div className="f"><label htmlFor="cu-m">Mobile *</label><input id="cu-m" inputMode="numeric" maxLength={10} value={f.mobile} onChange={(e) => setF({ ...f, mobile: e.target.value.replace(/\D/g, '') })} /></div>
-        <div className="f"><label htmlFor="cu-n">Name *</label><input id="cu-n" autoFocus value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && void save()} /></div>
-      </div>
-      <div className="panel" style={{ background: 'var(--sunk)', border: 0 }}>
-        <b>Ask the customer and tick only if they agree</b>
-        <label className="check"><input type="checkbox" checked={f.wa} onChange={(e) => setF({ ...f, wa: e.target.checked })} /> Send my bill on WhatsApp</label>
-        <label className="check"><input type="checkbox" checked={f.offers} onChange={(e) => setF({ ...f, offers: e.target.checked })} /> Send me offers and birthday wishes</label>
-        <span className="hint">Saved with today's date and your name. We use the number only for this shop's bills and offers.</span>
-      </div>
-      <div className="mfoot"><button className="btn" onClick={onClose}>Cancel</button><button className="btn p" onClick={() => void save()}>Save customer</button></div>
-    </Modal>
+    <CustomerForm editing={null} mobile={mobile} onClose={onClose}
+      onSaved={(p) => { void window.api.customers.find(p.mobile).then((c) => { if (c) onSaved(c) }) }} />
   )
 }
 
