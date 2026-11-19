@@ -86,7 +86,7 @@ export const productNameTaken = (name: string): boolean =>
 /** One product + its variants + opening stock, all or nothing. Shared by the Add product form and Excel import. */
 export function insertProduct(
   actorId: string,
-  p: { name: string; brand: string; categoryId: string; trackSerials?: boolean },
+  p: { name: string; brand: string; categoryId: string; trackSerials?: boolean; gstRate?: number | null },
   variants: VariantSpec[],
   source: 'product' | 'import' = 'product'
 ): { id: string; variantIds: string[] } {
@@ -95,7 +95,7 @@ export function insertProduct(
   const pid = randomUUID()
   const variantIds: string[] = []
   db.transaction(() => {
-    db.prepare('INSERT INTO products (id,name,brand,category_id,active,created_at,track_serials) VALUES (?,?,?,?,1,?,?)').run(pid, p.name.trim(), p.brand.trim(), p.categoryId, at, p.trackSerials ? 1 : 0)
+    db.prepare('INSERT INTO products (id,name,brand,category_id,active,created_at,track_serials,gst_rate) VALUES (?,?,?,?,1,?,?,?)').run(pid, p.name.trim(), p.brand.trim(), p.categoryId, at, p.trackSerials ? 1 : 0, p.gstRate ?? null)
     const ins = db.prepare('INSERT INTO variants (id,product_id,size,colour,barcode,mrp,sale_price,cost) VALUES (?,?,?,?,?,?,?,?)')
     for (const v of variants) {
       const vid = randomUUID()
@@ -123,6 +123,8 @@ export function createProduct(input: NewProductInput): { id: string; variantIds:
   if (!(input.mrp > 0)) throw new Error('Enter the MRP.')
   if (input.salePrice < 0 || input.cost < 0) throw new Error('Prices cannot be negative.')
   if (!db.prepare('SELECT 1 FROM categories WHERE id=? AND is_service=0').get(input.categoryId)) throw new Error('Choose a category.')
+  const gstRate = input.gstRate ?? null
+  if (gstRate !== null && !(Number.isInteger(gstRate) && gstRate >= 0 && gstRate <= 28)) throw new Error('GST must be a whole number from 0 to 28.')
   if (productNameTaken(name)) throw new Error('A product with this name already exists. Use a different name.')
   // photos: one per colour, optional. Checked first so a bad photo never leaves a half-saved product.
   const photos = Object.entries(input.photos ?? {}).filter(([, file]) => file)
@@ -135,7 +137,7 @@ export function createProduct(input: NewProductInput): { id: string; variantIds:
   for (const colour of colours)
     for (const size of sizes)
       variants.push({ size, colour, mrp: input.mrp, salePrice: input.salePrice, cost: input.cost, qty: Math.max(0, Math.floor(Number(input.opening[`${colour}|${size}`] ?? 0))) })
-  const made = insertProduct(actor.id, { name, brand: input.brand, categoryId: input.categoryId, trackSerials: !!input.trackSerials }, variants)
+  const made = insertProduct(actor.id, { name, brand: input.brand, categoryId: input.categoryId, trackSerials: !!input.trackSerials, gstRate }, variants)
   for (const [colour, file] of photos) attachPhoto(made.id, colour, file)
   return made
 }

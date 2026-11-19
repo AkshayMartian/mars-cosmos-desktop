@@ -52,6 +52,8 @@ export function NewProduct({ onDone }: { onDone: (notice?: string, stickers?: st
   const [photos, setPhotos] = useState<Record<string, { file: string; dataUrl: string; name: string }>>({}) // by colour
   const [busy, setBusy] = useState(false)
   const [serials, setSerials] = useState(true)
+  /** GST % typed for this product. Starts as the category's fixed rate; empty = follow the category (auto: by price) */
+  const [gstIn, setGstIn] = useState('')
   const { run, node } = useMsg()
 
   useEffect(() => {
@@ -64,7 +66,15 @@ export function NewProduct({ onDone }: { onDone: (notice?: string, stickers?: st
   const photoRows: ColourPhoto[] = colours.map((c) => ({ colour: c, dataUrl: photos[c]?.dataUrl ?? null, fileName: photos[c]?.name ?? null }))
   const cat = cats.find((c) => c.id === f.categoryId)
   const gst = cat ? gstRate('regular', cat, toPaise(f.sale || f.mrp)) : 0
+  useEffect(() => { setGstIn(cat?.mode === 'fixed' ? String(cat.rate) : '') }, [cat?.id, cat?.mode, cat?.rate])
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value })
+
+  /** the rate to store on the product: only when typed and different from what the category already gives */
+  function gstOverride(): number | null {
+    if (gstIn.trim() === '') return null
+    const n = Number(gstIn)
+    return cat?.mode === 'fixed' && n === cat.rate ? null : n
+  }
 
   async function save(printStickers: boolean) {
     setBusy(true)
@@ -72,7 +82,7 @@ export function NewProduct({ onDone }: { onDone: (notice?: string, stickers?: st
     for (const [k, v] of Object.entries(grid)) if (num(v) > 0) opening[k] = Math.floor(num(v))
     const r = await run(() => window.api.catalogue.create({
       name: f.name, brand: f.brand, categoryId: f.categoryId, mrp: toPaise(f.mrp), salePrice: toPaise(f.sale || f.mrp),
-      cost: toPaise(f.cost), sizes, colours, opening, trackSerials: serials,
+      cost: toPaise(f.cost), sizes, colours, opening, trackSerials: serials, gstRate: gstOverride(),
       photos: Object.fromEntries(colours.filter((c) => photos[c]).map((c) => [c, photos[c]!.file]))
     }))
     setBusy(false)
@@ -99,8 +109,10 @@ export function NewProduct({ onDone }: { onDone: (notice?: string, stickers?: st
                 {cats.map((c) => <option key={c.id} value={c.id}>{c.name} (HSN {c.hsn})</option>)}
               </select>
             </div>
-            <div className="f"><label>GST</label>
-              <div className="chip muted" style={{ marginTop: 6 }}>{cat ? (cat.mode === 'auto' ? `Auto: ${gst}% at this price` : `Fixed ${cat.rate}%`) : '—'}</div>
+            <div className="f"><label htmlFor="e-gst">GST %</label>
+              <input id="e-gst" type="number" min="0" max="28" step="1" value={gstIn} onChange={(e) => setGstIn(e.target.value)}
+                placeholder={cat?.mode === 'auto' ? `Auto: ${gst}% at this price` : cat?.mode === 'exempt' ? 'Exempt (0%)' : ''} />
+              <div className="hint">{cat?.mode === 'auto' ? 'Leave empty to follow the category: 5% up to ₹2,500 per piece, else 18%.' : 'Taken from the category. Change it only for this product.'}</div>
             </div>
           </div>
           <div className="row">

@@ -228,5 +228,12 @@ CREATE INDEX ix_piece_events ON piece_events(piece_id);
 
 CREATE TABLE stock_count_pieces (count_id TEXT NOT NULL REFERENCES stock_counts(id), piece_id INTEGER NOT NULL REFERENCES pieces(id), PRIMARY KEY (count_id, piece_id));
 `
+  },
+  {
+    // A product can carry its own GST rate (entered when the product is added). NULL = follow the category's rule.
+    version: 7,
+    sql: /* sql */ `
+ALTER TABLE products ADD COLUMN gst_rate INTEGER;
+`
   }
 ]

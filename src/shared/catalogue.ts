@@ -56,6 +56,8 @@ export interface NewProductInput {
   colours: string[]
   /** give every piece its own serial number */
   trackSerials?: boolean
+  /** GST % for this product (0 to 28). Left out / null = follow the category's rule */
+  gstRate?: number | null
   /** opening stock keyed "colour|size" */
   opening: Record<string, number>
   /** photo per colour: { colour: file name returned by the photo chooser }. Optional; every colour may have its own */

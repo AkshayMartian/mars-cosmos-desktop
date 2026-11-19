@@ -24,7 +24,7 @@ const SELLERS = ['owner', 'manager', 'cashier'] as const
 /* ---------- items ---------- */
 
 const SELL = `SELECT v.id,p.name,v.colour,v.size,v.barcode,v.mrp,v.sale_price AS price,COALESCE(s.qty,0) AS stock,
-              c.gst_mode AS mode,c.gst_rate AS rate,c.hsn,p.track_serials AS tracked
+              CASE WHEN p.gst_rate IS NOT NULL THEN 'fixed' ELSE c.gst_mode END AS mode,COALESCE(p.gst_rate,c.gst_rate) AS rate,c.hsn,p.track_serials AS tracked
   FROM variants v JOIN products p ON p.id=v.product_id JOIN categories c ON c.id=p.category_id
   LEFT JOIN v_stock s ON s.variant_id=v.id WHERE p.active=1 AND c.is_service=0`
 
