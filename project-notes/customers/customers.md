@@ -22,7 +22,7 @@
 | **Delete** | button (owner/manager) | Confirm "Delete this customer?" → **Keep** / **Delete** |
 | **Add / Edit customer dialog** | dialog | *Mobile \**, *Name \**, *Birthday (DD-MM)*, *Anniversary (DD-MM)*, **size boxes (one "<Category> size" per category)**, *Notes*, *GSTIN (business bills only)*, consent tick-boxes *Send my bill on WhatsApp* and *Send me offers and birthday wishes*, red error line, **Cancel**, **Save customer** |
 
-**Customer's usual sizes (optional):** a heading and hint, then three plain-text boxes: *Shirt size* (placeholder "e.g. 40 or L"), *Trouser size* ("e.g. 32"), *Shoe size* ("e.g. 9"). These are the sizes the customer **wears**, not products: there is no product search, no price and no amount here. Up to 20 characters each; any box may stay empty. Products and prices are added only on the Billing screen. On the **Billing** screen the same sizes appear on the customer card as "Shirt 40 · Trouser 32 · Shoe 9" as soon as the 10-digit mobile number is typed.
+**Usual sizes (removed from the dialog on 2026-11-19):** the Add / Edit customer dialog no longer has the sizes heading or the Shirt / Trouser / Shoe boxes. Sizes already saved are kept (editing a customer does not clear them) and still show on the profile and the Billing customer card; the data layer is unchanged.
 
 ## 3. Flows
 

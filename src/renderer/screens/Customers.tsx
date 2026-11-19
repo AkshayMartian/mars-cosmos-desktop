@@ -128,7 +128,7 @@ function Detail({ p, canDelete, onEdit, onDelete }: { p: CustomerProfile; canDel
   )
 }
 
-/** Add / edit dialog, exactly the fields of the design: contact, birthday, anniversary, sizes, notes, GSTIN, consent. */
+/** Add / edit dialog, contact, birthday, anniversary, notes, GSTIN, consent. */
 function CustomerForm({ editing, onClose, onSaved }: { editing: CustomerProfile | null; onClose: () => void; onSaved: (c: CustomerProfile) => void }) {
   const [f, setF] = useState({
     mobile: editing?.mobile ?? '', name: editing?.name ?? '',
@@ -140,7 +140,6 @@ function CustomerForm({ editing, onClose, onSaved }: { editing: CustomerProfile 
   const [busy, setBusy] = useState(false)
   const { run, msg } = useMsg()
   const text = (k: 'name' | 'birthday' | 'anniversary' | 'notes') => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value })
-  const size = (k: keyof CustomerSizes) => (e: { target: { value: string } }) => setF({ ...f, sizes: { ...f.sizes, [k]: e.target.value } })
 
   async function save() {
     setBusy(true)
@@ -159,15 +158,6 @@ function CustomerForm({ editing, onClose, onSaved }: { editing: CustomerProfile 
       <div className="row">
         <div className="f"><label htmlFor="cu-b">Birthday (DD-MM)</label><input id="cu-b" placeholder="21-08" value={f.birthday} onChange={text('birthday')} /></div>
         <div className="f"><label htmlFor="cu-a">Anniversary (DD-MM)</label><input id="cu-a" placeholder="04-12" value={f.anniversary} onChange={text('anniversary')} /></div>
-      </div>
-      <div className="f" role="group" aria-labelledby="cu-sizes-h">
-        <b id="cu-sizes-h">Customer's usual sizes (optional)</b>
-        <span className="hint">The sizes this customer wears, so staff can suggest the right fit. Just type them. Nothing is searched or priced here: products and prices are added only on the Billing screen.</span>
-      </div>
-      <div className="row">
-        <div className="f"><label htmlFor="cu-s1">Shirt size</label><input id="cu-s1" maxLength={20} placeholder="e.g. 40 or L" autoComplete="off" value={f.sizes.shirt} onChange={size('shirt')} /></div>
-        <div className="f"><label htmlFor="cu-s2">Trouser size</label><input id="cu-s2" maxLength={20} placeholder="e.g. 32" autoComplete="off" value={f.sizes.trouser} onChange={size('trouser')} /></div>
-        <div className="f"><label htmlFor="cu-s3">Shoe size</label><input id="cu-s3" maxLength={20} placeholder="e.g. 9" autoComplete="off" value={f.sizes.shoe} onChange={size('shoe')} /></div>
       </div>
       <div className="row">
         <div className="f"><label htmlFor="cu-no">Notes</label><input id="cu-no" value={f.notes} onChange={text('notes')} /></div>
