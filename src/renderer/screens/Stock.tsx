@@ -41,7 +41,7 @@ function Levels({ user }: { user: StaffPublic }) {
   const [pcode, setPcode] = useState('')
   const { run, setMsg, node } = useMsg()
 
-  useEffect(() => { void run(() => window.api.stock.levels(q, low)).then((r) => r && setRows(r)) }, [q, low, tick, run])
+  useEffect(() => { let stale = false; void run(() => window.api.stock.levels(q, low)).then((r) => { if (r && !stale) setRows(r) }); return () => { stale = true } }, [q, low, tick, run])
 
   async function lookup() {
     const text = pcode

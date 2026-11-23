@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { calc } from '@shared/calc'
 import { coinPaise, maxCoinsFor } from '@shared/coins'
 import { formatRupees, toPaise } from '@shared/money'
-import { sizesText } from '@shared/customers'
+import { sizesText, type CustomerListRow } from '@shared/customers'
 import { receiptText, whatsappText } from '@shared/receipt'
 import type { BillDto, BillingContext, BillLineInput, CustomerDto, HeldBillDto, PayMode, SellableVariant } from '@shared/billing'
 import { SERIAL_MSG } from '@shared/serials'
@@ -12,7 +12,8 @@ import { AltFields, altFormError, billAlteration, emptyAltForm, TagModal, type A
 import type { StaffPublic } from '@shared/types'
 import { CustomerForm } from './Customers'
 import { removeScannedPiece } from '@shared/serials'
-import { fmtDate, Modal, useMsg, useScanFocus } from '../ui'
+import { cleanMobile, isIndianMobile } from '@shared/mobile'
+import { fmtDate, MobileHint, Modal, useMsg, useScanFocus } from '../ui'
 
 /**
  * One row of the bill. An item with serial numbers keeps the serial of every piece (qty = how many, never typed):
@@ -345,7 +346,7 @@ export function Billing({ user }: { user: StaffPublic }) {
             </div>
           )}
           {cart.length ? (
-            <div className="tw">
+            <div className="tw" style={{ overflow: 'visible' }}>{/* every item shows in full: no scroll box inside the bill */}
               <table>
                 <thead><tr><th>Item</th><th>Qty</th><th className="r">Price</th><th className="r">Discount ₹</th><th className="r">GST</th><th className="r">Total</th><th /></tr></thead>
                 <tbody>
@@ -403,14 +404,16 @@ export function Billing({ user }: { user: StaffPublic }) {
                 <label htmlFor="custMobile">Customer mobile (F4)</label>
                 <input id="custMobile" ref={mobileRef} inputMode="numeric" maxLength={10} placeholder="10-digit mobile" value={mobile}
                   onChange={(e) => {
-                    const digits = e.target.value.replace(/\D/g, '')
+                    const digits = cleanMobile(e.target.value)
                     setMobile(digits); setMiss(false)
-                    if (digits.length === 10) void findCustomer(digits) // the card (with sizes) appears as soon as the number is complete
+                    if (isIndianMobile(digits)) void findCustomer(digits) // the card (with sizes) appears as soon as the number is complete
                   }}
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void findCustomer() } }} />
+                <MobileHint value={mobile} />
               </div>
               <button className="btn" onClick={() => void findCustomer()}>Find</button>
             </div>
+            {!customer && <CustomerSearch onPick={(c) => { setMobile(c.mobile); setMiss(false); void findCustomer(c.mobile) }} />}
             {customer ? (
               <div className="cust">
                 <b>{customer.name}</b>
@@ -443,7 +446,8 @@ export function Billing({ user }: { user: StaffPublic }) {
             <div className="tot">
               <span>Items</span><span className="num">{totals.qty}</span>
               <span>Subtotal</span><span className="num">{formatRupees(totals.subtotal)}</span>
-              {totals.discount > 0 && <><span>Discount</span><span className="num">−{formatRupees(totals.discount)}</span></>}
+              {totals.lineDisc > 0 && <><span>Item discounts</span><span className="num">−{formatRupees(totals.lineDisc)}</span></>}
+              {totals.billDisc > 0 && <><span>Bill discount</span><span className="num">−{formatRupees(totals.billDisc)}</span></>}
               {totals.coinValue > 0 && <><span>Coins ({coinsN})</span><span className="num">−{formatRupees(totals.coinValue)}</span></>}
               <span className="sub">{scheme === 'regular' ? 'GST included' : 'Bill of supply (no GST)'}</span><span className="sub num">{formatRupees(gstTotal)}</span>
               {totals.roundOff !== 0 && <><span className="sub">Round off</span><span className="sub num">{formatRupees(totals.roundOff)}</span></>}
@@ -603,7 +607,7 @@ export function ReceiptModal({ bill, ctx, onNew }: { bill: BillDto; ctx: Billing
   }
   // A walk-in has no number on the bill: ask for it here, only when the shop wants to send the bill on WhatsApp.
   const [typed, setTyped] = useState('')
-  const mobile = bill.customer?.mobile ?? (typed.length === 10 ? typed : null)
+  const mobile = bill.customer?.mobile ?? (isIndianMobile(typed) ? typed : null)
   const noConsent = !!bill.customer && bill.customer.waConsent === false // they have not agreed to WhatsApp bills
   const wa = mobile && !noConsent ? `https://wa.me/91${mobile}?text=${encodeURIComponent(whatsappText(bill, ctx.shop))}` : null
   return (
@@ -612,7 +616,7 @@ export function ReceiptModal({ bill, ctx, onNew }: { bill: BillDto; ctx: Billing
       <div className="receipt" aria-label="Receipt">{receiptText(bill, ctx.shop, ctx.gstScheme)}</div>
       {printMsg}
       <div className="mfoot">
-        {!bill.customer?.mobile && bill.type === 'sale' && <input aria-label="Customer mobile for WhatsApp" inputMode="numeric" maxLength={10} placeholder="Mobile to send on WhatsApp" style={{ width: 190 }} value={typed} onChange={(e) => setTyped(e.target.value.replace(/\D/g, ''))} />}
+        {!bill.customer?.mobile && bill.type === 'sale' && <input aria-label="Customer mobile for WhatsApp" inputMode="numeric" maxLength={10} placeholder="Mobile to send on WhatsApp" style={{ width: 190 }} value={typed} onChange={(e) => setTyped(cleanMobile(e.target.value))} />}
         {wa ? <a className="btn" href={wa} target="_blank" rel="noopener noreferrer">Send on WhatsApp</a> : <button className="btn" disabled title={noConsent ? 'This customer has not agreed to WhatsApp bills. Edit the customer to record their consent.' : "Type the customer's 10-digit mobile to send the bill on WhatsApp"}>Send on WhatsApp</button>}
         <button className="btn" onClick={() => void runP(() => window.api.print.receipt(bill.id), 'Sent to the receipt printer.')}>Print receipt</button>
         {bill.alterations?.length ? <button className="btn" onClick={() => void showTags()}>Print tailor tag</button> : null}
@@ -643,5 +647,56 @@ function AltCartModal({ ctx, label, customerName, draft, onClose, onSave, onRemo
       <div className="err" role="alert">{err}</div>
       <div className="mfoot">{draft && <button className="btn danger" onClick={onRemove}>Remove alteration</button>}<button className="btn" onClick={onClose}>Cancel</button><button className="btn p" onClick={save}>Save alteration</button></div>
     </Modal>
+  )
+}
+
+/** Find a customer by name or by any part of the mobile: a list that scrolls, picked with the mouse or Up / Down / Enter. */
+function CustomerSearch({ onPick }: { onPick: (c: CustomerListRow) => void }) {
+  const [q, setQ] = useState('')
+  const [rows, setRows] = useState<CustomerListRow[]>([])
+  const [open, setOpen] = useState(false)
+  const [at, setAt] = useState(0)
+  const [failed, setFailed] = useState(false)
+  const seq = useRef(0)
+  const listRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const text = q.trim()
+    if (!text) { setRows([]); setFailed(false); return }
+    const mine = ++seq.current
+    const t = setTimeout(() => {
+      window.api.customers.list(text)
+        .then((r) => { if (mine === seq.current) { setRows(r.slice(0, 100)); setAt(0); setFailed(false) } })
+        .catch(() => { if (mine === seq.current) { setRows([]); setFailed(true) } })
+    }, 150)
+    return () => clearTimeout(t)
+  }, [q])
+  useEffect(() => { (listRef.current?.children[at] as HTMLElement | undefined)?.scrollIntoView({ block: 'nearest' }) }, [at])
+
+  const pick = (c: CustomerListRow) => { setQ(''); setRows([]); setOpen(false); onPick(c) }
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setAt((i) => Math.min(rows.length - 1, i + 1)) }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setAt((i) => Math.max(0, i - 1)) }
+    else if (e.key === 'Enter' && open && rows[at]) { e.preventDefault(); pick(rows[at]!) }
+    else if (e.key === 'Escape') setOpen(false)
+  }
+  return (
+    <div className="f" style={{ position: 'relative' }}>
+      <label htmlFor="custSearch">Search customer (name or mobile)</label>
+      <input id="custSearch" autoComplete="off" placeholder="Type a name or part of a number" value={q} role="combobox" aria-expanded={open && rows.length > 0} aria-controls="custResults"
+        onChange={(e) => { setQ(e.target.value); setOpen(true) }} onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 120)} onKeyDown={onKey} />
+      {open && q.trim() && (
+        <div id="custResults" ref={listRef} role="listbox" aria-label="Matching customers"
+          style={{ position: 'absolute', left: 0, right: 0, top: '100%', zIndex: 20, maxHeight: 220, overflowY: 'auto', background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 10, boxShadow: '0 6px 18px rgba(0,0,0,.18)' }}>
+          {rows.map((c, i) => (
+            <div key={c.id} role="option" aria-selected={i === at} onMouseDown={(e) => { e.preventDefault(); pick(c) }} onMouseEnter={() => setAt(i)}
+              style={{ padding: '8px 12px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', gap: 12, background: i === at ? 'var(--sunk)' : undefined }}>
+              <b>{c.name}</b><span className="sub mono">{c.mobile}</span>
+            </div>
+          ))}
+          {!rows.length && <div className="sub" style={{ padding: '8px 12px' }}>{failed ? 'Could not search. Try again.' : 'No customer found.'}</div>}
+        </div>
+      )}
+    </div>
   )
 }

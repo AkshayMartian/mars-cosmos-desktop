@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { formatMonthDay, toDayMonth } from '@shared/dates'
+import { autoDayMonth, formatMonthDay, parseDayMonth, toDayMonth } from '@shared/dates'
 import { formatRupees } from '@shared/money'
 import type { CelebrationDto, CustomerListRow, CustomerProfile, CustomerSaveInput, CustomerSizes } from '@shared/customers'
 import { NO_SIZES, sizesText } from '@shared/customers'
 import type { StaffPublic } from '@shared/types'
-import { fmtDay, Modal, useMsg } from '../ui'
+import { cleanMobile } from '@shared/mobile'
+import { fmtDay, MobileHint, Modal, useMsg } from '../ui'
 
 type Dlg = { t: 'form'; editing: CustomerProfile | null } | { t: 'delete' } | null
 
@@ -20,7 +21,7 @@ export function Customers({ user }: { user: StaffPublic }) {
   const { run, attempt, setMsg, node } = useMsg()
   const canDelete = user.role === 'owner' || user.role === 'manager'
 
-  useEffect(() => { void run(() => window.api.customers.list(q)).then((r) => r && setRows(r)) }, [q, tick, run])
+  useEffect(() => { let stale = false; void run(() => window.api.customers.list(q)).then((r) => { if (r && !stale) setRows(r) }); return () => { stale = true } }, [q, tick, run])
   useEffect(() => { void run(() => window.api.customers.today()).then((r) => r && setToday(r)) }, [tick, run])
   useEffect(() => { void window.api.app.info().then((i) => setShop(i.shopName), () => undefined) }, [])
   useEffect(() => {
@@ -128,6 +129,8 @@ function Detail({ p, canDelete, onEdit, onDelete }: { p: CustomerProfile; canDel
   )
 }
 
+const DATE_MSG = 'Not a real date. Use day-month, like 21-08 (day 1-31, month 1-12).'
+
 /** Add / edit dialog, contact, birthday, anniversary, notes, GSTIN, consent. */
 /** `mobile` pre-fills the number when adding from another screen (Billing, Alterations). */
 export function CustomerForm({ editing, mobile, onClose, onSaved }: { editing: CustomerProfile | null; mobile?: string; onClose: () => void; onSaved: (c: CustomerProfile) => void }) {
@@ -140,7 +143,9 @@ export function CustomerForm({ editing, mobile, onClose, onSaved }: { editing: C
   })
   const [busy, setBusy] = useState(false)
   const { run, msg } = useMsg()
-  const text = (k: 'name' | 'birthday' | 'anniversary' | 'notes') => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value })
+  const text = (k: 'name' | 'notes') => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value })
+  const date = (k: 'birthday' | 'anniversary') => (e: { target: { value: string } }) => setF({ ...f, [k]: autoDayMonth(e.target.value) })
+  const badDate = (v: string) => v.length === 5 && parseDayMonth(v) === null
 
   async function save() {
     setBusy(true)
@@ -153,12 +158,12 @@ export function CustomerForm({ editing, mobile, onClose, onSaved }: { editing: C
   return (
     <Modal title={editing ? 'Edit customer' : 'Add customer'} wide onClose={onClose}>
       <div className="row">
-        <div className="f"><label htmlFor="cu-m">Mobile *</label><input id="cu-m" inputMode="numeric" maxLength={10} autoFocus={!editing && !mobile} value={f.mobile} onChange={(e) => setF({ ...f, mobile: e.target.value.replace(/\D/g, '') })} /></div>
+        <div className="f"><label htmlFor="cu-m">Mobile *</label><input id="cu-m" inputMode="numeric" maxLength={10} autoFocus={!editing && !mobile} value={f.mobile} onChange={(e) => setF({ ...f, mobile: cleanMobile(e.target.value) })} /><MobileHint value={f.mobile} /></div>
         <div className="f"><label htmlFor="cu-n">Name *</label><input id="cu-n" autoFocus={!editing && !!mobile} value={f.name} onChange={text('name')} /></div>
       </div>
       <div className="row">
-        <div className="f"><label htmlFor="cu-b">Birthday (DD-MM)</label><input id="cu-b" placeholder="21-08" value={f.birthday} onChange={text('birthday')} /></div>
-        <div className="f"><label htmlFor="cu-a">Anniversary (DD-MM)</label><input id="cu-a" placeholder="04-12" value={f.anniversary} onChange={text('anniversary')} /></div>
+        <div className="f"><label htmlFor="cu-b">Birthday (DD-MM)</label><input id="cu-b" inputMode="numeric" maxLength={5} placeholder="21-08" value={f.birthday} onChange={date('birthday')} />{badDate(f.birthday) && <div className="sub" role="alert" style={{ color: 'var(--bad)', fontWeight: 600 }}>{DATE_MSG}</div>}</div>
+        <div className="f"><label htmlFor="cu-a">Anniversary (DD-MM)</label><input id="cu-a" inputMode="numeric" maxLength={5} placeholder="04-12" value={f.anniversary} onChange={date('anniversary')} />{badDate(f.anniversary) && <div className="sub" role="alert" style={{ color: 'var(--bad)', fontWeight: 600 }}>{DATE_MSG}</div>}</div>
       </div>
       <div className="row">
         <div className="f"><label htmlFor="cu-no">Notes</label><input id="cu-no" value={f.notes} onChange={text('notes')} /></div>

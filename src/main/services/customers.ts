@@ -1,9 +1,11 @@
+import { likeAll } from './search'
 import { randomUUID } from 'node:crypto'
 import { getDb } from '../db'
 import type { CustomerDto, NewCustomerInput } from '@shared/billing'
 import type { CelebrationDto, CustomerListRow, CustomerProfile, CustomerSaveInput, CustomerSizes } from '@shared/customers'
 import { NO_SIZES, parseSizes } from '@shared/customers'
 import { parseDayMonth, todayMonthDay } from '@shared/dates'
+import { checkMobile } from '@shared/mobile'
 import { audit } from './auth'
 import { requireRole } from './session'
 import { liveBalance } from './coins'
@@ -28,8 +30,7 @@ function cleanSizes(input: Partial<CustomerSizes> | undefined): CustomerSizes {
 
 export function findCustomerByMobile(mobile: string): CustomerDto | null {
   requireRole('owner', 'manager', 'cashier')
-  const m = mobile.replace(/\D/g, '')
-  if (m.length !== 10) throw new Error('Enter a 10-digit mobile number.')
+  const m = checkMobile(mobile)
   const r = getDb().prepare(`${SELECT} WHERE mobile=? AND deleted_at IS NULL`).get(m) as Row | undefined
   return r ? toDto(r, liveBalance(r.id)) : null
 }
@@ -44,13 +45,13 @@ const STATS = `(SELECT COUNT(*) FROM bills b WHERE b.customer_id=c.id AND b.type
 
 export function listCustomers(q = ''): CustomerListRow[] {
   requireRole(...SELLERS)
-  const like = `%${q.trim()}%`
+  const m = likeAll(q, ['c.name', 'c.mobile'])
   return getDb()
     .prepare(
       `SELECT c.id,c.name,c.mobile,${STATS} FROM customers c
-       WHERE c.deleted_at IS NULL AND c.mobile IS NOT NULL AND (@q='' OR c.name LIKE @like OR c.mobile LIKE @like) ORDER BY c.name`
+       WHERE c.deleted_at IS NULL AND c.mobile IS NOT NULL AND ${m.sql} ORDER BY c.name`
     )
-    .all({ q: q.trim(), like }) as CustomerListRow[]
+    .all(...m.args) as CustomerListRow[]
 }
 
 export function getCustomer(id: string): CustomerProfile {
@@ -84,9 +85,8 @@ export function getCustomer(id: string): CustomerProfile {
 export function saveCustomer(input: CustomerSaveInput): CustomerProfile {
   const actor = requireRole(...SELLERS)
   const db = getDb()
-  const mobile = input.mobile.replace(/\D/g, '')
+  const mobile = checkMobile(input.mobile)
   const name = input.name.trim()
-  if (mobile.length !== 10) throw new Error('Mobile must be 10 digits.')
   if (!name) throw new Error('Name is required.')
   const birthday = parseDayMonth(input.birthday)
   if (birthday === null) throw new Error('Birthday must be a real date like 21-08 (day-month).')
@@ -157,9 +157,8 @@ export function celebrationsToday(): CelebrationDto[] {
 /** Consent is recorded with today's date and the staff member who asked, as the design requires. */
 export function createCustomer(input: NewCustomerInput): CustomerDto {
   const actor = requireRole('owner', 'manager', 'cashier')
-  const mobile = input.mobile.replace(/\D/g, '')
+  const mobile = checkMobile(input.mobile)
   const name = input.name.trim()
-  if (mobile.length !== 10) throw new Error('Mobile must be 10 digits.')
   if (!name) throw new Error('Name is required.')
   if (getDb().prepare('SELECT 1 FROM customers WHERE mobile=?').get(mobile)) throw new Error('A customer with this mobile already exists.')
 

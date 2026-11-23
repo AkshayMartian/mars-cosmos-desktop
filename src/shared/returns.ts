@@ -25,6 +25,8 @@ export interface ReturnLine {
   returnable: number
   /** the alteration charge: a service, never returned (use Alterations to cancel the job) */
   service: boolean
+  /** an alteration job (not cancelled) was made on this item of this bill: it has been altered, so it cannot be returned */
+  altered: boolean
   /** what the customer paid for the whole line (after discounts, GST included) */
   total: Paise
   /** serial numbers of the pieces on this bill line that can still come back (empty = the line is not tracked by serial) */

@@ -18,6 +18,9 @@ export interface ProductListRow {
   colours: string[]
   stock: number
   mrp: Paise
+  /** Lowest and highest cost of its items; null when the signed-in user may not see costs (only owner and manager can). */
+  cost: Paise | null
+  costMax: Paise | null
 }
 
 export interface VariantDto {

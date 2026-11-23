@@ -29,7 +29,7 @@
 | **Change customer** | button | Clears the customer |
 | *Salesperson (for commission)* | dropdown | Who gets the sale (default: you) |
 | *Bill discount ₹* | number | Discount on the whole bill (rupees) |
-| Totals box | display | Items, Subtotal, Discount, GST included, Round off, **Total** |
+| Totals box | display | Items, Subtotal, **Item discounts**, **Bill discount** (each only when above 0), Coins, GST included, Round off, **Total** |
 | *Approved by …* | chip | Shown after a manager approved this bill |
 | **Pay (F9)** | button | Starts payment (disabled when the cart is empty or the day is not started) |
 | **F2** | shortcut | Focus the scan box |
@@ -224,7 +224,7 @@ INSERT INTO bill_counters (counter,fy,next) VALUES (?,?,2)
 
 INSERT INTO bills (id,no,type,status,customer_id,staff_id,sales_by,session_id,at,subtotal,discount,taxable,cgst,sgst,round_off,grand)
   VALUES (?,?,'sale','completed',?,?,?,?,?,?,?,?,?,?,?,?);
-INSERT INTO bill_lines (bill_id,variant_id,name,size,colour,hsn,qty,mrp,price,discount,taxable,gst_rate,cgst,sgst,total) VALUES (…);
+INSERT INTO bill_lines (bill_id,variant_id,name,size,colour,hsn,qty,mrp,price,discount,taxable,gst_rate,cgst,sgst,total,item_disc) VALUES (…);
 INSERT INTO stock_moves (variant_id,qty,type,ref,reason,staff_id,at) VALUES (?, -qty, 'sale', <bill no>, NULL, ?, ?);
 INSERT INTO payments (bill_id,mode,amount) VALUES (?,?,?);
 ```
@@ -284,3 +284,14 @@ INSERT INTO payments (bill_id,mode,amount) VALUES (?,?,?);
 | 2026-11-17 | Found in a full test: Hold → Resume lost the customer, bill discount and salesperson (now kept); receipt and cash drawer now run by themselves after Save when a receipt printer is chosen; WhatsApp bill link needs the customer's WhatsApp consent | uncommitted |
 | 2026-11-17 | Barcode scanner fix: when the scan box has lost focus (after a click on a button or empty space) a typed digit or letter now goes to the scan box (also on Print stickers, Stock in, Stock out, Stock count); an unknown barcode empties the box so the next scan is not glued onto it; Enter reads the box's own value | uncommitted |
 | 2026-11-17 | Receipt no longer prints when the bill is saved: it prints only when staff press Print receipt (`print:afterSale` removed). Printed receipt text is now bold black so it is not faint on thermal paper | uncommitted |
+
+## 2026-11-23: customer search and discounts shown apart
+
+- **Search customer (name or mobile):** a box above the mobile box (only while no customer is chosen). Type a name or part of a number: a list of up to 100 matches appears and **scrolls** (about 8 rows tall); click a row, or Up / Down and Enter, to choose. It uses `customers.list` (owner, manager, cashier); nothing new is written.
+- **Item discounts and bill discount are shown apart** in the totals box and on the bill. Schema v8 adds `bill_lines.item_disc` (the item's own discount; `bill_lines.discount` still holds item discount + its share of bill discount and coins, which returns use). The receipt prints `Item discount` under each discounted item, then `Item discounts` and `Bill discount` as two lines above the total. Bills made before v8 have no item figure (NULL) and keep the single `Discount` line.
+
+## 2026-11-23: item list, first print, searches
+
+- The item table in Billing has no scroll box of its own any more: every row shows in full and the page scrolls.
+- **First print of a sale** (customer's copy) has the fuller design: `====` rules around the shop name and the TOTAL, an `ITEM / QTY x RATE / AMOUNT` heading, `Items n   Qty n`, `Subtotal` when there is a discount, and `You saved Rs X!` under the total. A **reprint** (Bills screen) keeps the plain layout with `** DUPLICATE **` on top. Return bills keep the plain layout. (`receiptText(..., copy)` in `src/shared/receipt.ts`.)
+- **All search boxes** (Billing, Stock in, Stock out, Stickers, Stock, Products, Customers, Bills, Returns' new item) now use one rule (`src/main/services/search.ts`): every word typed must match (name, brand, colour, size, barcode; for people name or mobile), in any order, so "blue slim" finds Slim Shirt in Blue. `%` and `_` typed by the user are ordinary characters. An older, slower search can no longer replace a newer one on Customers, Products, Stock and Bills.

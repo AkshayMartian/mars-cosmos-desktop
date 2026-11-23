@@ -123,7 +123,7 @@ Schema: see README section 7. `customers.sizes` (migration 4) holds the JSON. Th
 
 - **Mobile is the identity**: 10 digits, unique (a deleted customer frees the number).
 - **Consent** is recorded with date and the staff member who asked. Wishes (promotional) are offered **only** for customers who ticked *offers and birthday wishes* (D-21). Bill on WhatsApp needs the customer's mobile; ticking WhatsApp consent is recorded, the link itself is not blocked.
-- **Birthday/anniversary** are typed `DD-MM`, stored `MM-DD`, no year; matched against today.
+- **Birthday/anniversary** are typed `DD-MM`, stored `MM-DD`, no year; matched against today. On screen the boxes format as you type (digits only, the dash comes by itself, "5" becomes "05"), and a red hint appears if the finished date does not exist (e.g. 31-02).
 - **Usual sizes are three fixed plain-text boxes** (shirt, trouser, shoe), stored as JSON in `customers.sizes` (D-27, which replaces the per-category sizes of D-19). They are what the customer wears, not products: no search, no price, no stock. Reading is forgiving: empty, broken or wrongly typed JSON shows blank boxes. Migration 4 moved earlier data: the per-category sizes of Shirts/Trousers/Shoes (or, for older rows, the three old columns) became the JSON.
 - **GSTIN**: format and state code are checked, the final check character is not (D-22). Only needed for business customers.
 - **Delete anonymises**: old bills stay and show "Deleted customer"; personal data is wiped.

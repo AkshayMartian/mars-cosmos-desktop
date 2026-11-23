@@ -51,6 +51,7 @@ SQLite, money in integer paise, timestamps ISO-8601 text. Migrations are in `src
 | 5 | `alterations.gst_rate`: the GST rate of an alteration charge is kept on the job |
 | 6 | Serial numbers: `products.track_serials`, `pieces`, `piece_events`, `bunches`, `stock_count_pieces` |
 | 7 | `products.gst_rate`: a GST % typed on the product (NULL = follow the category rule) |
+| 8 | `bill_lines.item_disc`: the item's own discount, kept apart from its share of the bill discount (NULL on bills made before) |
 
 ## 8. Roles and permissions
 

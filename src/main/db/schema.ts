@@ -235,5 +235,13 @@ CREATE TABLE stock_count_pieces (count_id TEXT NOT NULL REFERENCES stock_counts(
     sql: /* sql */ `
 ALTER TABLE products ADD COLUMN gst_rate INTEGER;
 `
+  },
+  {
+    // bill_lines.discount keeps item discount + the line's share of the bill discount and coins (returns use it).
+    // item_disc is the item discount alone, so the bill and receipt can show the two apart. NULL on bills made before this.
+    version: 8,
+    sql: /* sql */ `
+ALTER TABLE bill_lines ADD COLUMN item_disc INTEGER;
+`
   }
 ]

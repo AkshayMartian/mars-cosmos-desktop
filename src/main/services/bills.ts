@@ -1,3 +1,4 @@
+import { likeAll } from './search'
 import { getDb } from '../db'
 import type { BillDetail, BillListRow, BillPeriod, CancelInput } from '@shared/bills'
 import { audit } from './auth'
@@ -24,12 +25,8 @@ export function listBills(period: BillPeriod, q: string): BillListRow[] {
     where.push('b.at>=?')
     args.push(new Date(Date.now() - 7 * 864e5).toISOString())
   } else if (period !== 'all') throw new Error('Unknown period.')
-  const t = (q ?? '').trim()
-  if (t) {
-    const like = `%${t.replace(/[%_]/g, '')}%`
-    where.push('(b.no LIKE ? OR c.mobile LIKE ? OR c.name LIKE ?)')
-    args.push(like, like, like)
-  }
+  const m = likeAll(q ?? '', ['b.no', 'c.mobile', 'c.name'])
+  if (m.args.length) { where.push(m.sql); args.push(...m.args) }
   const rows = getDb()
     .prepare(
       `SELECT b.id,b.no,b.type,b.status,b.at,c.name AS customerName,b.grand,

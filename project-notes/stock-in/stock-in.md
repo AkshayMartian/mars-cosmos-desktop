@@ -56,7 +56,7 @@ IPC result `{ ok:true, data }` / `{ ok:false, error:"message" }`.
 | Field | Type | Required | Validation |
 |---|---|---|---|
 | name | string | yes | not blank |
-| mobile | string | no | stored trimmed |
+| mobile | string | no | if given, a valid Indian mobile: 10 digits starting 6, 7, 8 or 9 (+91, spaces and dashes are dropped); else "Enter a valid Indian mobile number…" |
 | gstin | string | no | upper-cased; if given: exactly 15 letters/digits |
 
 - **Response:** `{ "id":"…","name":"Om Accessories","mobile":"9909033344","gstin":"24CCCCC3333C1Z2" }`

@@ -238,8 +238,23 @@ describe('cancelling and returning bills that have alterations', () => {
     const { alt, sale } = setup()
     const b = sale([alt({ charge: 15_000, mode: 'bill' })], [{ mode: 'cash', amount: 164_900 }])
     const lines = getBillForReturn(b.id).lines
-    expect(lines.map((l) => [l.service, l.returnable])).toEqual([[false, 1], [true, 0]])
+    expect(lines.map((l) => [l.service, l.returnable])).toEqual([[false, 0], [true, 0]]) // the shirt was altered too
     expect(() => doReturn({ billId: b.id, lines: [{ lineId: lines[1]!.id, qty: 1 }], newLines: [], settle: 'cash', payMode: 'cash' })).toThrow('alteration charge')
+  })
+
+  it('an altered item cannot be returned; an item with no job, or a cancelled job, can', () => {
+    const { alt, sale, cust, shirt } = setup()
+    const plain = sale([])
+    expect(getBillForReturn(plain.id).lines[0]).toMatchObject({ altered: false, returnable: 1 })
+    const b = sale([alt()])
+    const line = getBillForReturn(b.id).lines[0]!
+    expect(line).toMatchObject({ altered: true, returnable: 0, pieces: [] })
+    expect(() => doReturn({ billId: b.id, lines: [{ lineId: line.id, qty: 1 }], newLines: [], settle: 'cash', payMode: 'cash' })).toThrow('has been altered')
+    // a job made later for an old bill's item blocks it too
+    const j = createAlteration({ customerId: cust.id, billId: plain.id, variantId: shirt.id, ownItem: '', work: ['Hem'], notes: '', tailorId: (getDb().prepare('SELECT id FROM tailors').get() as { id: string }).id, dueAt: due(), charge: 0 })
+    expect(getBillForReturn(plain.id).lines[0]).toMatchObject({ altered: true, returnable: 0 })
+    getDb().prepare("UPDATE alterations SET status='cancelled' WHERE id=?").run(j.id)
+    expect(getBillForReturn(plain.id).lines[0]).toMatchObject({ altered: false, returnable: 1 })
   })
 })
 

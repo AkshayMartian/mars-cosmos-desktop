@@ -123,3 +123,7 @@
 | 2026-11-13 | Placeholder note created | n/a (no git) |
 | 2026-11-13 | Returns, exchange, credit notes (issue, use, expiry), screen, tests | uncommitted |
 | 2026-11-16 | A return takes back the coins earned on the value returned (see [Coins](../coins/coins.md)) | uncommitted |
+
+## 2026-11-23: no return after an alteration
+
+An item that had an alteration job made on it (any job on that bill and item that is not cancelled, in any stage, including delivered) cannot be returned. The Returns screen shows "Altered: cannot be returned" in place of the quantity box, and `returns:doReturn` refuses with "<item> has been altered, so it cannot be returned." Cancel the job first if the work was never done and the item should come back. The whole bill line is blocked, even if it has several pieces and only one was altered. `ReturnLine.altered` carries the flag.

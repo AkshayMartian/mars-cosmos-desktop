@@ -120,10 +120,27 @@ describe('stock in', () => {
     expect(r[0]).toMatchObject({ supplier: null, billNo: null, qty: 2, total: 120_000 })
     expect(r[1]).toMatchObject({ supplier: 'Om Accessories', billNo: 'OM/1', qty: 4, total: 200_000 })
   })
+  it('product list: cost (lowest to highest) is for the owner and manager, hidden from the cashier', () => {
+    as('owner')
+    const id = createProduct(shirt()).id
+    const name = getProduct(id).name
+    getDb().prepare("UPDATE variants SET cost=cost+10000 WHERE id=(SELECT id FROM variants WHERE product_id=? LIMIT 1)").run(id)
+    const row = listProducts(name)[0]!
+    expect(row.cost).not.toBeNull()
+    expect(row.costMax! - row.cost!).toBe(10_000)
+    as('cashier')
+    expect(listProducts(name)[0]).toMatchObject({ cost: null, costMax: null })
+  })
   it('refuses a bad supplier GSTIN or an empty name', () => {
     as('store')
     expect(() => createSupplier({ name: 'X', gstin: '123' })).toThrow('15 letters')
     expect(() => createSupplier({ name: '  ' })).toThrow('supplier name')
+  })
+  it('mobile is optional, but when given it must be 10 digits (stored as digits only)', () => {
+    as('store')
+    for (const m of ['12345', '99090333445', 'abcdefghij', '5909033344']) expect(() => createSupplier({ name: 'M', mobile: m })).toThrow('Indian mobile')
+    expect(createSupplier({ name: 'No mobile', mobile: '  ' }).mobile).toBeNull()
+    expect(createSupplier({ name: 'Spaced', mobile: '99090 33344' }).mobile).toBe('9909033344')
   })
   it('rejects bad quantities and cashiers, and is all-or-nothing', () => {
     as('owner')

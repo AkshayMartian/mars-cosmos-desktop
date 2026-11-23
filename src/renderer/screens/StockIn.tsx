@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { formatRupees, toPaise } from '@shared/money'
 import { DUPLICATE_PURCHASE, type PurchaseRow, type SupplierDto, type VariantSearchRow } from '@shared/catalogue'
-import { fmtDay, Modal, num, useMsg, useScanFocus } from '../ui'
+import { cleanMobile } from '@shared/mobile'
+import { fmtDay, MobileHint, Modal, num, useMsg, useScanFocus } from '../ui'
 
 interface Line { v: VariantSearchRow; qty: string; cost: string; bunch?: string }
 const today = (): string => {
@@ -163,7 +164,7 @@ function SupplierModal({ onClose, onSaved }: { onClose: () => void; onSaved: (s:
       {node}
       <div className="f"><label htmlFor="su-n">Name</label><input id="su-n" autoFocus value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} onKeyDown={(e) => e.key === 'Enter' && void save()} /></div>
       <div className="row">
-        <div className="f"><label htmlFor="su-m">Mobile</label><input id="su-m" inputMode="numeric" value={f.mobile} onChange={(e) => setF({ ...f, mobile: e.target.value })} /></div>
+        <div className="f"><label htmlFor="su-m">Mobile</label><input id="su-m" inputMode="numeric" maxLength={10} placeholder="10 digits (optional)" value={f.mobile} onChange={(e) => setF({ ...f, mobile: cleanMobile(e.target.value) })} /><MobileHint value={f.mobile} /></div>
         <div className="f"><label htmlFor="su-g">GSTIN</label><input id="su-g" maxLength={15} value={f.gstin} onChange={(e) => setF({ ...f, gstin: e.target.value.toUpperCase() })} /></div>
       </div>
       <div className="mfoot"><button className="btn" onClick={onClose}>Cancel</button><button className="btn p" onClick={() => void save()}>Save</button></div>

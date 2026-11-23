@@ -168,7 +168,7 @@ export function Returns() {
                       : l.returnable > 0
                       ? <input type="number" min="0" max={l.returnable} aria-label={`Return quantity for ${l.name} ${l.colour} ${l.size}`} value={sel[l.id] ?? ''}
                           onChange={(e) => setSel({ ...sel, [l.id]: e.target.value })} />
-                      : <span className="sub">{l.service ? 'Service' : 'All returned'}</span>}</td>
+                      : <span className="sub">{l.service ? 'Service' : l.altered ? 'Altered: cannot be returned' : 'All returned'}</span>}</td>
                   </tr>
                 ))}</tbody>
               </table></div>

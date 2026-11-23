@@ -39,3 +39,15 @@ export function formatMonthDay(md: string | null): string {
 export function localDate(d: Date = new Date()): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
+
+/**
+ * Types a DD-MM date for the shop: keeps digits only, puts the dash in by itself, and adds the leading 0 when the
+ * first digit of the day (4-9) or of the month (2-9) could not start a two-digit number. "5" -> "05-", "2108" -> "21-08".
+ */
+export function autoDayMonth(raw: string): string {
+  let d = raw.replace(/\D/g, '').slice(0, 4)
+  if (d.length >= 1 && Number(d[0]) > 3) d = '0' + d
+  if (d.length >= 3 && Number(d[2]) > 1) d = d.slice(0, 2) + '0' + d.slice(2)
+  d = d.slice(0, 4)
+  return d.length > 2 ? `${d.slice(0, 2)}-${d.slice(2)}` : d.length === 2 && raw.endsWith('-') ? `${d}-` : d
+}

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { getDb } from '../db'
 import { variantLabel } from '@shared/catalogue'
+import { checkMobile } from '@shared/mobile'
 import type {
   AltConfig, AltContext, AltJobDto, AltKpis, AltList, AltStatus, DeliverInput, DeliverResult, GarmentChoice, NewAlterationInput, TailorDto, TailorInput
 } from '@shared/alterations'
@@ -70,8 +71,7 @@ export function alterationContext(): AltContext {
 /** Store staff cannot open the customer list, so the Alterations screen finds a customer here (name and mobile only). */
 export function findAltCustomer(mobile: string): { id: string; name: string; mobile: string } | null {
   requireRole(...ALL4)
-  const m = mobile.replace(/D/g, '')
-  if (m.length !== 10) throw new Error('Enter a 10-digit mobile number.')
+  const m = checkMobile(mobile)
   return (getDb().prepare('SELECT id,name,mobile FROM customers WHERE mobile=? AND deleted_at IS NULL').get(m) as { id: string; name: string; mobile: string } | undefined) ?? null
 }
 
@@ -189,13 +189,14 @@ export function saveTailor(input: TailorInput): TailorDto[] {
   if (!name) throw new Error('Type the tailor name.')
   if (!['In-house', 'Outside'].includes(input.kind)) throw new Error('Choose In-house or Outside.')
   if (!Number.isInteger(input.ratePerJob) || input.ratePerJob < 0) throw new Error('The rate per job cannot be negative.')
+  const tailorMobile = checkMobile(input.mobile, true)
   if (input.id) {
     if (!db.prepare('SELECT 1 FROM tailors WHERE id=?').get(input.id)) throw new Error('Tailor not found.')
     if (!input.active && db.prepare("SELECT 1 FROM alterations WHERE tailor_id=? AND status NOT IN ('delivered','cancelled')").get(input.id))
       throw new Error('This tailor still has open jobs. Finish or move them before making the tailor inactive.')
-    db.prepare('UPDATE tailors SET name=?,mobile=?,kind=?,rate_per_job=?,active=? WHERE id=?').run(name, input.mobile.trim(), input.kind, input.ratePerJob, input.active ? 1 : 0, input.id)
+    db.prepare('UPDATE tailors SET name=?,mobile=?,kind=?,rate_per_job=?,active=? WHERE id=?').run(name, tailorMobile, input.kind, input.ratePerJob, input.active ? 1 : 0, input.id)
   } else {
-    db.prepare('INSERT INTO tailors (id,name,mobile,kind,rate_per_job,active) VALUES (?,?,?,?,?,1)').run(randomUUID(), name, input.mobile.trim(), input.kind, input.ratePerJob)
+    db.prepare('INSERT INTO tailors (id,name,mobile,kind,rate_per_job,active) VALUES (?,?,?,?,?,1)').run(randomUUID(), name, tailorMobile, input.kind, input.ratePerJob)
   }
   audit(actor.id, 'tailor_save', { name, id: input.id ?? null })
   return listTailors()

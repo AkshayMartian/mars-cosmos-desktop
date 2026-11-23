@@ -5,7 +5,8 @@ import {
 } from '@shared/alterations'
 import type { CustomerDto, PayMode } from '@shared/billing'
 import type { StaffPublic } from '@shared/types'
-import { Modal, useMsg } from '../ui'
+import { cleanMobile, isIndianMobile } from '@shared/mobile'
+import { MobileHint, Modal, useMsg } from '../ui'
 import { AltFields, altFormCommon, altFormError, emptyAltForm, TagModal, type AltForm } from './AlterationForm'
 import { CustomerModal, OpeningModal, ReceiptModal } from './Billing'
 import type { BillDto, BillingContext } from '@shared/billing'
@@ -203,8 +204,8 @@ function NewAlteration({ ctx, onClose, onSaved }: { ctx: AltContext; onClose: ()
       <div className="row">
         <div className="f"><label htmlFor="an-m">Customer mobile</label>
           <input id="an-m" autoFocus inputMode="numeric" maxLength={10} value={mobile}
-            onChange={(e) => { const d = e.target.value.replace(/\D/g, ''); setMobile(d); setMiss(false); setCust(null); if (d.length === 10) void find(d) }}
-            onKeyDown={(e) => e.key === 'Enter' && void find()} /></div>
+            onChange={(e) => { const d = cleanMobile(e.target.value); setMobile(d); setMiss(false); setCust(null); if (isIndianMobile(d)) void find(d) }}
+            onKeyDown={(e) => e.key === 'Enter' && void find()} /><MobileHint value={mobile} /></div>
         <button className="btn" onClick={() => void find()}>Find</button>
       </div>
       {cust ? (
@@ -255,7 +256,7 @@ function TailorsModal({ ctx, onClose, onChanged }: { ctx: AltContext; onClose: (
       </table></div>
       <div className="row">
         <div className="f"><label htmlFor="tl-n">New tailor name</label><input id="tl-n" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></div>
-        <div className="f"><label htmlFor="tl-m">Mobile</label><input id="tl-m" value={f.mobile} onChange={(e) => setF({ ...f, mobile: e.target.value })} /></div>
+        <div className="f"><label htmlFor="tl-m">Mobile</label><input id="tl-m" inputMode="numeric" maxLength={10} value={f.mobile} onChange={(e) => setF({ ...f, mobile: cleanMobile(e.target.value) })} /><MobileHint value={f.mobile} /></div>
         <div className="f"><label htmlFor="tl-k">Type</label><select id="tl-k" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value as 'In-house' | 'Outside' })}><option>In-house</option><option>Outside</option></select></div>
         <div className="f"><label htmlFor="tl-c">Rate per job ₹</label><input id="tl-c" type="number" min="0" value={f.rate} onChange={(e) => setF({ ...f, rate: e.target.value })} /></div>
         <button className="btn" onClick={() => void add()}>Add tailor</button>

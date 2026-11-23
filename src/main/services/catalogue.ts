@@ -1,3 +1,4 @@
+import { likeAll } from './search'
 import { randomUUID } from 'node:crypto'
 import { getDb } from '../db'
 import { storeBarcode } from '@shared/barcode'
@@ -18,35 +19,39 @@ export function listCategories(): CategoryDto[] {
 
 /** `archived` = show only archived products (hidden from the normal list, billing and stock). */
 export function listProducts(q = '', categoryId = '', archived = false): ProductListRow[] {
-  const like = `%${q.trim()}%`
+  const m = likeAll(q, ['p.name', 'p.brand'])
+  const exact = q.trim()
   const rows = getDb()
     .prepare(
       `SELECT p.id,p.name,p.brand,p.category_id AS categoryId,c.name AS categoryName,
-              v.size,v.colour,v.mrp,COALESCE(s.qty,0) AS stock
+              v.size,v.colour,v.mrp,v.cost,COALESCE(s.qty,0) AS stock
        FROM products p
        JOIN categories c ON c.id=p.category_id
        JOIN variants v ON v.product_id=p.id
        LEFT JOIN v_stock s ON s.variant_id=v.id
-       WHERE p.active=@act AND c.is_service=0
-         AND (@cat='' OR p.category_id=@cat)
-         AND (@q='' OR p.name LIKE @like OR p.brand LIKE @like OR v.barcode=@q OR v.brand_barcode=@q)
+       WHERE p.active=? AND c.is_service=0
+         AND (?='' OR p.category_id=?)
+         AND (${m.sql} OR v.barcode=? OR v.brand_barcode=?)
        ORDER BY p.name, v.rowid`
     )
-    .all({ cat: categoryId, q: q.trim(), like, act: archived ? 0 : 1 }) as {
+    .all(archived ? 0 : 1, categoryId, categoryId, ...m.args, exact, exact) as {
     id: string; name: string; brand: string; categoryId: string; categoryName: string
-    size: string; colour: string; mrp: number; stock: number
+    size: string; colour: string; mrp: number; cost: number; stock: number
   }[]
+  const role = (() => { try { return current().role } catch { return null } })()
+  const seeCost = role === 'owner' || role === 'manager' // what the shop paid is not for the counter
 
   const out = new Map<string, ProductListRow>()
   for (const r of rows) {
     let p = out.get(r.id)
     if (!p) {
-      p = { id: r.id, name: r.name, brand: r.brand, categoryId: r.categoryId, categoryName: r.categoryName, sizes: [], colours: [], stock: 0, mrp: r.mrp }
+      p = { id: r.id, name: r.name, brand: r.brand, categoryId: r.categoryId, categoryName: r.categoryName, sizes: [], colours: [], stock: 0, mrp: r.mrp, cost: seeCost ? r.cost : null, costMax: seeCost ? r.cost : null }
       out.set(r.id, p)
     }
     if (!p.sizes.includes(r.size)) p.sizes.push(r.size)
     if (!p.colours.includes(r.colour)) p.colours.push(r.colour)
     p.stock += r.stock
+    if (seeCost) { p.cost = Math.min(p.cost!, r.cost); p.costMax = Math.max(p.costMax!, r.cost) }
   }
   return [...out.values()]
 }

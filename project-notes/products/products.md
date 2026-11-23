@@ -21,7 +21,7 @@
 | *Search name, brand or barcode* | text | Filters the list (also matches an exact barcode or brand barcode) |
 | *Category* | dropdown | Filters by category |
 | **Show archived** | checkbox (owner/manager) | Shows only archived products (hidden from billing and stock) |
-| Table row | click (owner/manager) | Opens Edit product. Columns: Product (+brand), Category, Sizes, Colours, Stock, MRP |
+| Table row | click (owner/manager) | Opens Edit product. Columns: Product (+brand), Category, Sizes, Colours, Stock, Cost (owner/manager only; one value, or lowest – highest when sizes differ), MRP |
 
 **Add product** (`ProductForm.tsx`): *Product name*, *Brand*, *Category* (shows HSN), *GST applies* switch (off = no GST, 0%, box locked) and *GST %* input (starts as the category's fixed rate; empty = follow the category, placeholder `Auto: 5% at this price`; a typed rate 0 to 28 is kept on the product, migration 7, and billing uses it), *MRP ₹*, *Sale price ₹* (blank = MRP), *Cost ₹*, *Sizes* (comma separated, default `S, M, L, XL`), *Colours* (comma separated, default `Blue`), **Pieces per bunch (optional)** (packs the opening stock into bunches with one barcode each, rest single; see Serial numbers), **Opening stock grid** (colour × size, optional), the **Photos panel** (one row per colour typed in the Colours field: thumbnail, colour name, file name, **Add photo** (becomes **Change** once there is one) and **✕** to remove; all sizes of a colour share that colour's photo; photos are optional), **Save**, **Save & print stickers** (saves; printing arrives later), **Back to products**. Text under the grid: "N items will be created."
 
@@ -71,9 +71,9 @@ IPC result `{ ok:true, data }` / `{ ok:false, error:"message" }`. Roles listed p
 - **Tables written:** `categories`, `audit_log` (`category_create`).
 
 ### `window.api.catalogue.products(q, categoryId, archived)` · `cat:products`
-- **Called from:** Products list. **Roles:** no check.
+- **Called from:** Products list. **Roles:** no check; `cost` and `costMax` are null unless the user is owner or manager.
 - **Request:** `{ "q":"shirt","categoryId":"","archived":false }`
-- **Response:** `[{ "id":"…","name":"Oxford Formal Shirt","brand":"Own","categoryId":"…","categoryName":"Shirts","sizes":["38","40","42","44"],"colours":["White","Sky"],"stock":37,"mrp":149900 }]`
+- **Response:** `[{ "id":"…","name":"Oxford Formal Shirt","brand":"Own","categoryId":"…","categoryName":"Shirts","sizes":["38","40","42","44"],"colours":["White","Sky"],"stock":37,"mrp":149900,"cost":78000,"costMax":78000 }]`
 - **Tables read:** `products, categories, variants, v_stock`. Active products only, or archived only when `archived=true`.
 - **Query:** `… WHERE p.active=@act AND c.is_service=0 AND (@cat='' OR p.category_id=@cat) AND (@q='' OR p.name LIKE @like OR p.brand LIKE @like OR v.barcode=@q OR v.brand_barcode=@q) ORDER BY p.name, v.rowid`; rows are grouped per product in code (sizes/colours de-duplicated, stock summed, MRP of the first variant).
 

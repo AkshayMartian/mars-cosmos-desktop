@@ -115,7 +115,7 @@ export interface BillDto {
   at: string
   staffName: string
   customer: { name: string; mobile: string | null; gstin: string | null; /** agreed to get the bill on WhatsApp */ waConsent?: boolean } | null
-  lines: { name: string; colour: string; size: string; qty: number; price: Paise; rate: number; total: Paise; hsn: string }[]
+  lines: { name: string; colour: string; size: string; qty: number; price: Paise; rate: number; total: Paise; hsn: string; /** this item's own discount (null on bills made before it was kept apart) */ itemDisc?: Paise | null }[]
   subtotal: Paise
   discount: Paise
   taxable: Paise

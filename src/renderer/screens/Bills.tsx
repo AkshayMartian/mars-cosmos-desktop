@@ -27,8 +27,10 @@ export function Bills(_props: { user: StaffPublic }) {
   const { run, setMsg, node } = useMsg()
   const { run: runP, node: printMsg } = useMsg()
 
+  const loadSeq = useRef(0)
   const load = useCallback(() => {
-    void run(() => window.api.bills.list(period, q)).then((r) => r && setRows(r))
+    const mine = ++loadSeq.current // an older, slower search must not replace a newer one
+    void run(() => window.api.bills.list(period, q)).then((r) => { if (r && mine === loadSeq.current) setRows(r) })
   }, [run, period, q])
   useEffect(() => { load() }, [load])
   useEffect(() => { void window.api.billing.context().then(setCtx, () => undefined) }, [])

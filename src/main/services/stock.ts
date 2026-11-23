@@ -1,3 +1,4 @@
+import { likeAll } from './search'
 import { randomUUID } from 'node:crypto'
 import { getDb } from '../db'
 import {
@@ -10,6 +11,7 @@ import type {
 import { checkApprover, isManager } from './approval'
 import { audit } from './auth'
 import { requireRole } from './session'
+import { checkMobile } from '@shared/mobile'
 import { createPieces, findBunch, bunchSerials, findPiece, isTracked, movePieces, pieceProblem, receiveBunches, resolveSticker, takeFree } from './serials'
 import { SERIAL_MSG, type PieceStatus } from '@shared/serials'
 
@@ -64,25 +66,23 @@ export function searchVariants(q: string): VariantSearchRow[] {
   const db = getDb()
   const exact = db.prepare(`${SEARCH_SELECT} AND (v.barcode=? OR v.brand_barcode=?)`).all(q, q) as SearchRaw[]
   if (exact.length) return exact.map(toSearchRow)
-  const like = `%${q}%`
-  return (db
-    .prepare(`${SEARCH_SELECT} AND (p.name LIKE ? OR p.brand LIKE ? OR v.colour LIKE ? OR v.size LIKE ? OR v.barcode LIKE ?) ORDER BY p.name LIMIT 12`)
-    .all(like, like, like, like, like) as SearchRaw[]).map(toSearchRow)
+  const m = likeAll(q, ['p.name', 'p.brand', 'v.colour', 'v.size', 'v.barcode'])
+  return (db.prepare(`${SEARCH_SELECT} AND ${m.sql} ORDER BY p.name LIMIT 12`).all(...m.args) as SearchRaw[]).map(toSearchRow)
 }
 
 export function stockLevels(q = '', lowOnly = false): StockRow[] {
-  const like = `%${q.trim()}%`
+  const m = likeAll(q, ['p.name', 'p.brand', 'v.colour', 'v.size', 'v.barcode'])
   const rows = getDb()
     .prepare(
       `SELECT v.id AS variantId,p.name,v.colour,v.size,v.barcode,COALESCE(s.qty,0) AS qty,v.min_stock AS minStock,v.cost,p.track_serials AS tracked
        FROM variants v JOIN products p ON p.id=v.product_id JOIN categories c ON c.id=p.category_id
        LEFT JOIN v_stock s ON s.variant_id=v.id
        WHERE p.active=1 AND c.is_service=0
-         AND (@q='' OR p.name LIKE @like OR p.brand LIKE @like OR v.colour LIKE @like OR v.size LIKE @like OR v.barcode LIKE @like)
-         AND (@low=0 OR COALESCE(s.qty,0)<=v.min_stock)
+         AND ${m.sql}
+         AND (?=0 OR COALESCE(s.qty,0)<=v.min_stock)
        ORDER BY p.name, v.rowid`
     )
-    .all({ q: q.trim(), like, low: lowOnly ? 1 : 0 }) as { variantId: string; name: string; colour: string; size: string; barcode: string; qty: number; minStock: number; cost: number; tracked: number }[]
+    .all(...m.args, lowOnly ? 1 : 0) as { variantId: string; name: string; colour: string; size: string; barcode: string; qty: number; minStock: number; cost: number; tracked: number }[]
   return rows.map((r) => ({
     variantId: r.variantId, label: variantLabel(r.name, r.colour, r.size), tracked: !!r.tracked, barcode: r.barcode,
     qty: r.qty, minStock: r.minStock, costValue: Math.max(0, r.qty) * r.cost
@@ -110,7 +110,8 @@ export function createSupplier(input: { name: string; mobile?: string; gstin?: s
   if (!name) throw new Error('Enter the supplier name.')
   const gstin = (input.gstin ?? '').trim().toUpperCase()
   if (gstin && !/^[0-9A-Z]{15}$/.test(gstin)) throw new Error('GSTIN must be 15 letters and numbers.')
-  const s = { id: randomUUID(), name, mobile: (input.mobile ?? '').trim() || null, gstin: gstin || null }
+  const mobile = checkMobile(input.mobile, true)
+  const s = { id: randomUUID(), name, mobile: mobile || null, gstin: gstin || null }
   getDb().prepare('INSERT INTO suppliers (id,name,mobile,gstin) VALUES (?,?,?,?)').run(s.id, s.name, s.mobile, s.gstin)
   audit(actor.id, 'supplier_create', { id: s.id })
   return s

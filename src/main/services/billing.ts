@@ -1,3 +1,4 @@
+import { likeAll } from './search'
 import { randomUUID } from 'node:crypto'
 import { getDb } from '../db'
 import { calc, type CalcLineInput } from '@shared/calc'
@@ -92,9 +93,8 @@ export function sellableSearch(q: string): SellableVariant[] {
   const db = getDb()
   const exact = db.prepare(`${SELL} AND (v.barcode=? OR v.brand_barcode=?)`).all(q, q) as SellRow[]
   if (exact.length) return exact.map(toSellable)
-  const like = `%${q}%`
-  return (db.prepare(`${SELL} AND (p.name LIKE ? OR p.brand LIKE ? OR v.colour LIKE ? OR v.size LIKE ? OR v.barcode LIKE ?) ORDER BY p.name, v.rowid LIMIT 8`)
-    .all(like, like, like, like, like) as SellRow[]).map(toSellable)
+  const m = likeAll(q, ['p.name', 'p.brand', 'v.colour', 'v.size', 'v.barcode'])
+  return (db.prepare(`${SELL} AND ${m.sql} ORDER BY p.name, v.rowid LIMIT 8`).all(...m.args) as SellRow[]).map(toSellable)
 }
 
 /** Names of archived products that match what was typed, so the screen can say "it is archived" instead of "not found". */
@@ -330,18 +330,18 @@ export function createBill(input: NewBillInput, internals: BillInternals = {}): 
     }
 
     const insLine = db.prepare(
-      `INSERT INTO bill_lines (bill_id,variant_id,name,size,colour,hsn,qty,mrp,price,discount,taxable,gst_rate,cgst,sgst,total)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      `INSERT INTO bill_lines (bill_id,variant_id,name,size,colour,hsn,qty,mrp,price,discount,taxable,gst_rate,cgst,sgst,total,item_disc)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     )
     for (const l of c.lines) {
       if (l.variantId === SERVICE) {
         const sv = ensureServiceVariant()
-        insLine.run(id, sv.variantId, 'Alteration charge', '—', 'Service', sv.hsn, 1, l.price, l.price, (l.disc ?? 0) + l.share, l.taxable, l.rate, l.cgst, l.sgst, l.net)
+        insLine.run(id, sv.variantId, 'Alteration charge', '—', 'Service', sv.hsn, 1, l.price, l.price, (l.disc ?? 0) + l.share, l.taxable, l.rate, l.cgst, l.sgst, l.net, l.disc ?? 0)
         continue // a service: no stock
       }
       const v = items.get(l.variantId)!
       const hsn = (db.prepare('SELECT c.hsn FROM variants v JOIN products p ON p.id=v.product_id JOIN categories c ON c.id=p.category_id WHERE v.id=?').get(l.variantId) as { hsn: string }).hsn
-      insLine.run(id, l.variantId, v.name, v.size, v.colour, hsn, l.qty, v.mrp, v.price, (l.disc ?? 0) + l.share, l.taxable, l.rate, l.cgst, l.sgst, l.net)
+      insLine.run(id, l.variantId, v.name, v.size, v.colour, hsn, l.qty, v.mrp, v.price, (l.disc ?? 0) + l.share, l.taxable, l.rate, l.cgst, l.sgst, l.net, l.disc ?? 0)
       addMove({ variantId: l.variantId, qty: -l.qty, type: 'sale', ref: no, staffId: actor.id, at })
       // serial numbers: each piece sold is marked sold and linked to this bill (a bunch links its pieces to the bunch too)
       const mine = pieces.get(l.variantId)
@@ -392,7 +392,7 @@ export function getBill(id: string): BillDto {
     ...(b.coinsUsed ? { coinValue: b.subtotal - b.discount - b.grand + b.roundOff } : {}),
     ...(custId && b.type === 'sale' ? { coinBalance: coinBalance(custId) } : {}),
     customer: cName ? { name: cName, mobile: cMobile, gstin: cGstin, waConsent: !!cWa } : null,
-    lines: db.prepare('SELECT name,colour,size,qty,price,gst_rate AS rate,total,hsn FROM bill_lines WHERE bill_id=? ORDER BY id').all(id) as BillDto['lines'],
+    lines: db.prepare('SELECT name,colour,size,qty,price,gst_rate AS rate,total,hsn,item_disc AS itemDisc FROM bill_lines WHERE bill_id=? ORDER BY id').all(id) as BillDto['lines'],
     payments: db.prepare('SELECT mode,amount FROM payments WHERE bill_id=? ORDER BY id').all(id) as BillDto['payments'],
     alterations: (db.prepare('SELECT id,no,work,due_at AS dueAt FROM alterations WHERE bill_id=? ORDER BY rowid').all(id) as { id: string; no: string; work: string; dueAt: string }[]).map((a) => ({ ...a, work: a.work.split(', ') }))
   }

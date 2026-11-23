@@ -36,7 +36,7 @@ function ProductList({ canEdit, notice, onNew, onOpen, onStickers }: { canEdit: 
   const { run, setMsg, node } = useMsg()
 
   useEffect(() => { void run(() => window.api.catalogue.categories()).then((c) => c && setCats(c)) }, [run, tick])
-  useEffect(() => { void run(() => window.api.catalogue.products(q, cat, archived)).then((r) => r && setRows(r)) }, [q, cat, archived, run, tick])
+  useEffect(() => { let stale = false; void run(() => window.api.catalogue.products(q, cat, archived)).then((r) => { if (r && !stale) setRows(r) }); return () => { stale = true } }, [q, cat, archived, run, tick])
 
   return (
     <>
@@ -70,13 +70,13 @@ function ProductList({ canEdit, notice, onNew, onOpen, onStickers }: { canEdit: 
         {rows.length ? (
           <div className="tw">
             <table>
-              <thead><tr><th>Product</th><th>Category</th><th>Sizes</th><th>Colours</th><th className="r">Stock</th><th className="r">MRP</th></tr></thead>
+              <thead><tr><th>Product</th><th>Category</th><th>Sizes</th><th>Colours</th><th className="r">Stock</th>{canEdit && <th className="r">Cost</th>}<th className="r">MRP</th></tr></thead>
               <tbody>
                 {rows.map((p) => (
                   <tr key={p.id} className={canEdit ? 'click' : ''} onClick={canEdit ? () => onOpen(p.id) : undefined}>
                     <td><b>{p.name}</b><div className="sub">{p.brand}</div></td>
                     <td>{p.categoryName}</td><td>{p.sizes.join(', ')}</td><td>{p.colours.join(', ')}</td>
-                    <td className="r num">{p.stock}</td><td className="r num">{formatRupees(p.mrp)}</td>
+                    <td className="r num">{p.stock}</td>{canEdit && <td className="r num">{p.cost === null ? '—' : p.cost === p.costMax ? formatRupees(p.cost) : `${formatRupees(p.cost)} – ${formatRupees(p.costMax!)}`}</td>}<td className="r num">{formatRupees(p.mrp)}</td>
                   </tr>
                 ))}
               </tbody>

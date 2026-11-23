@@ -16,6 +16,10 @@ const WHO = ['owner', 'manager', 'cashier'] as const
 /** SQL: this bill line is the alteration service charge (never returned, never stocked). */
 const SVC = "EXISTS (SELECT 1 FROM variants v JOIN products p ON p.id=v.product_id JOIN categories c ON c.id=p.category_id WHERE v.id=bill_lines.variant_id AND c.is_service=1)"
 
+/** SQL: an alteration job (not cancelled) was made on this item of this bill. An altered garment cannot come back. */
+const ALT = "EXISTS (SELECT 1 FROM alterations a WHERE a.bill_id=bill_lines.bill_id AND a.variant_id=bill_lines.variant_id AND a.status<>'cancelled')"
+const ALTERED_MSG = 'has been altered, so it cannot be returned. (Cancel the alteration job first if it was never done.)'
+
 const receiptSettings = () => getSetting<{ returnDays?: number; creditNoteDays?: number }>('receipt', {})
 const windowDays = (): number => receiptSettings().returnDays ?? 7
 export const returnWindowDays = windowDays
@@ -60,8 +64,8 @@ export function getBillForReturn(billId: string): BillForReturn {
   const b = loadBill(billId)
   const c = b.customer_id ? (getDb().prepare('SELECT id,name FROM customers WHERE id=?').get(b.customer_id) as { id: string; name: string } | undefined) : undefined
   const lines = getDb()
-    .prepare('SELECT id,variant_id AS variantId,name,colour,size,qty,returned_qty AS returned,total,' + SVC + ' AS service FROM bill_lines WHERE bill_id=? ORDER BY id')
-    .all(billId) as (Omit<ReturnLine, 'returnable' | 'service' | 'pieces'> & { service: number })[]
+    .prepare('SELECT id,variant_id AS variantId,name,colour,size,qty,returned_qty AS returned,total,' + SVC + ' AS service,' + ALT + ' AS altered FROM bill_lines WHERE bill_id=? ORDER BY id')
+    .all(billId) as (Omit<ReturnLine, 'returnable' | 'service' | 'pieces' | 'altered'> & { service: number; altered: number })[]
   const soldPieces = (variantId: string): string[] =>
     (getDb().prepare("SELECT serial FROM pieces WHERE bill_id=? AND variant_id=? AND status='sold' ORDER BY id").all(billId, variantId) as { serial: string }[]).map((p) => p.serial)
   const age = ageDays(b.at)
@@ -69,7 +73,7 @@ export function getBillForReturn(billId: string): BillForReturn {
   return {
     id: b.id, no: b.no, at: b.at, ageDays: age, windowDays: win, overWindow: age > win, needsApproval: age > win && !isManager(actor),
     customerId: c?.id ?? null, customerName: c?.name ?? null, grand: b.grand,
-    lines: lines.map((l) => ({ ...l, service: !!l.service, returnable: l.service ? 0 : l.qty - l.returned, pieces: l.service ? [] : soldPieces(l.variantId) }))
+    lines: lines.map((l) => ({ ...l, service: !!l.service, altered: !!l.altered, returnable: l.service || l.altered ? 0 : l.qty - l.returned, pieces: l.service || l.altered ? [] : soldPieces(l.variantId) }))
   }
 }
 
@@ -110,6 +114,7 @@ export function doReturn(input: ReturnInput): ReturnResult {
     if (!l) throw new Error('That item is not on this bill.')
     if ((db.prepare('SELECT ' + SVC + ' AS s FROM bill_lines WHERE id=?').get(id) as { s: number }).s)
       throw new Error('An alteration charge cannot be returned.')
+    if ((db.prepare('SELECT ' + ALT + ' AS a FROM bill_lines WHERE id=?').get(id) as { a: number }).a) throw new Error(`${l.name} ${l.colour} ${l.size} ${ALTERED_MSG}`)
     if (q > l.qty - l.returned) throw new Error(`Only ${l.qty - l.returned} of ${l.name} ${l.colour} ${l.size} can still be returned.`)
   }
   // serial numbers: a piece comes back by its serial, and only a piece that was sold on THIS bill

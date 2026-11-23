@@ -4,7 +4,8 @@ import type { AltContext, TailorDto } from '@shared/alterations'
 import { GST_SCHEMES, ROLE_NAMES, type AllSettings, type BackupInfo, type StaffAdminRow } from '@shared/settings'
 import { LABEL_SIZES } from '@shared/stickers'
 import type { GstScheme, Role } from '@shared/types'
-import { Modal, fmtDate, num, useMsg } from '../ui'
+import { cleanMobile } from '@shared/mobile'
+import { MobileHint, Modal, fmtDate, num, useMsg } from '../ui'
 
 const TABS = [['shop', 'Shop'], ['gst', 'GST'], ['receipt', 'Receipt'], ['printers', 'Printers'], ['coins', 'Coins'], ['staff', 'Staff'], ['alter', 'Alterations'], ['backup', 'Backup']] as const
 type Tab = (typeof TABS)[number][0]
@@ -280,7 +281,7 @@ function AlterTab() {
       </table></div>
       <div className="row">
         <div className="f"><label htmlFor="tl-n">New tailor name</label><input id="tl-n" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></div>
-        <div className="f"><label htmlFor="tl-m">Mobile</label><input id="tl-m" value={f.mobile} onChange={(e) => setF({ ...f, mobile: e.target.value })} /></div>
+        <div className="f"><label htmlFor="tl-m">Mobile</label><input id="tl-m" inputMode="numeric" maxLength={10} value={f.mobile} onChange={(e) => setF({ ...f, mobile: cleanMobile(e.target.value) })} /><MobileHint value={f.mobile} /></div>
         <div className="f"><label htmlFor="tl-k">Type</label><select id="tl-k" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value as 'In-house' | 'Outside' })}><option>In-house</option><option>Outside</option></select></div>
         <div className="f"><label htmlFor="tl-c">Rate per job ₹</label><input id="tl-c" type="number" min="0" value={f.rate} onChange={(e) => setF({ ...f, rate: e.target.value })} /></div>
         <button className="btn" onClick={() => void add()}>Add tailor</button>
@@ -309,7 +310,7 @@ function TailorModal({ t, onClose, onSaved }: { t: TailorDto; onClose: () => voi
       {node}
       <div className="row">
         <div className="f"><label htmlFor="te-n">Name</label><input id="te-n" autoFocus value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></div>
-        <div className="f"><label htmlFor="te-m">Mobile</label><input id="te-m" value={f.mobile} onChange={(e) => setF({ ...f, mobile: e.target.value })} /></div>
+        <div className="f"><label htmlFor="te-m">Mobile</label><input id="te-m" inputMode="numeric" maxLength={10} value={f.mobile} onChange={(e) => setF({ ...f, mobile: cleanMobile(e.target.value) })} /><MobileHint value={f.mobile} /></div>
       </div>
       <div className="row">
         <div className="f"><label htmlFor="te-k">Type</label><select id="te-k" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value as 'In-house' | 'Outside' })}><option>In-house</option><option>Outside</option></select></div>

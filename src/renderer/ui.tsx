@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode, type RefObject } from 'react'
+import { isIndianMobile, MOBILE_MSG } from '@shared/mobile'
 
 /** Dialog over the screen (prototype .scrim/.modal). Esc closes. */
 export function Modal({ title, wide, onClose, children }: { title: string; wide?: boolean; onClose: () => void; children: ReactNode }) {
@@ -103,3 +104,8 @@ export const num = (s: string): number => (s.trim() === '' ? 0 : Number(s))
 export const fmtDay = (iso: string): string => new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 export const fmtDate = (iso: string): string =>
   new Date(iso).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+
+/** Red hint under a mobile field once 10 digits are typed and they are not a valid Indian mobile (6, 7, 8 or 9 first). */
+export function MobileHint({ value }: { value: string }) {
+  return value.length === 10 && !isIndianMobile(value) ? <div className="sub" role="alert" style={{ color: 'var(--bad)', fontWeight: 600 }}>{MOBILE_MSG}</div> : null
+}

@@ -158,8 +158,8 @@ describe('customers on a bill', () => {
     expect(getDb().prepare('SELECT consent_by,consent_at FROM customers').get()).toMatchObject({ consent_by: id('cashier'), consent_at: expect.any(String) })
     expect(findCustomerByMobile('9876500045')?.name).toBe('Rahul Shah')
     expect(() => createCustomer({ mobile: '9876500045', name: 'Other', waConsent: false, offersConsent: false })).toThrow('already exists')
-    expect(() => createCustomer({ mobile: '123', name: 'X', waConsent: false, offersConsent: false })).toThrow('10 digits')
-    expect(() => findCustomerByMobile('12')).toThrow('10-digit')
+    expect(() => createCustomer({ mobile: '123', name: 'X', waConsent: false, offersConsent: false })).toThrow('Indian mobile')
+    expect(() => findCustomerByMobile('12')).toThrow('Indian mobile')
   })
   it('puts the customer on the receipt and the WhatsApp message', () => {
     const { shirt } = stockedShop()
