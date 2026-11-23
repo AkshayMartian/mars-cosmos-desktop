@@ -439,7 +439,7 @@ export function Billing({ user }: { user: StaffPublic }) {
 
       {ctx && !ctx.session && !skipOpen && <OpeningModal onStarted={() => void loadCtx()} onSkip={() => setSkipOpen(true)} />}
       {ctx && !ctx.session && skipOpen && <div className="banner bad" role="alert">The day has not been started, so bills cannot be saved. <button className="btn sm" onClick={() => setSkipOpen(false)}>Start the day</button></div>}
-      {dlg?.t === 'pay' && ctx && <PayModal preview={<BillPreview cart={cart} charges={charges} totals={totals} scheme={scheme} gstTotal={gstTotal} coinsN={coinsN} customer={customer} />} grand={totals.grand} creditBalance={notes.reduce((a, n) => a + n.balance, 0)} error={msg && !msg.ok ? msg.text : undefined} onBack={() => { setMsg(null); setDlg(null) }} onSave={saveBill} />}
+      {dlg?.t === 'pay' && ctx && <PayModal preview={<BillPreview amountsOnly cart={cart} charges={charges} totals={totals} scheme={scheme} gstTotal={gstTotal} coinsN={coinsN} customer={customer} />} grand={totals.grand} creditBalance={notes.reduce((a, n) => a + n.balance, 0)} error={msg && !msg.ok ? msg.text : undefined} onBack={() => { setMsg(null); setDlg(null) }} onSave={saveBill} />}
       {dlg?.t === 'approval' && ctx && (
         <ApprovalModal reasons={dlg.reasons} error={dlg.error} approvers={ctx.approvers}
           onCancel={() => setDlg(null)} onApprove={(a) => { approval.current = a; setDlg({ t: 'pay' }) }} />
@@ -703,9 +703,12 @@ function CustomerBox({ value, inputRef, onChange, onFind, onPick }: {
   )
 }
 
-/** What the customer is about to pay for, shown above the payment boxes: every item with its price, discount and amount, then every total. */
-function BillPreview({ compact, label = 'To pay', cart, charges, totals, scheme, gstTotal, coinsN, customer }: {
-  compact?: boolean; label?: string; cart: CartLine[]; charges: { v: SellableVariant; price: number }[]; totals: ReturnType<typeof calc>; scheme: string; gstTotal: number; coinsN: number; customer: CustomerDto | null
+/**
+ * The bill before payment. In the side panel (`compact`) each item with its discount, then the totals. In the Payment dialog
+ * (`amountsOnly`) only the amounts: the items are already on the screen behind it.
+ */
+function BillPreview({ compact, amountsOnly, label = 'To pay', cart, charges, totals, scheme, gstTotal, coinsN, customer }: {
+  compact?: boolean; amountsOnly?: boolean; label?: string; cart: CartLine[]; charges: { v: SellableVariant; price: number }[]; totals: ReturnType<typeof calc>; scheme: string; gstTotal: number; coinsN: number; customer: CustomerDto | null
 }) {
   const rows = [
     ...cart.map((l) => ({ key: l.key, name: l.v.name, detail: [l.v.colour, l.v.size].filter(Boolean).join(' · '), serials: l.bunch ? `bunch of ${l.qty}` : l.serials?.join(', ') ?? '', qty: l.qty, price: l.v.price, disc: toPaise(l.disc) })),
@@ -713,7 +716,7 @@ function BillPreview({ compact, label = 'To pay', cart, charges, totals, scheme,
   ]
   return (
     <div style={{ marginBottom: 12 }} aria-label="Bill preview">
-      {customer && !compact && <div className="sub" style={{ marginBottom: 6 }}>Customer: <b>{customer.name}</b></div>}
+      {customer && !compact && !amountsOnly && <div className="sub" style={{ marginBottom: 6 }}>Customer: <b>{customer.name}</b></div>}
       {compact && rows.length > 0 && (
         <div aria-label="Items on this bill" style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 8 }}>
           {rows.map((r) => (
@@ -728,7 +731,7 @@ function BillPreview({ compact, label = 'To pay', cart, charges, totals, scheme,
           ))}
         </div>
       )}
-      {!compact && <div className="tw" style={{ overflow: 'visible' }}>
+      {!compact && !amountsOnly && <div className="tw" style={{ overflow: 'visible' }}>
         <table>
           <thead><tr><th>Item</th><th className="r">Qty</th><th className="r">Price</th><th className="r">Discount</th><th className="r">Amount</th></tr></thead>
           <tbody>

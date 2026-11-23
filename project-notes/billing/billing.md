@@ -298,4 +298,4 @@ INSERT INTO payments (bill_id,mode,amount) VALUES (?,?,?);
 
 ## 2026-11-23: bill preview before payment
 
-The Payment dialog now opens with the whole bill above the payment boxes, so the customer can check it before paying: customer name, every item (name, colour and size, serial numbers or "bunch of N") with Qty, Price, Discount and Amount, any alteration charge, then Items, Subtotal, Item discounts, Bill discount, Coins, GST included, Round off and **To pay**. Display only; nothing is saved by it (`BillPreview` in `Billing.tsx`).
+The Payment dialog opens with the amounts only above the payment boxes: Items, Subtotal, Item discounts, Bill discount, Coins, GST included, Round off and **To pay**. The item list (names, serials, discounts) is not repeated there; it is in the side panel of the Billing screen. Display only; nothing is saved by it (`BillPreview` in `Billing.tsx`).
