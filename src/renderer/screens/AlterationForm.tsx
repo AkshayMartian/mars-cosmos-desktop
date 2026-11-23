@@ -5,6 +5,9 @@ import { Modal, useMsg } from '../ui'
 /** The form fields shared by the Billing cart-line dialog and the Alterations "New alteration" dialog. */
 export interface AltForm {
   work: string[]
+  /** the measurement or instruction for each type of work, by its name (only the ticked types are used) */
+  measures: Record<string, string>
+  /** anything else for the tailor */
   notes: string
   tailorId: string
   /** value of a datetime-local input */
@@ -25,23 +28,39 @@ export function defaultDue(days: number): string {
 }
 
 export const emptyAltForm = (ctx: AltContext): AltForm => ({
-  work: [], notes: '', tailorId: ctx.tailors.find((t) => t.active)?.id ?? '', due: defaultDue(ctx.cfg.dueDays), charge: ''
+  work: [], measures: {}, notes: '', tailorId: ctx.tailors.find((t) => t.active)?.id ?? '', due: defaultDue(ctx.cfg.dueDays), charge: ''
 })
+
+/**
+ * What the tailor reads: one entry per ticked type of work with its own measurement, then anything else.
+ * "Length: 39 inch; Waist: 32 inch; keep original hem". The types follow the order of the tick boxes, not the order they were ticked.
+ */
+export function altNotes(f: AltForm): string {
+  const parts = ALT_WORKS.filter((w) => f.work.includes(w)).map((w) => `${w}: ${(f.measures[w] ?? '').trim()}`)
+  return [...parts, f.notes.trim()].filter(Boolean).join('; ')
+}
 
 /** A message for the first problem with the form, or null. The main process checks everything again. */
 export function altFormError(f: AltForm): string | null {
   if (!f.tailorId) return 'Add a tailor first (Alterations → Tailors), then choose one.'
   if (!f.work.length) return 'Tick at least one type of work.'
+  const missing = ALT_WORKS.find((w) => f.work.includes(w) && !(f.measures[w] ?? '').trim())
+  if (missing) return `Add the measurement or instruction for ${missing}.`
   if (!f.due || Number.isNaN(new Date(f.due).getTime())) return 'Choose the ready-by date and time.'
   const c = Number(f.charge || 0)
   if (!(c >= 0) || !Number.isInteger(c)) return 'Enter the charge in whole rupees (0 = free).'
   return null
 }
 
-export const altFormCommon = (f: AltForm) => ({ work: f.work, notes: f.notes, tailorId: f.tailorId, dueAt: new Date(f.due).toISOString(), charge: toPaise(f.charge) })
+export const altFormCommon = (f: AltForm) => ({ work: ALT_WORKS.filter((w) => f.work.includes(w)), notes: altNotes(f), tailorId: f.tailorId, dueAt: new Date(f.due).toISOString(), charge: toPaise(f.charge) })
 
 export function billAlteration(variantId: string, f: AltForm, mode: 'bill' | 'pickup'): BillAlteration {
   return { variantId, ...altFormCommon(f), mode }
+}
+
+const HINTS: Record<string, string> = {
+  Length: 'e.g. 39 inch', Waist: 'e.g. take in 1 inch', Sleeves: 'e.g. shorten 1.5 inch', Fitting: 'e.g. slim the sides',
+  Hem: 'e.g. keep original hem', Buttons: 'e.g. replace 3', Other: 'what to do'
 }
 
 export function AltFields({ ctx, value, onChange }: { ctx: AltContext; value: AltForm; onChange: (f: AltForm) => void }) {
@@ -52,8 +71,12 @@ export function AltFields({ ctx, value, onChange }: { ctx: AltContext; value: Al
         <div className="works">{ALT_WORKS.map((w) => (
           <label key={w}><input type="checkbox" checked={value.work.includes(w)} onChange={(e) => set({ work: e.target.checked ? [...value.work, w] : value.work.filter((x) => x !== w) })} /> {w}</label>
         ))}</div></div>
-      <div className="f"><label htmlFor="al-notes">Measurements and instructions for the tailor</label>
-        <input id="al-notes" value={value.notes} placeholder="e.g. Length 39 inch, keep original hem" onChange={(e) => set({ notes: e.target.value })} /></div>
+      {ALT_WORKS.filter((w) => value.work.includes(w)).map((w) => (
+        <div className="f" key={w}><label htmlFor={`al-m-${w}`}>{w}: measurement or instruction</label>
+          <input id={`al-m-${w}`} value={value.measures[w] ?? ''} placeholder={HINTS[w]} onChange={(e) => set({ measures: { ...value.measures, [w]: e.target.value } })} /></div>
+      ))}
+      <div className="f"><label htmlFor="al-notes">Anything else for the tailor (optional)</label>
+        <input id="al-notes" value={value.notes} placeholder="e.g. keep the original stitching" onChange={(e) => set({ notes: e.target.value })} /></div>
       <div className="row">
         <div className="f"><label htmlFor="al-t">Tailor</label>
           <select id="al-t" value={value.tailorId} onChange={(e) => set({ tailorId: e.target.value })}>

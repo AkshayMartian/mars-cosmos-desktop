@@ -133,13 +133,12 @@ export function saveStaff(i: StaffSaveInput): StaffAdminRow[] {
   return listStaffAdmin()
 }
 
-/** The owner sets a new PIN for someone; that person must change it at the next login (the owner's own PIN is 6 digits). */
+/** The owner sets a new PIN for someone; that person must change it at the next login (every PIN is exactly 4 digits). */
 export function setStaffPin(staffId: string, pin: string): void {
   const a = owner()
   const s = getDb().prepare('SELECT role,name FROM staff WHERE id=?').get(staffId) as { role: Role; name: string } | undefined
   if (!s) throw new Error('Staff member not found.')
-  const len = s.role === 'owner' ? 6 : 4
-  if (!new RegExp(`^\\d{${len}}$`).test(pin)) throw new Error(`PIN must be ${len} digits.`)
+  if (!/^\d{4}$/.test(pin)) throw new Error('PIN must be 4 digits.')
   if (isWeakPin(pin)) throw new Error('Choose a PIN that is harder to guess.')
   getDb().prepare('UPDATE staff SET pin_hash=?,must_change_pin=?,failed_attempts=0,locked_until=0 WHERE id=?').run(hashPin(pin), staffId === a.id ? 0 : 1, staffId)
   audit(a.id, 'pin_change', { id: staffId, by: 'owner' })

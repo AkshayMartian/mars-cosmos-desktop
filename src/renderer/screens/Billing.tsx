@@ -491,7 +491,7 @@ export function ApprovalModal({ reasons, error, approvers, onCancel, onApprove }
       <div className="f"><label htmlFor="ap-who">Approved by</label>
         <select id="ap-who" value={who} onChange={(e) => setWho(e.target.value)}>{approvers.map((a) => <option key={a.id} value={a.id}>{a.name} ({a.role})</option>)}</select></div>
       <div className="f"><label htmlFor="ap">Their PIN</label>
-        <input id="ap" type="password" inputMode="numeric" maxLength={6} className="big" autoComplete="off" autoFocus value={pin}
+        <input id="ap" type="password" inputMode="numeric" maxLength={4} className="big" autoComplete="off" autoFocus value={pin}
           onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} onKeyDown={(e) => e.key === 'Enter' && go()} /></div>
       <div className="err" role="alert">{error ?? ''}</div>
       <div className="mfoot"><button className="btn" onClick={onCancel}>Cancel</button><button className="btn p" onClick={go}>Approve</button></div>

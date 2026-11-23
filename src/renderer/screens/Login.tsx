@@ -15,7 +15,7 @@ export function Login({ info, onDone }: { info: AppInfo | null; onDone: (s: Staf
 
   useEffect(() => { void window.api.auth.staff().then(setStaff) }, [])
 
-  const len = sel?.role === 'owner' ? 6 : 4
+  const len = 4 // every PIN is exactly 4 digits
 
   async function submit(value = pin) {
     if (!sel || busy.current) return
@@ -42,7 +42,7 @@ export function Login({ info, onDone }: { info: AppInfo | null; onDone: (s: Staf
     if (!sel || newPin) return
     const onKey = (e: KeyboardEvent) => {
       if (/INPUT|SELECT|TEXTAREA/.test((document.activeElement?.tagName ?? ''))) return
-      if (/^\d$/.test(e.key)) setPin((p) => (p.length < 6 ? p + e.key : p))
+      if (/^\d$/.test(e.key)) setPin((p) => (p.length < 4 ? p + e.key : p))
       else if (e.key === 'Backspace') setPin((p) => p.slice(0, -1))
       else if (e.key === 'Enter') void submit()
     }
@@ -83,9 +83,9 @@ export function Login({ info, onDone }: { info: AppInfo | null; onDone: (s: Staf
           <>
             <div className="dots" aria-label="PIN entered">{Array.from({ length: Math.max(4, pin.length) }, (_, i) => <i key={i} className={i < pin.length ? 'on' : ''} />)}</div>
             <div className="pad">
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => <button key={n} onClick={() => setPin((p) => (p.length < 6 ? p + n : p))}>{n}</button>)}
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => <button key={n} onClick={() => setPin((p) => (p.length < 4 ? p + n : p))}>{n}</button>)}
               <button aria-label="Delete" onClick={() => setPin((p) => p.slice(0, -1))}>⌫</button>
-              <button onClick={() => setPin((p) => (p.length < 6 ? p + '0' : p))}>0</button>
+              <button onClick={() => setPin((p) => (p.length < 4 ? p + '0' : p))}>0</button>
               <button className="ok" onClick={() => void submit()}>OK</button>
             </div>
           </>

@@ -117,9 +117,11 @@ describe('Staff', () => {
     setStaffPin(cashier, '7391')
     expect(login(cashier, '7391')).toMatchObject({ ok: true, mustChangePin: true })
     setCurrent(null); as('owner')
-    expect(() => setStaffPin(id('owner'), '1234')).toThrow('6 digits')
-    setStaffPin(id('owner'), '482915')
-    expect(login(id('owner'), '482915')).toMatchObject({ ok: true, mustChangePin: false })
+    expect(() => setStaffPin(id('owner'), '482915')).toThrow('4 digits') // every PIN is exactly 4 digits, the owner's too
+    expect(() => setStaffPin(id('owner'), '48291')).toThrow('4 digits')
+    expect(() => setStaffPin(id('owner'), '48a1')).toThrow('4 digits')
+    setStaffPin(id('owner'), '4829')
+    expect(login(id('owner'), '4829')).toMatchObject({ ok: true, mustChangePin: false })
   })
 })
 

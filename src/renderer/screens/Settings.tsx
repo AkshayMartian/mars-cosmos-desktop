@@ -232,9 +232,9 @@ function StaffModal({ form, onClose, onSaved }: { form: StaffForm; onClose: () =
       {!f.id && <div className="f"><label htmlFor="st-pin">PIN (4 digits) *</label><input id="st-pin" type="password" inputMode="numeric" maxLength={4} value={f.pin} onChange={(e) => setF({ ...f, pin: e.target.value.replace(/\D/g, '') })} />
         <div className="hint">They must choose their own PIN at the first login.</div></div>}
       {f.id && newPin !== null && (
-        <div className="f"><label htmlFor="st-np">New PIN ({isOwner ? '6' : '4'} digits)</label>
+        <div className="f"><label htmlFor="st-np">New PIN (4 digits)</label>
           <div style={{ display: 'flex', gap: 8 }}>
-            <input id="st-np" type="password" inputMode="numeric" maxLength={isOwner ? 6 : 4} autoFocus value={newPin} onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ''))} />
+            <input id="st-np" type="password" inputMode="numeric" maxLength={4} autoFocus value={newPin} onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ''))} />
             <button className="btn" onClick={() => void run(() => window.api.settings.setPin(f.id!, newPin), 'PIN changed.').then(() => setNewPin(null))}>Set PIN</button>
           </div></div>
       )}

@@ -79,13 +79,13 @@ All calls return `{ ok:true, data }` or `{ ok:false, error:"message" }` at the I
 
 ### `window.api.auth.changePin(pin)` · channel `auth:changePin`
 - **Called from:** "Set your own PIN" → Save · **Roles:** a user who has just logged in with a default PIN.
-- **Request:** `{ "pin":"731942" }` (owner, 6 digits) or `{ "pin":"7391" }` (others, 4 digits).
+- **Request:** `{ "pin":"7391" }` (every PIN, owner included, is exactly 4 digits).
 - **Response:** `{ "ok":true, "staff":{ "id":"…","name":"Cashier","role":"cashier" } }`
 
 | When | Message |
 |---|---|
 | no pending login | `Log in again first.` |
-| wrong length | `PIN must be 6 digits.` / `PIN must be 4 digits.` |
+| wrong length or not digits | `PIN must be 4 digits.` |
 | weak (0000, 1111, 2222, 3333, 4444, 1234, 123456, 111111, 000000, or one repeated digit) | `Choose a PIN that is harder to guess.` |
 
 - **Tables:** write `staff` (`pin_hash`, `must_change_pin=0`), `audit_log` (`pin_change`). **Steps:** check pending id → length → weak list → hash → update → activate session.
@@ -138,7 +138,7 @@ Seed (first run only): Owner 1111 (max discount 100, cancel ✔, price ✔) · M
 ## 6. Business rules
 
 - **Lockout:** 5 wrong PINs → account locked for 60 s (per staff member). The counter resets on a successful login.
-- **PIN length** when *changing*: owner 6, others 4. Login accepts 1–6 typed digits.
+- **PIN length** when changing: exactly 4 digits for everyone (owner included, since 2026-11-23). The login pad takes at most 4 typed digits.
 - **Default PINs** work without change while `FORCE_PIN_CHANGE=false` (`seed.ts`). Set to `true` before go-live (the change-PIN flow is built and tested).
 - **Session lives in the main process** (`session.ts`). A "pending" session (default PIN not changed) allows nothing but `changePin`.
 - **Idle lock:** 10 minutes (`security.idleMinutes`), checked every 20 s in the screen; it calls `logout`.
@@ -178,3 +178,7 @@ Seed (first run only): Owner 1111 (max discount 100, cancel ✔, price ✔) · M
 | 2026-11-13 | **K-01 fixed**: approver PIN lockout (5 wrong → 1 min, doubling to 15; per approver; separate from login), migration 3 `approval_attempts`, 13 tests | n/a |
 | 2026-11-16 | Only one copy of the app per PC (a second launch brings the open window forward) | uncommitted |
 | 2026-11-17 | Found in a full test: at the first login a new staff member could "change" their PIN to the same given PIN; now refused | uncommitted |
+
+## 2026-11-23: every PIN is exactly 4 digits
+
+The owner's PIN is no longer 6 digits: a PIN for anyone, owner included, must be exactly 4 digits (digits only), when a user sets their own (`auth:changePin`) and when the owner sets one for someone (`settings:setPin`, error `PIN must be 4 digits.`). The boxes accept digits only and stop at 4 (new PIN, confirm PIN, Settings → Staff, the approver's PIN dialog); the login pad takes at most 4. Weak PINs (0000, 1234, …) are still refused. A PIN of 6 digits made earlier no longer works at the login pad: set a new 4-digit one from Settings → Staff.

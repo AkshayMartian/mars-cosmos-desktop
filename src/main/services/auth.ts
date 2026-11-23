@@ -45,8 +45,7 @@ export function changePin(pin: string): { ok: boolean; error?: string; staff?: S
   const id = pending()
   if (!id) return { ok: false, error: 'Log in again first.' }
   const s = getDb().prepare('SELECT id,name,role FROM staff WHERE id=?').get(id) as StaffPublic
-  const len = s.role === 'owner' ? 6 : 4
-  if (!new RegExp(`^\\d{${len}}$`).test(pin)) return { ok: false, error: `PIN must be ${len} digits.` }
+  if (!/^\d{4}$/.test(pin)) return { ok: false, error: 'PIN must be 4 digits.' }
   if (isWeakPin(pin)) return { ok: false, error: 'Choose a PIN that is harder to guess.' }
   const old = getDb().prepare('SELECT pin_hash AS h FROM staff WHERE id=?').get(id) as { h: string }
   if (verifyPin(pin, old.h)) return { ok: false, error: 'Choose a different PIN: it cannot be the one you were given.' }

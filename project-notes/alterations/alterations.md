@@ -134,3 +134,7 @@
 ## 2026-11-23: one customer box on New alteration
 
 The New alteration dialog has the same single box as Billing (`src/renderer/CustomerBox.tsx`): type a 10-digit mobile and the customer loads by itself, or type a name / part of a number and a scrolling list appears (`alterations.customerSearch`, open to store staff too). Enter or Find on an empty box does nothing.
+
+## 2026-11-23: a measurement for each type of work
+
+The "Measurements and instructions" box was one line for every ticked type, so with Length and Waist both ticked it was unclear which number was which. Now each ticked type gets **its own box** ("Length: measurement or instruction", with an example), in the order of the tick boxes, plus an optional "Anything else for the tailor" box. Every ticked type needs its measurement ("Add the measurement or instruction for Waist."). What is saved in `alterations.notes` (and printed on the tag and slip) is one line: `Length: 39 inch; Waist: take in 1 inch; keep the stitching`. The same fields are on the Billing cart-line alteration dialog. Code: `altNotes` in `src/renderer/screens/AlterationForm.tsx`.
