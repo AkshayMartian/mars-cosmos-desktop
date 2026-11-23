@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { calc } from '@shared/calc'
 import { coinPaise, maxCoinsFor } from '@shared/coins'
-import { formatRupees, toPaise } from '@shared/money'
+import { cleanAmountInput, formatRupees, toPaise } from '@shared/money'
 import { sizesText, type CustomerListRow } from '@shared/customers'
 import { receiptText, whatsappText } from '@shared/receipt'
 import type { BillDto, BillingContext, BillLineInput, CustomerDto, HeldBillDto, PayMode, SellableVariant } from '@shared/billing'
@@ -157,9 +157,10 @@ export function Billing({ user }: { user: StaffPublic }) {
     const next = Math.max(1, l.qty + d)
     if (next > l.v.stock) return setMsg({ ok: false, text: `Only ${l.v.stock} of ${l.v.label} in stock.` })
     setMsg(null)
-    setCart((c) => c.map((x, j) => (j === i ? { ...x, qty: next } : x)))
+    setCart((c) => c.map((x, j) => (j === i ? { ...x, qty: next, disc: cleanAmountInput(x.disc, (x.v.price * next) / 100) } : x)))
   }
-  const setLineDisc = (i: number, v: string) => setCart((c) => c.map((l, j) => (j === i ? { ...l, disc: v } : l)))
+  // a discount is typed without a leading 0 and cannot be more than the line (or the bill) is worth
+  const setLineDisc = (i: number, v: string) => setCart((c) => c.map((l, j) => (j === i ? { ...l, disc: cleanAmountInput(v, (l.v.price * l.qty) / 100) } : l)))
   const remove = (i: number) => {
     const id = cart[i]?.v.id
     if (id && !cart.some((l, j) => j !== i && l.v.id === id)) setAlts((a) => { const { [id]: _gone, ...rest } = a; return rest })
@@ -354,7 +355,7 @@ export function Billing({ user }: { user: StaffPublic }) {
                     const line = cart[i]!
                     return (
                       <tr key={line.key}>
-                        <td style={{ minWidth: 300 }}>
+                        <td style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
                           <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                             <div className="thumb" aria-hidden={!photos[line.v.id]}>{photos[line.v.id] ? <img src={photos[line.v.id]!} alt={`${line.v.name} ${line.v.colour}`} /> : null}</div>
                             <div>
@@ -375,7 +376,7 @@ export function Billing({ user }: { user: StaffPublic }) {
                           ? <span className="num"><b>{line.qty}</b></span>
                           : <span className="qty"><button aria-label="Less" onClick={() => setQty(i, -1)}>−</button><span className="num">{line.qty}</span><button aria-label="More" onClick={() => setQty(i, 1)}>+</button></span>}</td>
                         <td className="r num">{formatRupees(line.v.price)}</td>
-                        <td className="r"><input type="number" min="0" aria-label="Line discount" value={line.disc} onChange={(e) => setLineDisc(i, e.target.value)} /></td>
+                        <td className="r"><input type="text" inputMode="decimal" autoComplete="off" placeholder="0" aria-label="Line discount" value={line.disc} onChange={(e) => setLineDisc(i, e.target.value)} /></td>
                         <td className="r num">{l.rate}%</td>
                         <td className="r num"><b>{formatRupees(l.net)}</b></td>
                         <td><button className="btn sm" aria-label="Remove" title="Remove the whole row" onClick={() => remove(i)}>✕</button></td>
@@ -435,7 +436,7 @@ export function Billing({ user }: { user: StaffPublic }) {
                 {ctx?.salespeople.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </div>
-            <div className="f"><label htmlFor="billDisc">Bill discount ₹</label><input id="billDisc" type="number" min="0" value={billDisc} onChange={(e) => setBillDisc(e.target.value)} /></div>
+            <div className="f"><label htmlFor="billDisc">Bill discount ₹</label><input id="billDisc" type="text" inputMode="decimal" autoComplete="off" placeholder="0" value={billDisc} onChange={(e) => setBillDisc(cleanAmountInput(e.target.value, (base.subtotal - base.lineDisc) / 100))} /></div>
             {ctx?.coins.on && customer && customer.coins > 0 && (
               <div className="f"><label htmlFor="coinsUse">Use coins (balance {customer.coins}, this bill up to {maxCoins})</label>
                 <div className="row" style={{ alignItems: 'center' }}>
@@ -443,16 +444,7 @@ export function Billing({ user }: { user: StaffPublic }) {
                   <button className="btn sm" disabled={maxCoins === 0} onClick={() => setCoinsUse(String(maxCoins))}>Use max</button>
                 </div></div>
             )}
-            <div className="tot">
-              <span>Items</span><span className="num">{totals.qty}</span>
-              <span>Subtotal</span><span className="num">{formatRupees(totals.subtotal)}</span>
-              {totals.lineDisc > 0 && <><span>Item discounts</span><span className="num">−{formatRupees(totals.lineDisc)}</span></>}
-              {totals.billDisc > 0 && <><span>Bill discount</span><span className="num">−{formatRupees(totals.billDisc)}</span></>}
-              {totals.coinValue > 0 && <><span>Coins ({coinsN})</span><span className="num">−{formatRupees(totals.coinValue)}</span></>}
-              <span className="sub">{scheme === 'regular' ? 'GST included' : 'Bill of supply (no GST)'}</span><span className="sub num">{formatRupees(gstTotal)}</span>
-              {totals.roundOff !== 0 && <><span className="sub">Round off</span><span className="sub num">{formatRupees(totals.roundOff)}</span></>}
-              <span className="g">Total</span><span className="g">{formatRupees(totals.grand)}</span>
-            </div>
+            <BillPreview compact cart={cart} charges={charges} totals={totals} scheme={scheme} gstTotal={gstTotal} coinsN={coinsN} customer={null} label="Total" />
             {approval.current && <span className="chip good">Approved by {ctx?.approvers.find((a) => a.id === approval.current?.staffId)?.name}</span>}
             <button className="btn p lg block" disabled={!cart.length || !ctx?.session} onClick={startPay}>Pay (F9)</button>
           </div>
@@ -461,7 +453,7 @@ export function Billing({ user }: { user: StaffPublic }) {
 
       {ctx && !ctx.session && !skipOpen && <OpeningModal onStarted={() => void loadCtx()} onSkip={() => setSkipOpen(true)} />}
       {ctx && !ctx.session && skipOpen && <div className="banner bad" role="alert">The day has not been started, so bills cannot be saved. <button className="btn sm" onClick={() => setSkipOpen(false)}>Start the day</button></div>}
-      {dlg?.t === 'pay' && ctx && <PayModal grand={totals.grand} creditBalance={notes.reduce((a, n) => a + n.balance, 0)} error={msg && !msg.ok ? msg.text : undefined} onBack={() => { setMsg(null); setDlg(null) }} onSave={saveBill} />}
+      {dlg?.t === 'pay' && ctx && <PayModal preview={<BillPreview cart={cart} charges={charges} totals={totals} scheme={scheme} gstTotal={gstTotal} coinsN={coinsN} customer={customer} />} grand={totals.grand} creditBalance={notes.reduce((a, n) => a + n.balance, 0)} error={msg && !msg.ok ? msg.text : undefined} onBack={() => { setMsg(null); setDlg(null) }} onSave={saveBill} />}
       {dlg?.t === 'approval' && ctx && (
         <ApprovalModal reasons={dlg.reasons} error={dlg.error} approvers={ctx.approvers}
           onCancel={() => setDlg(null)} onApprove={(a) => { approval.current = a; setDlg({ t: 'pay' }) }} />
@@ -522,7 +514,7 @@ export function ApprovalModal({ reasons, error, approvers, onCancel, onApprove }
 
 const MODES: { k: PayMode; label: string }[] = [{ k: 'cash', label: 'Cash' }, { k: 'upi', label: 'UPI' }, { k: 'card', label: 'Card' }]
 
-function PayModal({ grand, creditBalance, error, onBack, onSave }: { grand: number; creditBalance: number; error?: string; onBack: () => void; onSave: (p: { mode: PayMode; amount: number }[], credit: number) => Promise<void> }) {
+function PayModal({ preview, grand, creditBalance, error, onBack, onSave }: { preview?: ReactNode; grand: number; creditBalance: number; error?: string; onBack: () => void; onSave: (p: { mode: PayMode; amount: number }[], credit: number) => Promise<void> }) {
   const [amt, setAmt] = useState<Record<PayMode, string>>({ cash: String(grand / 100), upi: '', card: '' })
   const [recv, setRecv] = useState('')
   const [busy, setBusy] = useState(false)
@@ -539,6 +531,7 @@ function PayModal({ grand, creditBalance, error, onBack, onSave }: { grand: numb
   }
   return (
     <Modal title={`Payment · ${formatRupees(grand)}`} wide onClose={onBack}>
+      {preview}
       <div className="tw">
         <table><tbody>
           {MODES.map((m) => (
@@ -697,6 +690,61 @@ function CustomerSearch({ onPick }: { onPick: (c: CustomerListRow) => void }) {
           {!rows.length && <div className="sub" style={{ padding: '8px 12px' }}>{failed ? 'Could not search. Try again.' : 'No customer found.'}</div>}
         </div>
       )}
+    </div>
+  )
+}
+
+/** What the customer is about to pay for, shown above the payment boxes: every item with its price, discount and amount, then every total. */
+function BillPreview({ compact, label = 'To pay', cart, charges, totals, scheme, gstTotal, coinsN, customer }: {
+  compact?: boolean; label?: string; cart: CartLine[]; charges: { v: SellableVariant; price: number }[]; totals: ReturnType<typeof calc>; scheme: string; gstTotal: number; coinsN: number; customer: CustomerDto | null
+}) {
+  const rows = [
+    ...cart.map((l) => ({ key: l.key, name: l.v.name, detail: [l.v.colour, l.v.size].filter(Boolean).join(' · '), serials: l.bunch ? `bunch of ${l.qty}` : l.serials?.join(', ') ?? '', qty: l.qty, price: l.v.price, disc: toPaise(l.disc) })),
+    ...charges.map((c, i) => ({ key: 'alt' + i, name: 'Alteration charge', detail: c.v.label, serials: '', qty: 1, price: c.price, disc: 0 }))
+  ]
+  return (
+    <div style={{ marginBottom: 12 }} aria-label="Bill preview">
+      {customer && !compact && <div className="sub" style={{ marginBottom: 6 }}>Customer: <b>{customer.name}</b></div>}
+      {compact && rows.length > 0 && (
+        <div aria-label="Items on this bill" style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 8 }}>
+          {rows.map((r) => (
+            <div key={r.key} style={{ borderBottom: '1px solid var(--line)', paddingBottom: 6 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}><b>{r.name}</b><b className="num">{formatRupees(r.price * r.qty - r.disc)}</b></div>
+              <div className="sub">{r.detail}{r.serials ? <> · <span className="mono">{r.serials}</span></> : null}</div>
+              <div className="sub" style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                <span>{r.qty} × {formatRupees(r.price)} = {formatRupees(r.price * r.qty)}</span>
+                {r.disc > 0 && <span style={{ color: 'var(--good)', fontWeight: 600 }}>Item discount −{formatRupees(r.disc)}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {!compact && <div className="tw" style={{ overflow: 'visible' }}>
+        <table>
+          <thead><tr><th>Item</th><th className="r">Qty</th><th className="r">Price</th><th className="r">Discount</th><th className="r">Amount</th></tr></thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.key}>
+                <td><b>{r.name}</b><div className="sub">{r.detail}{r.serials ? <> · <span className="mono">{r.serials}</span></> : null}</div></td>
+                <td className="r num">{r.qty}</td>
+                <td className="r num">{formatRupees(r.price)}</td>
+                <td className="r num">{r.disc > 0 ? `−${formatRupees(r.disc)}` : '—'}</td>
+                <td className="r num"><b>{formatRupees(r.price * r.qty - r.disc)}</b></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>}
+      <div className="tot" style={compact ? undefined : { marginTop: 8 }}>
+        <span>Items</span><span className="num">{totals.qty}</span>
+        <span>Subtotal</span><span className="num">{formatRupees(totals.subtotal)}</span>
+        {totals.lineDisc > 0 && <><span>Item discounts</span><span className="num">−{formatRupees(totals.lineDisc)}</span></>}
+        {totals.billDisc > 0 && <><span>Bill discount</span><span className="num">−{formatRupees(totals.billDisc)}</span></>}
+        {totals.coinValue > 0 && <><span>Coins ({coinsN})</span><span className="num">−{formatRupees(totals.coinValue)}</span></>}
+        <span className="sub">{scheme === 'regular' ? 'GST included' : 'Bill of supply (no GST)'}</span><span className="sub num">{formatRupees(gstTotal)}</span>
+        {totals.roundOff !== 0 && <><span className="sub">Round off</span><span className="sub num">{formatRupees(totals.roundOff)}</span></>}
+        <span className="g">{label}</span><span className="g">{formatRupees(totals.grand)}</span>
+      </div>
     </div>
   )
 }

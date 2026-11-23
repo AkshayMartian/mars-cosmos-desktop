@@ -295,3 +295,7 @@ INSERT INTO payments (bill_id,mode,amount) VALUES (?,?,?);
 - The item table in Billing has no scroll box of its own any more: every row shows in full and the page scrolls.
 - **First print of a sale** (customer's copy) has the fuller design: `====` rules around the shop name and the TOTAL, an `ITEM / QTY x RATE / AMOUNT` heading, `Items n   Qty n`, `Subtotal` when there is a discount, and `You saved Rs X!` under the total. A **reprint** (Bills screen) keeps the plain layout with `** DUPLICATE **` on top. Return bills keep the plain layout. (`receiptText(..., copy)` in `src/shared/receipt.ts`.)
 - **All search boxes** (Billing, Stock in, Stock out, Stickers, Stock, Products, Customers, Bills, Returns' new item) now use one rule (`src/main/services/search.ts`): every word typed must match (name, brand, colour, size, barcode; for people name or mobile), in any order, so "blue slim" finds Slim Shirt in Blue. `%` and `_` typed by the user are ordinary characters. An older, slower search can no longer replace a newer one on Customers, Products, Stock and Bills.
+
+## 2026-11-23: bill preview before payment
+
+The Payment dialog now opens with the whole bill above the payment boxes, so the customer can check it before paying: customer name, every item (name, colour and size, serial numbers or "bunch of N") with Qty, Price, Discount and Amount, any alteration charge, then Items, Subtotal, Item discounts, Bill discount, Coins, GST included, Round off and **To pay**. Display only; nothing is saved by it (`BillPreview` in `Billing.tsx`).
