@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { calc } from '@shared/calc'
 import { coinPaise, maxCoinsFor } from '@shared/coins'
 import { cleanAmountInput, formatRupees, toPaise } from '@shared/money'
-import { sizesText, type CustomerListRow } from '@shared/customers'
+import { sizesText } from '@shared/customers'
 import { receiptText, whatsappText } from '@shared/receipt'
 import type { BillDto, BillingContext, BillLineInput, CustomerDto, HeldBillDto, PayMode, SellableVariant } from '@shared/billing'
 import { SERIAL_MSG } from '@shared/serials'
@@ -11,6 +11,7 @@ import type { AltContext, AltJobDto } from '@shared/alterations'
 import { AltFields, altFormError, billAlteration, emptyAltForm, TagModal, type AltForm } from './AlterationForm'
 import type { StaffPublic } from '@shared/types'
 import { CustomerForm } from './Customers'
+import { CustomerBox } from '../CustomerBox'
 import { removeScannedPiece } from '@shared/serials'
 import { cleanMobile, isIndianMobile } from '@shared/mobile'
 import { fmtDate, MobileHint, Modal, useMsg, useScanFocus } from '../ui'
@@ -400,7 +401,7 @@ export function Billing({ user }: { user: StaffPublic }) {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div className="panel">
-            <CustomerBox value={mobile} inputRef={mobileRef} onChange={(t) => { setMobile(t); setMiss(false) }} onFind={(n) => void findCustomer(n)} onPick={(cu) => { setMobile(cu.mobile); setMiss(false); void findCustomer(cu.mobile) }} />
+            <CustomerBox search={(q) => window.api.customers.list(q)} value={mobile} inputRef={mobileRef} onChange={(t) => { setMobile(t); setMiss(false) }} onFind={(n) => void findCustomer(n)} onPick={(cu) => { setMobile(cu.mobile); setMiss(false); void findCustomer(cu.mobile) }} />
             {customer ? (
               <div className="cust">
                 <b>{customer.name}</b>
@@ -626,80 +627,6 @@ function AltCartModal({ ctx, label, customerName, draft, onClose, onSave, onRemo
       <div className="err" role="alert">{err}</div>
       <div className="mfoot">{draft && <button className="btn danger" onClick={onRemove}>Remove alteration</button>}<button className="btn" onClick={onClose}>Cancel</button><button className="btn p" onClick={save}>Save alteration</button></div>
     </Modal>
-  )
-}
-
-/**
- * ONE box for the customer: type a 10-digit mobile (the customer loads by itself as soon as it is a valid number) or a name /
- * part of a number (a list that scrolls; pick with the mouse or Up / Down / Enter). F4 focuses it.
- */
-function CustomerBox({ value, inputRef, onChange, onFind, onPick }: {
-  value: string; inputRef: React.RefObject<HTMLInputElement | null>; onChange: (text: string) => void; onFind: (number: string) => void; onPick: (c: CustomerListRow) => void
-}) {
-  const [rows, setRows] = useState<CustomerListRow[]>([])
-  const [open, setOpen] = useState(false)
-  const [at, setAt] = useState(0)
-  const [failed, setFailed] = useState(false)
-  const seq = useRef(0)
-  const listRef = useRef<HTMLDivElement>(null)
-  const numeric = /^[\d\s+-]*$/.test(value) // digits (a number) or letters (a name)
-
-  useEffect(() => {
-    const text = value.trim()
-    if (!text) { setRows([]); setFailed(false); return }
-    const mine = ++seq.current
-    const t = setTimeout(() => {
-      window.api.customers.list(text)
-        .then((r) => { if (mine === seq.current) { setRows(r.slice(0, 100)); setAt(0); setFailed(false) } })
-        .catch(() => { if (mine === seq.current) { setRows([]); setFailed(true) } })
-    }, 150)
-    return () => clearTimeout(t)
-  }, [value])
-  useEffect(() => { (listRef.current?.children[at] as HTMLElement | undefined)?.scrollIntoView({ block: 'nearest' }) }, [at])
-
-  const pick = (c: CustomerListRow) => { setRows([]); setOpen(false); onPick(c) }
-  const change = (raw: string) => {
-    const text = /^[\d\s+-]*$/.test(raw) ? cleanMobile(raw) : raw // a number is cleaned and capped at 10 digits; a name is left as typed
-    onChange(text)
-    setOpen(true)
-    if (isIndianMobile(text)) onFind(text) // the card (with sizes) appears as soon as the number is complete
-  }
-  const go = () => { // Enter or Find
-    if (isIndianMobile(value)) return onFind(value)
-    if (open && rows[at]) return pick(rows[at]!)
-    if (numeric) onFind(value) // a short number: the screen says what is wrong
-  }
-  const onKey = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setAt((i) => Math.min(rows.length - 1, i + 1)) }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); setAt((i) => Math.max(0, i - 1)) }
-    else if (e.key === 'Enter') { e.preventDefault(); go() }
-    else if (e.key === 'Escape') setOpen(false)
-  }
-  const showList = open && value.trim() !== '' && !isIndianMobile(value)
-  return (
-    <div style={{ position: 'relative' }}>
-      <div className="row">
-        <div className="f" style={{ flex: 1 }}>
-          <label htmlFor="custMobile">Customer mobile or name (F4)</label>
-          <input id="custMobile" ref={inputRef} autoComplete="off" placeholder="10-digit mobile, or type a name" value={value} role="combobox" aria-expanded={showList && rows.length > 0} aria-controls="custResults"
-            onChange={(e) => change(e.target.value)} onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 120)} onKeyDown={onKey} />
-          {numeric && <MobileHint value={value} />}
-        </div>
-        <button className="btn" onClick={go}>Find</button>
-      </div>
-      {showList && (
-        <div id="custResults" ref={listRef} role="listbox" aria-label="Matching customers"
-          style={{ position: 'absolute', left: 0, right: 0, top: '100%', zIndex: 20, maxHeight: 220, overflowY: 'auto', background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 10, boxShadow: '0 6px 18px rgba(0,0,0,.18)' }}>
-          {rows.map((c, i) => (
-            <div key={c.id} role="option" aria-selected={i === at} onMouseDown={(e) => { e.preventDefault(); pick(c) }} onMouseEnter={() => setAt(i)}
-              style={{ padding: '8px 12px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', gap: 12, background: i === at ? 'var(--sunk)' : undefined }}>
-              <b>{c.name}</b><span className="sub mono">{c.mobile}</span>
-            </div>
-          ))}
-          {!rows.length && <div className="sub" style={{ padding: '8px 12px' }}>{failed ? 'Could not search. Try again.' : 'No customer found.'}</div>}
-        </div>
-      )}
-    </div>
   )
 }
 

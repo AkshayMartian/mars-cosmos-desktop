@@ -50,6 +50,9 @@
 ### `window.api.alterations.customer(mobile)` · channel `alt:customer`
 - **Roles:** same (store staff cannot use the Customers calls). **Response:** `{ id, name, mobile } | null`. **Error:** "Enter a 10-digit mobile number."
 
+### `window.api.alterations.customerSearch(q)` · channel `alt:customerSearch`
+- **Roles:** same as `customer` (owner, manager, cashier, store). **Request:** `{ "q":"rah" }` (every word must match the name or part of the mobile; blank = everyone) · **Response:** up to 100 `{ id, name, mobile }`, by name. **Tables read:** `customers` (not deleted, with a mobile). Used by the one customer box on the New alteration dialog (type a mobile or a name; the list scrolls).
+
 ### `window.api.alterations.garments(customerId)` · channel `alt:garments`
 - **Response:** the customer's last 12 sold items `[{ key, billId, variantId, label }]` (service lines excluded).
 
@@ -127,3 +130,7 @@
 |---|---|---|
 | 2026-11-13 | Placeholder note created | n/a (no git) |
 | 2026-11-13 | Alterations screen, Billing ✂ button, jobs with bills, collect and hand over, tailors and rules, migration 5 (`gst_rate`), tests | uncommitted |
+
+## 2026-11-23: one customer box on New alteration
+
+The New alteration dialog has the same single box as Billing (`src/renderer/CustomerBox.tsx`): type a 10-digit mobile and the customer loads by itself, or type a name / part of a number and a scrolling list appears (`alterations.customerSearch`, open to store staff too). Enter or Find on an empty box does nothing.

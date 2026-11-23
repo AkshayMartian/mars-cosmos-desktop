@@ -11,6 +11,7 @@ import { alterationConfig, checkJobInput, insertJob } from './altcore'
 import { isManager } from './approval'
 import { requireRole } from './session'
 import { getSetting } from './settings'
+import { likeAll } from './search'
 
 const ALL4 = ['owner', 'manager', 'cashier', 'store'] as const
 const SELLERS = ['owner', 'manager', 'cashier'] as const
@@ -73,6 +74,13 @@ export function findAltCustomer(mobile: string): { id: string; name: string; mob
   requireRole(...ALL4)
   const m = checkMobile(mobile)
   return (getDb().prepare('SELECT id,name,mobile FROM customers WHERE mobile=? AND deleted_at IS NULL').get(m) as { id: string; name: string; mobile: string } | undefined) ?? null
+}
+
+/** Customers by name or part of a mobile, for the box on the New alteration dialog (name and mobile only; store staff may use it). */
+export function searchAltCustomers(q: string): { id: string; name: string; mobile: string }[] {
+  requireRole(...ALL4)
+  const m = likeAll(q, ['name', 'mobile'])
+  return getDb().prepare(`SELECT id,name,mobile FROM customers WHERE deleted_at IS NULL AND mobile IS NOT NULL AND ${m.sql} ORDER BY name LIMIT 100`).all(...m.args) as { id: string; name: string; mobile: string }[]
 }
 
 /** The garments of this customer's recent bills, for "which item is the job for". */

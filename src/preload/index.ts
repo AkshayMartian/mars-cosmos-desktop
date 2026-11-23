@@ -72,6 +72,7 @@ const api = {
     byBill: (billId: string) => call<AltJobDto[]>('alt:byBill', billId),
     context: () => call<AltContext>('alt:context'),
     customer: (mobile: string) => call<{ id: string; name: string; mobile: string } | null>('alt:customer', mobile),
+    customerSearch: (q: string) => call<{ id: string; name: string; mobile: string }[]>('alt:customerSearch', q),
     garments: (customerId: string) => call<GarmentChoice[]>('alt:garments', customerId),
     create: (input: NewAlterationInput) => call<AltJobDto>('alt:create', input),
     advance: (id: string) => call<AltJobDto>('alt:advance', id),

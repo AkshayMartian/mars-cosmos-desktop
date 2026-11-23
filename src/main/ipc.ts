@@ -80,6 +80,7 @@ export function registerIpc(): void {
   h('alt:byBill', alterations.jobsByBill)
   h('alt:context', alterations.alterationContext)
   h('alt:customer', alterations.findAltCustomer)
+  h('alt:customerSearch', alterations.searchAltCustomers)
   h('alt:garments', alterations.customerGarments)
   h('alt:create', alterations.createAlteration)
   h('alt:advance', alterations.advanceAlteration)

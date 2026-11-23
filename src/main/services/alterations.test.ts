@@ -4,7 +4,7 @@ import { readyMessage, slipText, tagLines } from '@shared/alterations'
 import { receiptText } from '@shared/receipt'
 import { getDb, openDb } from '../db'
 import {
-  advanceAlteration, alterationContext, createAlteration, customerGarments, deliverAlteration, findAltCustomer, jobsByBill, listAlterations, listTailors, saveAlterationConfig, saveTailor
+  advanceAlteration, alterationContext, createAlteration, customerGarments, deliverAlteration, findAltCustomer, searchAltCustomers, jobsByBill, listAlterations, listTailors, saveAlterationConfig, saveTailor
 } from './alterations'
 import { billingContext, createBill, getBill, openDay } from './billing'
 import { cancelBill } from './bills'
@@ -165,6 +165,17 @@ describe('jobs made from the Alterations screen', () => {
     expect(g).toMatchObject({ billId: b.id, label: 'Slim Shirt · Blue · M (bill ' + b.no + ')' })
     const j = createAlteration({ customerId: cust.id, billId: g!.billId, variantId: g!.variantId, ownItem: '', work: ['Sleeves', 'Fitting'], notes: '', tailorId: tailor.id, dueAt: due(), charge: 12_000 })
     expect(j).toMatchObject({ chargeMode: 'pickup', paid: false, billNo: b.no, work: ['Sleeves', 'Fitting'] })
+  })
+
+  it('finds customers by name words or part of a mobile, for store staff too', () => {
+    const { cust } = setup()
+    createCustomer({ mobile: '9876500046', name: 'Rahul Mehta', waConsent: false, offersConsent: false })
+    as('store')
+    expect(searchAltCustomers('rahul').map((c) => c.name)).toEqual(['Rahul Mehta', 'Rahul Shah'])
+    expect(searchAltCustomers('rahul sh').map((c) => c.id)).toEqual([cust.id])
+    expect(searchAltCustomers('00046').map((c) => c.name)).toEqual(['Rahul Mehta'])
+    expect(searchAltCustomers('%')).toHaveLength(0)
+    expect(searchAltCustomers('zzz')).toEqual([])
   })
 
   it('checks what is typed', () => {

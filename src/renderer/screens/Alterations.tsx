@@ -7,6 +7,7 @@ import type { CustomerDto, PayMode } from '@shared/billing'
 import type { StaffPublic } from '@shared/types'
 import { cleanMobile, isIndianMobile } from '@shared/mobile'
 import { MobileHint, Modal, useMsg } from '../ui'
+import { CustomerBox } from '../CustomerBox'
 import { AltFields, altFormCommon, altFormError, emptyAltForm, TagModal, type AltForm } from './AlterationForm'
 import { CustomerModal, OpeningModal, ReceiptModal } from './Billing'
 import type { BillDto, BillingContext } from '@shared/billing'
@@ -201,13 +202,9 @@ function NewAlteration({ ctx, onClose, onSaved }: { ctx: AltContext; onClose: ()
   return (
     <Modal title="New alteration" wide onClose={onClose}>
       {node}
-      <div className="row">
-        <div className="f"><label htmlFor="an-m">Customer mobile</label>
-          <input id="an-m" autoFocus inputMode="numeric" maxLength={10} value={mobile}
-            onChange={(e) => { const d = cleanMobile(e.target.value); setMobile(d); setMiss(false); setCust(null); if (isIndianMobile(d)) void find(d) }}
-            onKeyDown={(e) => e.key === 'Enter' && void find()} /><MobileHint value={mobile} /></div>
-        <button className="btn" onClick={() => void find()}>Find</button>
-      </div>
+      <CustomerBox autoFocus label="Customer mobile or name" search={(q) => window.api.alterations.customerSearch(q)} value={mobile}
+        onChange={(t) => { setMobile(t); setMiss(false); setCust(null) }} onFind={(n) => void find(n)}
+        onPick={(c) => { setMobile(c.mobile); setMiss(false); void find(c.mobile) }} />
       {cust ? (
         <>
           <div className="cust"><b>{cust.name}</b><span className="sub">{cust.mobile}</span></div>
@@ -225,7 +222,7 @@ function NewAlteration({ ctx, onClose, onSaved }: { ctx: AltContext; onClose: ()
           <div>{ctx.canCollect ? <button className="btn sm p" onClick={() => setAdding(true)}>Add customer</button> : <span className="sub">Ask the counter to add the customer first.</span>}</div></div>
       ) : <div className="hint">Find the customer first. The tag and the ready message need their mobile.</div>}
       <div className="mfoot"><button className="btn" onClick={onClose}>Cancel</button>{cust && <button className="btn p" onClick={() => void save()}>Save and print tag</button>}</div>
-      {adding && <CustomerModal mobile={mobile} onClose={() => setAdding(false)} onSaved={(c: CustomerDto) => { setAdding(false); setMobile(c.mobile); void find(c.mobile) }} />}
+      {adding && <CustomerModal mobile={isIndianMobile(mobile) ? mobile : ''} onClose={() => setAdding(false)} onSaved={(c: CustomerDto) => { setAdding(false); setMobile(c.mobile); void find(c.mobile) }} />}
     </Modal>
   )
 }
