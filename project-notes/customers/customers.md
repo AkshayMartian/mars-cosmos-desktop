@@ -162,3 +162,10 @@ Schema: see README section 7. `customers.sizes` (migration 4) holds the JSON. Th
 | 2026-11-12 | Sizes made dynamic per category; migration 2 (`customer_sizes`) | n/a |
 | 2026-11-13 | **Usual sizes are now three fixed plain-text boxes** (shirt, trouser, shoe) stored as JSON in `customers.sizes` (schema v4); heading "Customer's usual sizes (optional)" with a hint and placeholders; per-category boxes and `customers:sizeFields` removed (D-27); Billing customer card shows the sizes and finds the customer as soon as 10 digits are typed | n/a |
 | 2026-11-16 | Profile shows coins and unused credit note balance | uncommitted |
+
+## 2026-11-23: birthday and anniversary are DD-MM-YYYY
+
+- The boxes are typed as **DD-MM-YYYY** (`21-08-1990`), 10 characters, and stored as `YYYY-MM-DD` (`1990-08-21`). The year starts 19 or 20 (from 1900); a date in the future is refused and its last digit cannot be typed; 29 Feb needs a leap year.
+- Only digits that can be part of a real date are accepted while typing: a day of 32 or more, `00`, a month of 13 or more, or 31 in a 30-day month cannot be typed. `5` becomes `05`. A red hint shows for a date that does not exist, and "Add the year" when the year is missing.
+- Customers saved before this keep their `MM-DD` (no year) and still show as `21-08`; they can be saved unchanged, and any new or changed date needs the year. The "today's birthdays" panel compares the month and day only (`substr(...,-5)`). The profile shows "21 Aug 1990" (or "21 Aug" with no year).
+- Code: `src/shared/birthdate.ts` (`autoDate`, `parseBirthDate`, `toBirthInput`, `showBirthDate`, `monthDayOf`). The older `dates.ts` day-month helpers remain for legacy values.

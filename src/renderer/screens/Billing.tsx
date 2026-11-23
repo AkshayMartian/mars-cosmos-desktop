@@ -400,21 +400,7 @@ export function Billing({ user }: { user: StaffPublic }) {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div className="panel">
-            <div className="row">
-              <div className="f" style={{ flex: 1 }}>
-                <label htmlFor="custMobile">Customer mobile (F4)</label>
-                <input id="custMobile" ref={mobileRef} inputMode="numeric" maxLength={10} placeholder="10-digit mobile" value={mobile}
-                  onChange={(e) => {
-                    const digits = cleanMobile(e.target.value)
-                    setMobile(digits); setMiss(false)
-                    if (isIndianMobile(digits)) void findCustomer(digits) // the card (with sizes) appears as soon as the number is complete
-                  }}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void findCustomer() } }} />
-                <MobileHint value={mobile} />
-              </div>
-              <button className="btn" onClick={() => void findCustomer()}>Find</button>
-            </div>
-            {!customer && <CustomerSearch onPick={(c) => { setMobile(c.mobile); setMiss(false); void findCustomer(c.mobile) }} />}
+            <CustomerBox value={mobile} inputRef={mobileRef} onChange={(t) => { setMobile(t); setMiss(false) }} onFind={(n) => void findCustomer(n)} onPick={(cu) => { setMobile(cu.mobile); setMiss(false); void findCustomer(cu.mobile) }} />
             {customer ? (
               <div className="cust">
                 <b>{customer.name}</b>
@@ -467,7 +453,7 @@ export function Billing({ user }: { user: StaffPublic }) {
           onRemove={() => { setAlts((a) => { const { [line.v.id]: _gone, ...rest } = a; return rest }); setDlg(null) }} />
       })()}
       {dlg?.t === 'held' && <HeldModal onClose={() => setDlg(null)} onResume={(h) => void resume(h)} />}
-      {dlg?.t === 'customer' && <CustomerModal mobile={mobile} onClose={() => setDlg(null)} onSaved={(c) => { setCustomer(c); setMobile(c.mobile); setMiss(false); setDlg(null) }} />}
+      {dlg?.t === 'customer' && <CustomerModal mobile={isIndianMobile(mobile) ? mobile : ''} onClose={() => setDlg(null)} onSaved={(c) => { setCustomer(c); setMobile(c.mobile); setMiss(false); setDlg(null) }} />}
       {dlg?.t === 'receipt' && ctx && <ReceiptModal bill={dlg.bill} ctx={ctx} onNew={() => { setDlg(null); clearBill(); void loadCtx(); void loadHeld() }} />}
     </>
   )
@@ -643,18 +629,23 @@ function AltCartModal({ ctx, label, customerName, draft, onClose, onSave, onRemo
   )
 }
 
-/** Find a customer by name or by any part of the mobile: a list that scrolls, picked with the mouse or Up / Down / Enter. */
-function CustomerSearch({ onPick }: { onPick: (c: CustomerListRow) => void }) {
-  const [q, setQ] = useState('')
+/**
+ * ONE box for the customer: type a 10-digit mobile (the customer loads by itself as soon as it is a valid number) or a name /
+ * part of a number (a list that scrolls; pick with the mouse or Up / Down / Enter). F4 focuses it.
+ */
+function CustomerBox({ value, inputRef, onChange, onFind, onPick }: {
+  value: string; inputRef: React.RefObject<HTMLInputElement | null>; onChange: (text: string) => void; onFind: (number: string) => void; onPick: (c: CustomerListRow) => void
+}) {
   const [rows, setRows] = useState<CustomerListRow[]>([])
   const [open, setOpen] = useState(false)
   const [at, setAt] = useState(0)
   const [failed, setFailed] = useState(false)
   const seq = useRef(0)
   const listRef = useRef<HTMLDivElement>(null)
+  const numeric = /^[\d\s+-]*$/.test(value) // digits (a number) or letters (a name)
 
   useEffect(() => {
-    const text = q.trim()
+    const text = value.trim()
     if (!text) { setRows([]); setFailed(false); return }
     const mine = ++seq.current
     const t = setTimeout(() => {
@@ -663,22 +654,40 @@ function CustomerSearch({ onPick }: { onPick: (c: CustomerListRow) => void }) {
         .catch(() => { if (mine === seq.current) { setRows([]); setFailed(true) } })
     }, 150)
     return () => clearTimeout(t)
-  }, [q])
+  }, [value])
   useEffect(() => { (listRef.current?.children[at] as HTMLElement | undefined)?.scrollIntoView({ block: 'nearest' }) }, [at])
 
-  const pick = (c: CustomerListRow) => { setQ(''); setRows([]); setOpen(false); onPick(c) }
+  const pick = (c: CustomerListRow) => { setRows([]); setOpen(false); onPick(c) }
+  const change = (raw: string) => {
+    const text = /^[\d\s+-]*$/.test(raw) ? cleanMobile(raw) : raw // a number is cleaned and capped at 10 digits; a name is left as typed
+    onChange(text)
+    setOpen(true)
+    if (isIndianMobile(text)) onFind(text) // the card (with sizes) appears as soon as the number is complete
+  }
+  const go = () => { // Enter or Find
+    if (isIndianMobile(value)) return onFind(value)
+    if (open && rows[at]) return pick(rows[at]!)
+    if (numeric) onFind(value) // a short number: the screen says what is wrong
+  }
   const onKey = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setAt((i) => Math.min(rows.length - 1, i + 1)) }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setAt((i) => Math.max(0, i - 1)) }
-    else if (e.key === 'Enter' && open && rows[at]) { e.preventDefault(); pick(rows[at]!) }
+    else if (e.key === 'Enter') { e.preventDefault(); go() }
     else if (e.key === 'Escape') setOpen(false)
   }
+  const showList = open && value.trim() !== '' && !isIndianMobile(value)
   return (
-    <div className="f" style={{ position: 'relative' }}>
-      <label htmlFor="custSearch">Search customer (name or mobile)</label>
-      <input id="custSearch" autoComplete="off" placeholder="Type a name or part of a number" value={q} role="combobox" aria-expanded={open && rows.length > 0} aria-controls="custResults"
-        onChange={(e) => { setQ(e.target.value); setOpen(true) }} onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 120)} onKeyDown={onKey} />
-      {open && q.trim() && (
+    <div style={{ position: 'relative' }}>
+      <div className="row">
+        <div className="f" style={{ flex: 1 }}>
+          <label htmlFor="custMobile">Customer mobile or name (F4)</label>
+          <input id="custMobile" ref={inputRef} autoComplete="off" placeholder="10-digit mobile, or type a name" value={value} role="combobox" aria-expanded={showList && rows.length > 0} aria-controls="custResults"
+            onChange={(e) => change(e.target.value)} onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 120)} onKeyDown={onKey} />
+          {numeric && <MobileHint value={value} />}
+        </div>
+        <button className="btn" onClick={go}>Find</button>
+      </div>
+      {showList && (
         <div id="custResults" ref={listRef} role="listbox" aria-label="Matching customers"
           style={{ position: 'absolute', left: 0, right: 0, top: '100%', zIndex: 20, maxHeight: 220, overflowY: 'auto', background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 10, boxShadow: '0 6px 18px rgba(0,0,0,.18)' }}>
           {rows.map((c, i) => (

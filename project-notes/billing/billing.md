@@ -287,7 +287,7 @@ INSERT INTO payments (bill_id,mode,amount) VALUES (?,?,?);
 
 ## 2026-11-23: customer search and discounts shown apart
 
-- **Search customer (name or mobile):** a box above the mobile box (only while no customer is chosen). Type a name or part of a number: a list of up to 100 matches appears and **scrolls** (about 8 rows tall); click a row, or Up / Down and Enter, to choose. It uses `customers.list` (owner, manager, cashier); nothing new is written.
+- **One customer box (mobile or name):** a single box (F4) with a Find button; there is no separate search box any more. Type a 10-digit mobile and the customer loads by itself once it is a valid Indian number; type a name or part of a number and a list appears. Type a name or part of a number: a list of up to 100 matches appears and **scrolls** (about 8 rows tall); click a row, or Up / Down and Enter, to choose. It uses `customers.list` (owner, manager, cashier); nothing new is written.
 - **Item discounts and bill discount are shown apart** in the totals box and on the bill. Schema v8 adds `bill_lines.item_disc` (the item's own discount; `bill_lines.discount` still holds item discount + its share of bill discount and coins, which returns use). The receipt prints `Item discount` under each discounted item, then `Item discounts` and `Bill discount` as two lines above the total. Bills made before v8 have no item figure (NULL) and keep the single `Discount` line.
 
 ## 2026-11-23: item list, first print, searches

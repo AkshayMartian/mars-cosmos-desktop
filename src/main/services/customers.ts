@@ -4,7 +4,8 @@ import { getDb } from '../db'
 import type { CustomerDto, NewCustomerInput } from '@shared/billing'
 import type { CelebrationDto, CustomerListRow, CustomerProfile, CustomerSaveInput, CustomerSizes } from '@shared/customers'
 import { NO_SIZES, parseSizes } from '@shared/customers'
-import { parseDayMonth, todayMonthDay } from '@shared/dates'
+import { todayMonthDay } from '@shared/dates'
+import { monthDayOf, parseBirthDate } from '@shared/birthdate'
 import { checkMobile } from '@shared/mobile'
 import { audit } from './auth'
 import { requireRole } from './session'
@@ -88,10 +89,10 @@ export function saveCustomer(input: CustomerSaveInput): CustomerProfile {
   const mobile = checkMobile(input.mobile)
   const name = input.name.trim()
   if (!name) throw new Error('Name is required.')
-  const birthday = parseDayMonth(input.birthday)
-  if (birthday === null) throw new Error('Birthday must be a real date like 21-08 (day-month).')
-  const anniversary = parseDayMonth(input.anniversary)
-  if (anniversary === null) throw new Error('Anniversary must be a real date like 04-12 (day-month).')
+  const birthday = parseBirthDate(input.birthday)
+  if (birthday === null) throw new Error('Birthday must be a real date like 21-08-1990 (day-month-year, not in the future).')
+  const anniversary = parseBirthDate(input.anniversary)
+  if (anniversary === null) throw new Error('Anniversary must be a real date like 04-12-2015 (day-month-year, not in the future).')
   const gstin = input.gstin.trim().toUpperCase()
   if (gstin && !GSTIN.test(gstin)) throw new Error('GSTIN is not valid. It has 15 characters, like 24ABCDE1234F1Z5.')
   const clash = db.prepare('SELECT id FROM customers WHERE mobile=? AND (? IS NULL OR id<>?)').get(mobile, input.id ?? null, input.id ?? null)
@@ -144,12 +145,12 @@ export function celebrationsToday(): CelebrationDto[] {
   requireRole(...SELLERS)
   const md = todayMonthDay()
   const rows = getDb()
-    .prepare('SELECT id,name,mobile,birthday,anniversary,offers_consent AS offers FROM customers WHERE deleted_at IS NULL AND mobile IS NOT NULL AND (birthday=? OR anniversary=?) ORDER BY name')
+    .prepare('SELECT id,name,mobile,birthday,anniversary,offers_consent AS offers FROM customers WHERE deleted_at IS NULL AND mobile IS NOT NULL AND (substr(birthday,-5)=? OR substr(anniversary,-5)=?) ORDER BY name')
     .all(md, md) as { id: string; name: string; mobile: string; birthday: string | null; anniversary: string | null; offers: number }[]
   return rows.flatMap((r) => {
     const out: CelebrationDto[] = []
-    if (r.birthday === md) out.push({ id: r.id, name: r.name, mobile: r.mobile, kind: 'birthday', offersConsent: !!r.offers })
-    if (r.anniversary === md) out.push({ id: r.id, name: r.name, mobile: r.mobile, kind: 'anniversary', offersConsent: !!r.offers })
+    if (monthDayOf(r.birthday) === md) out.push({ id: r.id, name: r.name, mobile: r.mobile, kind: 'birthday', offersConsent: !!r.offers })
+    if (monthDayOf(r.anniversary) === md) out.push({ id: r.id, name: r.name, mobile: r.mobile, kind: 'anniversary', offersConsent: !!r.offers })
     return out
   })
 }

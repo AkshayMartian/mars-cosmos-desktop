@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { autoDayMonth, formatMonthDay, parseDayMonth, toDayMonth } from '@shared/dates'
+import { autoDate, parseBirthDate, showBirthDate, toBirthInput } from '@shared/birthdate'
+const FUTURE_MSG = 'A date in the future cannot be added.'
 import { formatRupees } from '@shared/money'
 import type { CelebrationDto, CustomerListRow, CustomerProfile, CustomerSaveInput, CustomerSizes } from '@shared/customers'
 import { NO_SIZES, sizesText } from '@shared/customers'
@@ -104,8 +105,8 @@ function Detail({ p, canDelete, onEdit, onDelete }: { p: CustomerProfile; canDel
       <h2>{p.name}</h2>
       <div className="sub mono">{p.mobile}</div>
       <div className="tot">
-        <span className="sub">Birthday</span><span>{formatMonthDay(p.birthday || null)}</span>
-        <span className="sub">Anniversary</span><span>{formatMonthDay(p.anniversary || null)}</span>
+        <span className="sub">Birthday</span><span>{showBirthDate(p.birthday || null)}</span>
+        <span className="sub">Anniversary</span><span>{showBirthDate(p.anniversary || null)}</span>
         <span className="sub">Sizes</span><span>{sizes || '—'}</span>
         <span className="sub">WhatsApp bill</span><span>{p.waConsent ? 'Yes' : 'No'}</span>
         <span className="sub">Offers</span><span>{p.offersConsent ? 'Yes' : 'No'}</span>
@@ -129,25 +130,35 @@ function Detail({ p, canDelete, onEdit, onDelete }: { p: CustomerProfile; canDel
   )
 }
 
-const DATE_MSG = 'Not a real date. Use day-month, like 21-08 (day 1-31, month 1-12).'
+const DATE_MSG = 'Not a real date. Use day-month-year, like 21-08-1990 (not in the future).'
+const YEAR_MSG = 'Add the full year: DD-MM-YYYY, like 21-08-1990.'
 
 /** Add / edit dialog, contact, birthday, anniversary, notes, GSTIN, consent. */
 /** `mobile` pre-fills the number when adding from another screen (Billing, Alterations). */
 export function CustomerForm({ editing, mobile, onClose, onSaved }: { editing: CustomerProfile | null; mobile?: string; onClose: () => void; onSaved: (c: CustomerProfile) => void }) {
   const [f, setF] = useState({
     mobile: editing?.mobile ?? mobile ?? '', name: editing?.name ?? '',
-    birthday: toDayMonth(editing?.birthday ?? null), anniversary: toDayMonth(editing?.anniversary ?? null),
+    birthday: toBirthInput(editing?.birthday ?? null), anniversary: toBirthInput(editing?.anniversary ?? null),
     sizes: { ...NO_SIZES, ...(editing?.sizes ?? {}) } as CustomerSizes,
     notes: editing?.notes ?? '', gstin: editing?.gstin ?? '',
     waConsent: editing?.waConsent ?? false, offersConsent: editing?.offersConsent ?? false
   })
   const [busy, setBusy] = useState(false)
-  const { run, msg } = useMsg()
+  const { run, msg, setMsg } = useMsg()
   const text = (k: 'name' | 'notes') => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value })
-  const date = (k: 'birthday' | 'anniversary') => (e: { target: { value: string } }) => setF({ ...f, [k]: autoDayMonth(e.target.value) })
-  const badDate = (v: string) => v.length === 5 && parseDayMonth(v) === null
+  const date = (k: 'birthday' | 'anniversary') => (e: { target: { value: string } }) => setF({ ...f, [k]: autoDate(e.target.value) })
+  // a customer saved before years were asked for may keep DD-MM as it is; anything new or changed needs DD-MM-YYYY
+  const problem = (k: 'birthday' | 'anniversary'): string => {
+    const v = f[k]
+    if (!v) return ''
+    if (v.length === 10) return parseBirthDate(v) !== null ? '' : parseBirthDate(v, new Date(2100, 0, 1)) !== null ? FUTURE_MSG : DATE_MSG
+    if (v.length === 5 && v === toBirthInput(editing?.[k] ?? null)) return ''
+    return YEAR_MSG
+  }
 
   async function save() {
+    const bad = problem('birthday') ? 'Birthday: ' + problem('birthday') : problem('anniversary') ? 'Anniversary: ' + problem('anniversary') : ''
+    if (bad) return setMsg({ ok: false, text: bad })
     setBusy(true)
     const input: CustomerSaveInput = { ...f, id: editing?.id }
     const c = await run(() => window.api.customers.save(input))
@@ -162,8 +173,8 @@ export function CustomerForm({ editing, mobile, onClose, onSaved }: { editing: C
         <div className="f"><label htmlFor="cu-n">Name *</label><input id="cu-n" autoFocus={!editing && !!mobile} value={f.name} onChange={text('name')} /></div>
       </div>
       <div className="row">
-        <div className="f"><label htmlFor="cu-b">Birthday (DD-MM)</label><input id="cu-b" inputMode="numeric" maxLength={5} placeholder="21-08" value={f.birthday} onChange={date('birthday')} />{badDate(f.birthday) && <div className="sub" role="alert" style={{ color: 'var(--bad)', fontWeight: 600 }}>{DATE_MSG}</div>}</div>
-        <div className="f"><label htmlFor="cu-a">Anniversary (DD-MM)</label><input id="cu-a" inputMode="numeric" maxLength={5} placeholder="04-12" value={f.anniversary} onChange={date('anniversary')} />{badDate(f.anniversary) && <div className="sub" role="alert" style={{ color: 'var(--bad)', fontWeight: 600 }}>{DATE_MSG}</div>}</div>
+        <div className="f"><label htmlFor="cu-b">Birthday (DD-MM-YYYY)</label><input id="cu-b" inputMode="numeric" maxLength={10} placeholder="21-08-1990" value={f.birthday} onChange={date('birthday')} />{f.birthday.length >= 5 && problem('birthday') && <div className="sub" role="alert" style={{ color: 'var(--bad)', fontWeight: 600 }}>{problem('birthday')}</div>}</div>
+        <div className="f"><label htmlFor="cu-a">Anniversary (DD-MM-YYYY)</label><input id="cu-a" inputMode="numeric" maxLength={10} placeholder="04-12-2015" value={f.anniversary} onChange={date('anniversary')} />{f.anniversary.length >= 5 && problem('anniversary') && <div className="sub" role="alert" style={{ color: 'var(--bad)', fontWeight: 600 }}>{problem('anniversary')}</div>}</div>
       </div>
       <div className="row">
         <div className="f"><label htmlFor="cu-no">Notes</label><input id="cu-no" value={f.notes} onChange={text('notes')} /></div>
