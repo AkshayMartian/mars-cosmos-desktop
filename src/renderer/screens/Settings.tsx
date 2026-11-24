@@ -200,6 +200,7 @@ function StaffTab() {
         ))}</tbody>
       </table></div>
       <div><button className="btn p" onClick={() => open()}>+ Add staff</button></div>
+      <RecoveryCode />
       {edit && <StaffModal form={edit} onClose={() => setEdit(null)} onSaved={(r) => { setRows(r); setEdit(null) }} />}
     </>
   )
@@ -368,5 +369,35 @@ function BackupTab() {
         </Modal>
       )}
     </>
+  )
+}
+
+/** The owner's way back in if the owner PIN is forgotten: a code written down once and kept somewhere safe. */
+function RecoveryCode() {
+  const [isSet, setIsSet] = useState<boolean | null>(null)
+  const [code, setCode] = useState<string | null>(null)
+  const { run, node } = useMsg()
+  useEffect(() => { void window.api.app.info().then((i) => setIsSet(i.recoveryCodeSet)) }, [])
+  const make = async () => {
+    const c = await run(() => window.api.settings.recoveryCode())
+    if (c) { setCode(c); setIsSet(true); window.dispatchEvent(new Event('mars:settings-saved')) }
+  }
+  return (
+    <div className="panel" style={{ marginTop: 16 }}>
+      <h3 style={{ margin: 0 }}>Forgot-PIN recovery code</h3>
+      <p className="hint">If the owner forgets their PIN, this code lets them set a new one from the login screen. It is shown once, so write it down and keep it somewhere safe (not on this computer).</p>
+      {node}
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        {isSet === null ? null : isSet ? <span className="chip good">Code made</span> : <span className="chip warn">No code yet</span>}
+        <button className="btn" onClick={() => void make()}>{isSet ? 'Make a new code' : 'Make the code'}</button>
+      </div>
+      {code && (
+        <Modal title="Your recovery code" onClose={() => setCode(null)}>
+          <div className="banner" style={{ fontSize: 26, letterSpacing: 3, textAlign: 'center', fontFamily: 'var(--mono, monospace)' }}>{code}</div>
+          <p className="hint">Write this down now. It will not be shown again, and making a new code cancels this one. Using it once also uses it up.</p>
+          <div className="mfoot"><button className="btn p" onClick={() => setCode(null)}>I have written it down</button></div>
+        </Modal>
+      )}
+    </div>
   )
 }

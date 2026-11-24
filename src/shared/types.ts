@@ -31,6 +31,8 @@ export interface AppInfo {
   /** days since the newest backup (null = never); `backupWarn` = older than 2 days while the shop has data */
   backupDays: number | null
   backupWarn: boolean
+  /** false until the owner has made a recovery code (the way back in if the owner PIN is forgotten) */
+  recoveryCodeSet: boolean
 }
 
 export type MenuId =

@@ -30,6 +30,6 @@ export function appInfo(): AppInfo {
   const backupDays = last ? Math.floor((Date.now() - new Date(last.at).getTime()) / 864e5) : null
   return {
     shopName: shop.name || 'Your Shop', counter: getSetting('counter', 'C1'), idleMinutes: security.idleMinutes ?? 10,
-    setupDone, backupDays, backupWarn: used && (backupDays === null || backupDays > 2)
+    recoveryCodeSet: !!getSetting('recovery', null), setupDone, backupDays, backupWarn: used && (backupDays === null || backupDays > 2)
   }
 }

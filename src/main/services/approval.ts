@@ -50,7 +50,8 @@ export function checkApprover(a: ApprovalInput | undefined): string {
     return s.id
   }
 
-  const actor = current()
+  let actor: { id: string | null }
+  try { actor = current() } catch { actor = { id: null } } // a PIN reset happens before anyone is signed in
   const fails = (row?.fails ?? 0) + 1
   if (fails < MAX_APPROVAL_FAILS) {
     db.prepare('INSERT INTO approval_attempts (staff_id,fails,locks,locked_until) VALUES (?,?,?,0) ON CONFLICT(staff_id) DO UPDATE SET fails=excluded.fails')

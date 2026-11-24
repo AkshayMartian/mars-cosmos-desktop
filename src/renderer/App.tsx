@@ -152,6 +152,11 @@ export function App() {
                 {user.role === 'owner' ? <button className="btn sm" onClick={() => go('settings')}>Back up now</button> : 'Ask the owner to back up (Settings → Backup).'}
               </div>
             )}
+            {info && !info.recoveryCodeSet && user.role === 'owner' && !wizard && (
+              <div className="chip warn" role="status" style={{ alignSelf: 'stretch', padding: '8px 12px', borderRadius: 8, whiteSpace: 'normal' }}>
+                No forgot-PIN recovery code yet. <button className="btn sm" onClick={() => go('settings')}>Make it in Settings → Staff</button>
+              </div>
+            )}
             {/* key = remount on switch so each screen reloads fresh data */}
             {wizard
               ? <Setup onDone={() => { setWizard(false); void window.api.app.info().then(setInfo); go(homeFor(user.role)) }} />

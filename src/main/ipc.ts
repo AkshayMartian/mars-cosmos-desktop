@@ -11,6 +11,7 @@ import { commitImport } from './services/importer'
 import * as alterations from './services/alterations'
 import { appInfo, mySalesToday } from './services/settings'
 import { logoDataUri } from './services/branding'
+import { createRecoveryCode, resetOwnerPin, resetPinByApprover } from './services/pinreset'
 import { logoReady } from './logo'
 import * as returns from './services/returns'
 import * as stickers from './services/stickers'
@@ -47,6 +48,8 @@ export function registerIpc(): void {
   h('auth:login', login)
   h('auth:changePin', changePin)
   h('auth:logout', logout)
+  h('auth:resetPin', resetPinByApprover)
+  h('auth:resetOwnerPin', resetOwnerPin)
 
   h('cat:categories', cat.listCategories)
   h('cat:addCategory', cat.createCategory)
@@ -105,6 +108,7 @@ export function registerIpc(): void {
   h('settings:backups', admin.backupInfo)
   h('settings:saveBackupFolder', admin.saveBackupFolder)
   h('settings:finishSetup', admin.finishSetup)
+  h('settings:recoveryCode', createRecoveryCode)
   h('settings:backupNow', admin.backupNow)
   h('settings:restore', restoreListed)
   h('settings:restoreFromFile', restoreFromFile)

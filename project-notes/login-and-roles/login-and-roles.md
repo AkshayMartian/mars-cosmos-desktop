@@ -95,9 +95,27 @@ All calls return `{ ok:true, data }` or `{ ok:false, error:"message" }` at the I
 - **Called from:** Lock button, idle lock · **Roles:** anyone · **Request:** none · **Response:** `null`.
 - **Tables:** none. **Side effect:** session cleared in memory. (Logout is not written to `audit_log`.)
 
+### `window.api.auth.resetPin({ staffId, approverId, approverPin, newPin })` · channel `auth:resetPin`
+- **Called from:** Login → *Forgot PIN?* (cashier, store staff or manager) · **Roles:** nobody is logged in; an owner/manager approves by name + PIN.
+- **Rules:** the owner resets a manager, cashier or store staff; a manager resets only cashier or store staff; nobody approves their own reset; the owner's own PIN cannot be reset here (use the recovery code). `newPin` is the *temporary* PIN: 4 digits, not weak. The person must choose their own at the next login (`must_change_pin=1`).
+- **Approver check:** `checkApprover()`, so wrong approver PINs are counted and lock exactly like other approvals (5 wrong = locked 1, 2, 4... up to 15 min; the right PIN is refused while locked). Works before anyone is logged in (audit actor is then empty).
+- **Errors:** `Unknown staff member.` · `The owner PIN can only be reset with the recovery code.` · `Only the owner can reset a manager PIN.` · `Someone else must approve your PIN reset.` · `The new PIN must be 4 digits.` · `Choose a PIN that is harder to guess.` · approval messages.
+- **Tables:** write `staff` (`pin_hash`, `must_change_pin=1`, failed counters cleared), `approval_attempts`, `audit_log` (`pin_reset`, `approval_failed`).
+
+### `window.api.auth.resetOwnerPin(code, newPin)` · channel `auth:resetOwnerPin`
+- **Called from:** Login → Owner → *Forgot PIN?* · **Roles:** nobody is logged in.
+- **What it does:** checks the recovery code (case and spaces/dashes ignored) against the stored hash, sets the new owner PIN (no forced change), clears the owner's lockout, and **uses the code up** (setting `recovery` is deleted; the owner is shown a banner to make a new one).
+- **Limits:** 5 wrong codes lock it for 1 minute, then 2, 4... up to 15 (setting `recovery_tries`); `audit_log` `recovery_failed`; success writes `pin_reset` (`by:"recovery_code"`).
+- **Errors:** `No recovery code has been made yet. Ask the owner to make one in Settings → Staff.` · `That recovery code is not correct (N tries left).` · `Too many wrong codes. Try again in N seconds.` · new-PIN errors as above.
+
+### `window.api.app.logo()` · channel `app:logo`
+- **Called from:** App top bar · **Roles:** anyone · **Response:** the shop logo as a base64 data URI, or `null` if none has been downloaded yet (the top bar then shows the built-in logo).
+- **How the logo gets here:** `LOGO_URL` in `src/main/brand.ts` (or env `MARS_LOGO_URL`). At start-up, if the address differs from the saved one, the picture is downloaded (https only, image types, up to 1 MB, 10 s) and saved in setting `logo` as `{url, data, at}`. A failed download keeps the old logo and retries at the next start. The call waits for that start-up download to finish. Code: `src/main/logo.ts`, `services/branding.ts`.
+
+
 ### `window.api.app.info()` · channel `app:info`
 - **Called from:** App on load (top bar, idle limit) · **Roles:** anyone.
-- **Response:** `{ "shopName":"Your Shop", "counter":"C1", "idleMinutes":10 }` (`shop.name` setting if set, else "Your Shop").
+- **Response:** `{ "shopName":"Your Shop", "counter":"C1", "idleMinutes":10, "recoveryCodeSet":false, ... }` (`shop.name` setting if set, else "Your Shop").
 - **Tables:** read `settings` (`shop`, `counter`, `security`).
 
 ### `window.api.app.mySales()` · channel `app:mySales`

@@ -32,7 +32,9 @@ const api = {
     staff: () => call<StaffPublic[]>('auth:staff'),
     login: (id: string, pin: string) => call<LoginResult>('auth:login', id, pin),
     changePin: (pin: string) => call<{ ok: boolean; error?: string; staff?: StaffPublic }>('auth:changePin', pin),
-    logout: () => call<void>('auth:logout')
+    logout: () => call<void>('auth:logout'),
+    resetPin: (i: { staffId: string; approverId: string; approverPin: string; newPin: string }) => call<true>('auth:resetPin', i),
+    resetOwnerPin: (code: string, newPin: string) => call<true>('auth:resetOwnerPin', code, newPin)
   },
   catalogue: {
     categories: () => call<CategoryDto[]>('cat:categories'),
@@ -95,6 +97,7 @@ const api = {
     staff: () => call<StaffAdminRow[]>('settings:staff'),
     saveStaff: (v: StaffSaveInput) => call<StaffAdminRow[]>('settings:saveStaff', v),
     setPin: (id: string, pin: string) => call<void>('settings:setPin', id, pin),
+    recoveryCode: () => call<string>('settings:recoveryCode'),
     backups: () => call<BackupInfo>('settings:backups'),
     saveBackupFolder: (f: string) => call<BackupInfo>('settings:saveBackupFolder', f),
     finishSetup: () => call<true>('settings:finishSetup'),
