@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { WaOutboxRow, WaRunResult, WaSaveInput, WaSettings, WishKind } from '@shared/whatsapp'
 import type { AppInfo, LoginResult, StaffPublic } from '@shared/types'
 import type { CloseDayResult, DayEndSummary } from '@shared/dayend'
 import type { CelebrationDto, CustomerListRow, CustomerProfile, CustomerSaveInput } from '@shared/customers'
@@ -98,6 +99,12 @@ const api = {
     saveStaff: (v: StaffSaveInput) => call<StaffAdminRow[]>('settings:saveStaff', v),
     setPin: (id: string, pin: string) => call<void>('settings:setPin', id, pin),
     recoveryCode: () => call<string>('settings:recoveryCode'),
+    waGet: () => call<WaSettings>('settings:waGet'),
+    waSave: (v: WaSaveInput) => call<WaSettings>('settings:waSave', v),
+    waTest: (mobile: string, kind: WishKind) => call<true>('settings:waTest', mobile, kind),
+    waOutbox: () => call<WaOutboxRow[]>('settings:waOutbox'),
+    waRunNow: () => call<WaRunResult>('settings:waRunNow'),
+    waRetry: () => call<number>('settings:waRetry'),
     backups: () => call<BackupInfo>('settings:backups'),
     saveBackupFolder: (f: string) => call<BackupInfo>('settings:saveBackupFolder', f),
     finishSetup: () => call<true>('settings:finishSetup'),
@@ -105,6 +112,7 @@ const api = {
     restore: (file: string) => call<{ restarting: true }>('settings:restore', file),
     restoreFromFile: () => call<{ restarting: true } | null>('settings:restoreFromFile')
   },
+  whatsapp: { bill: (billId: string, mobile?: string) => call<{ pasted: boolean; file: string }>('whatsapp:bill', billId, mobile) },
   print: {
     receipt: (billId: string, copy = false) => call<void>('print:receipt', billId, copy),
     alteration: (jobId: string, which: 'tag' | 'slip') => call<void>('print:alteration', jobId, which),

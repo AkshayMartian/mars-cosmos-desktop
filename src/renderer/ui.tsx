@@ -109,3 +109,7 @@ export const fmtDate = (iso: string): string =>
 export function MobileHint({ value }: { value: string }) {
   return value.length === 10 && !isIndianMobile(value) ? <div className="sub" role="alert" style={{ color: 'var(--bad)', fontWeight: 600 }}>{MOBILE_MSG}</div> : null
 }
+
+/** What staff do next after "Send on WhatsApp" (the bill PDF is copied like a file; WhatsApp opens on the customer's chat). */
+export const waNote = (pasted: boolean): string =>
+  pasted ? 'Bill PDF copied. In the WhatsApp chat that just opened, press Ctrl+V, then Send.' : 'Bill PDF saved and its folder is open. Attach it in the WhatsApp chat, then Send.'

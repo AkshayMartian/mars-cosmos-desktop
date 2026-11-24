@@ -139,3 +139,15 @@ export async function listPrinters(): Promise<string[]> {
   if (!w) return []
   return (await w.webContents.getPrintersAsync()).map((p) => p.name)
 }
+
+/** The receipt as a PDF (same size and font as the printed roll), for sending on WhatsApp. */
+export async function receiptPdf(text: string, width: number): Promise<Buffer> {
+  const d = rollDoc(text, width, monoFontFace())
+  const win = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, javascript: false } })
+  try {
+    await win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(d.html))
+    return await win.webContents.printToPDF({ pageSize: { width: d.wMm / 25.4, height: d.hMm / 25.4 }, margins: { top: 0, bottom: 0, left: 0, right: 0 }, printBackground: true })
+  } finally {
+    win.destroy()
+  }
+}

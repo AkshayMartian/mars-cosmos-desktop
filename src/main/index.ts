@@ -1,5 +1,6 @@
 import { app, BrowserWindow, shell } from 'electron'
 import { startLogoSync, storedIcon } from './logo'
+import { startWhatsAppJob } from './waJob'
 import icon from '../../build/icon.ico?asset'
 import { join } from 'node:path'
 import { resolveDbPath } from './config'
@@ -52,6 +53,7 @@ app.whenReady().then(() => {
   setBackupDir(join(app.getPath('userData'), 'backups')) // until a USB / second-disk folder is chosen in Settings
   registerIpc()
   startLogoSync() // first start with internet downloads the logo into the database; later starts only act if its address changed
+  startWhatsAppJob() // birthday and anniversary wishes by themselves, once the owner has set up WhatsApp Business
   autoBackupIfDue()
   // A shop that leaves the app open all night still gets its daily backup: look again every hour.
   setInterval(autoBackupIfDue, 60 * 60 * 1000)

@@ -3,7 +3,7 @@ import { calc } from '@shared/calc'
 import { coinPaise, maxCoinsFor } from '@shared/coins'
 import { cleanAmountInput, formatRupees, toPaise } from '@shared/money'
 import { sizesText } from '@shared/customers'
-import { receiptText, whatsappText } from '@shared/receipt'
+import { receiptText } from '@shared/receipt'
 import type { BillDto, BillingContext, BillLineInput, CustomerDto, HeldBillDto, PayMode, SellableVariant } from '@shared/billing'
 import { SERIAL_MSG } from '@shared/serials'
 import type { CreditNoteDto } from '@shared/returns'
@@ -14,7 +14,7 @@ import { CustomerForm } from './Customers'
 import { CustomerBox } from '../CustomerBox'
 import { removeScannedPiece } from '@shared/serials'
 import { cleanMobile, isIndianMobile } from '@shared/mobile'
-import { fmtDate, MobileHint, Modal, useMsg, useScanFocus } from '../ui'
+import { fmtDate, MobileHint, Modal, useMsg, useScanFocus, waNote } from '../ui'
 
 /**
  * One row of the bill. An item with serial numbers keeps the serial of every piece (qty = how many, never typed):
@@ -232,6 +232,11 @@ export function Billing({ user }: { user: StaffPublic }) {
 
   function startPay() {
     if (!cart.length || !ctx?.session) return
+    if (!customer) {
+      setMsg({ ok: false, text: 'Select the customer first (mobile or name), then pay.' })
+      mobileRef.current?.focus()
+      return
+    }
     setMsg(null)
     const reasons = approvalReasons()
     if (reasons.length && !approval.current) return setDlg({ t: 'approval', reasons })
@@ -413,7 +418,7 @@ export function Billing({ user }: { user: StaffPublic }) {
               </div>
             ) : miss ? (
               <div className="cust"><span>No customer with this number.</span><div><button className="btn sm p" onClick={() => setDlg({ t: 'customer' })}>Add customer</button></div></div>
-            ) : <div className="hint">Walk-in? Leave this empty. The mobile is needed only for an alteration, coins, a credit note or WhatsApp.{ctx?.coins.on ? ' Add it to earn coins.' : ''}</div>}
+            ) : <div className="hint">Select the customer before paying. Type the mobile or name, then pick from the list.</div>}
           </div>
 
           <div className="panel">
@@ -433,7 +438,7 @@ export function Billing({ user }: { user: StaffPublic }) {
             )}
             <BillPreview compact cart={cart} charges={charges} totals={totals} scheme={scheme} gstTotal={gstTotal} coinsN={coinsN} customer={null} label="Total" />
             {approval.current && <span className="chip good">Approved by {ctx?.approvers.find((a) => a.id === approval.current?.staffId)?.name}</span>}
-            <button className="btn p lg block" disabled={!cart.length || !ctx?.session} onClick={startPay}>Pay (F9)</button>
+            <button className="btn p lg block" disabled={!cart.length || !ctx?.session} title={customer ? undefined : 'Select the customer first'} onClick={startPay}>Pay (F9)</button>
           </div>
         </div>
       </div>
@@ -578,7 +583,7 @@ export function CustomerModal({ mobile, onClose, onSaved }: { mobile: string; on
 
 export function ReceiptModal({ bill, ctx, onNew }: { bill: BillDto; ctx: BillingContext; onNew: () => void }) {
   const [tags, setTags] = useState<{ jobs: AltJobDto[]; actx: AltContext } | null>(null)
-  const { run: runP, node: printMsg } = useMsg()
+  const { run: runP, setMsg: setPMsg, node: printMsg } = useMsg()
   async function showTags() {
     try {
       const [jobs, actx] = await Promise.all([window.api.alterations.byBill(bill.id), window.api.alterations.context()])
@@ -589,15 +594,18 @@ export function ReceiptModal({ bill, ctx, onNew }: { bill: BillDto; ctx: Billing
   const [typed, setTyped] = useState('')
   const mobile = bill.customer?.mobile ?? (isIndianMobile(typed) ? typed : null)
   const noConsent = !!bill.customer && bill.customer.waConsent === false // they have not agreed to WhatsApp bills
-  const wa = mobile && !noConsent ? `https://wa.me/91${mobile}?text=${encodeURIComponent(whatsappText(bill, ctx.shop))}` : null
+  const sendWa = async () => {
+    if (!mobile) { setPMsg({ ok: false, text: "Type the customer's 10-digit mobile in the box first, then press Send on WhatsApp." }); document.getElementById('wa-mobile')?.focus(); return }
+    const r = await runP(() => window.api.whatsapp.bill(bill.id, typed || undefined)); if (r) setPMsg({ ok: true, text: waNote(r.pasted) })
+  }
   return (
     <Modal title="Receipt" wide onClose={onNew}>
       <div className="banner good">Bill {bill.no} saved · {formatRupees(bill.grand)}</div>
       <div className="receipt" aria-label="Receipt">{receiptText(bill, ctx.shop, ctx.gstScheme)}</div>
       {printMsg}
       <div className="mfoot">
-        {!bill.customer?.mobile && bill.type === 'sale' && <input aria-label="Customer mobile for WhatsApp" inputMode="numeric" maxLength={10} placeholder="Mobile to send on WhatsApp" style={{ width: 190 }} value={typed} onChange={(e) => setTyped(cleanMobile(e.target.value))} />}
-        {wa ? <a className="btn" href={wa} target="_blank" rel="noopener noreferrer">Send on WhatsApp</a> : <button className="btn" disabled title={noConsent ? 'This customer has not agreed to WhatsApp bills. Edit the customer to record their consent.' : "Type the customer's 10-digit mobile to send the bill on WhatsApp"}>Send on WhatsApp</button>}
+        {!bill.customer?.mobile && bill.type === 'sale' && <input id="wa-mobile" aria-label="Customer mobile for WhatsApp" inputMode="numeric" maxLength={10} placeholder="Mobile to send on WhatsApp" style={{ width: 190 }} value={typed} onChange={(e) => setTyped(cleanMobile(e.target.value))} />}
+        {noConsent ? <button className="btn" disabled title='This customer has not agreed to WhatsApp bills. Edit the customer to record their consent.'>Send on WhatsApp</button> : <button className="btn" onClick={() => void sendWa()}>Send on WhatsApp</button>}
         <button className="btn" onClick={() => void runP(() => window.api.print.receipt(bill.id), 'Sent to the receipt printer.')}>Print receipt</button>
         {bill.alterations?.length ? <button className="btn" onClick={() => void showTags()}>Print tailor tag</button> : null}
         <button className="btn p" autoFocus onClick={onNew}>New bill</button>

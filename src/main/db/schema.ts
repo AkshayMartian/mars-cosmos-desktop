@@ -243,5 +243,18 @@ ALTER TABLE products ADD COLUMN gst_rate INTEGER;
     sql: /* sql */ `
 ALTER TABLE bill_lines ADD COLUMN item_disc INTEGER;
 `
+  },
+  {
+    // Automatic birthday / anniversary wishes on WhatsApp: one row per customer, kind and year, so a wish never goes twice.
+    version: 9,
+    sql: /* sql */ `
+CREATE TABLE wa_outbox (
+  id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK (kind IN ('birthday','anniversary')), customer_id TEXT NOT NULL,
+  name TEXT NOT NULL, mobile TEXT NOT NULL, year INTEGER NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('queued','sent','failed')), tries INTEGER NOT NULL DEFAULT 0, error TEXT,
+  wa_message_id TEXT, at TEXT NOT NULL, sent_at TEXT, next_try INTEGER NOT NULL DEFAULT 0,
+  UNIQUE (customer_id, kind, year)
+);
+`
   }
 ]
