@@ -3,7 +3,8 @@ import { startLogoSync, storedIcon } from './logo'
 import { startWhatsAppJob } from './waJob'
 import icon from '../../build/icon.ico?asset'
 import { join } from 'node:path'
-import { resolveDbPath } from './config'
+import { resolveDbPath, resolveLicenceServer } from './config'
+import { refreshLicence, setLicenceServer } from './services/licence'
 import { openDb } from './db'
 import { registerIpc } from './ipc'
 import { enableSerialsEverywhere } from './services/catalogue'
@@ -52,6 +53,10 @@ app.whenReady().then(() => {
   purgeTemp(24 * 60 * 60 * 1000) // photos chosen but never saved
   setBackupDir(join(app.getPath('userData'), 'backups')) // until a USB / second-disk folder is chosen in Settings
   registerIpc()
+  // licence server: MARS_LICENCE_URL / config.json; a dev run (npm run dev) falls back to the local test server (npm run licence-server)
+  setLicenceServer(resolveLicenceServer(app.getPath('userData')) || (app.isPackaged ? '' : 'http://localhost:4000'))
+  void refreshLicence() // about weekly while online; never blocks the shop
+  setInterval(() => void refreshLicence(), 6 * 60 * 60 * 1000)
   startLogoSync() // first start with internet downloads the logo into the database; later starts only act if its address changed
   startWhatsAppJob() // birthday and anniversary wishes by themselves, once the owner has set up WhatsApp Business
   autoBackupIfDue()

@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { chooseImportFile, saveImportTemplate } from './dialogs'
 import { changePin, listActiveStaff, login, logout } from './services/auth'
+import * as licence from './services/licence'
 import { listApprovers } from './services/approval'
 import { addExpense, closeDay, daySummary } from './services/dayend'
 import * as billing from './services/billing'
@@ -47,7 +48,14 @@ export function registerIpc(): void {
   h('app:logo', async () => { await logoReady(); return logoDataUri() })
   h('app:mySales', mySalesToday)
   h('auth:staff', listActiveStaff)
-  h('auth:login', login)
+  h('auth:login', (id: string, pin: string) => { licence.assertActivated(); return login(id, pin) }) // closed until this PC is activated
+  h('licence:status', () => licence.licenceStatus())
+  h('licence:request', licence.requestCode)
+  h('licence:activateCode', licence.activateWithCode)
+  h('licence:activateOnline', licence.activateOnline)
+  h('licence:trialOtp', licence.trialSendOtp)
+  h('licence:trialVerify', licence.trialVerify)
+  h('licence:refresh', () => licence.refreshLicence(true))
   h('auth:changePin', changePin)
   h('auth:logout', logout)
   h('auth:resetPin', resetPinByApprover)

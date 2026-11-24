@@ -7,8 +7,11 @@ import type { GstScheme, Role } from '@shared/types'
 import { cleanMobile } from '@shared/mobile'
 import { WISH_SUGGESTIONS, type WaOutboxRow, type WaSaveInput, type WaSettings } from '@shared/whatsapp'
 import { MobileHint, Modal, fmtDate, num, useMsg } from '../ui'
+import { LicenceTab } from './Licence'
+import { shopErrors } from '@shared/shopValidation'
+import { STATE_OPTIONS, stateForCode } from '@shared/states'
 
-const TABS = [['shop', 'Shop'], ['gst', 'GST'], ['receipt', 'Receipt'], ['printers', 'Printers'], ['coins', 'Coins'], ['staff', 'Staff'], ['whatsapp', 'WhatsApp'], ['alter', 'Alterations'], ['backup', 'Backup']] as const
+const TABS = [['shop', 'Shop'], ['gst', 'GST'], ['receipt', 'Receipt'], ['printers', 'Printers'], ['coins', 'Coins'], ['staff', 'Staff'], ['whatsapp', 'WhatsApp'], ['alter', 'Alterations'], ['backup', 'Backup'], ['licence', 'Licence']] as const
 type Tab = (typeof TABS)[number][0]
 
 const changed = (): void => { window.dispatchEvent(new Event('mars:settings-saved')) }
@@ -33,6 +36,7 @@ export function Settings() {
           : tab === 'staff' ? <StaffTab />
           : tab === 'whatsapp' ? <WhatsAppTab />
           : tab === 'alter' ? <AlterTab />
+          : tab === 'licence' ? <LicenceTab onChange={() => window.dispatchEvent(new Event('mars:licence-changed'))} />
           : <BackupTab />}
       </div>
     </>
@@ -43,15 +47,32 @@ export function Settings() {
 
 export function ShopTab({ all, onSaved }: { all: AllSettings; onSaved: (s: AllSettings['shop']) => void }) {
   const [f, setF] = useState(all.shop)
+  const [touched, setTouched] = useState<Record<string, boolean>>({})
   const { run, node } = useMsg()
-  const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value })
+  const errs = shopErrors(f)
+  const set = (k: keyof typeof f, fix: (v: string) => string = (v) => v) => (e: { target: { value: string } }) => setF({ ...f, [k]: fix(e.target.value) })
+  const touch = (k: keyof typeof f) => () => setTouched({ ...touched, [k]: true })
+  // an error shows once the box was left, or at once while something is typed (the name only after it was left)
+  const err = (k: keyof typeof f) => (errs[k] && (touched[k] || (k !== 'name' && f[k])) ? <div role="alert" style={{ color: 'var(--bad)', fontWeight: 600, fontSize: 13 }}>{errs[k]}</div> : null)
+  const bad = (k: keyof typeof f) => !!errs[k] && (!!touched[k] || (k !== 'name' && !!f[k]))
+  const invalid = Object.keys(errs).length > 0
   return (
     <>
       {node}
-      <div className="row"><div className="f"><label htmlFor="s-n">Shop name *</label><input id="s-n" value={f.name} onChange={set('name')} /></div><div className="f"><label htmlFor="s-p">Phone</label><input id="s-p" value={f.phone} onChange={set('phone')} /></div></div>
-      <div className="f"><label htmlFor="s-a">Address</label><input id="s-a" value={f.address} onChange={set('address')} /></div>
-      <div className="row"><div className="f"><label htmlFor="s-g">GSTIN</label><input id="s-g" value={f.gstin} onChange={set('gstin')} /></div><div className="f"><label htmlFor="s-s">State</label><input id="s-s" value={f.state} onChange={set('state')} /></div></div>
-      <div><button className="btn p" onClick={() => void run(() => window.api.settings.saveShop(f), 'Shop details saved.').then((s) => s && onSaved(s))}>Save</button></div>
+      <div className="row">
+        <div className="f"><label htmlFor="s-n">Shop name *</label><input id="s-n" maxLength={80} aria-invalid={bad('name')} value={f.name} onChange={set('name')} onBlur={touch('name')} />{err('name')}</div>
+        <div className="f"><label htmlFor="s-p">Phone</label><input id="s-p" inputMode="numeric" placeholder="10-digit mobile number" aria-invalid={bad('phone')} value={f.phone} onChange={set('phone', cleanMobile)} onBlur={touch('phone')} />{err('phone')}</div>
+      </div>
+      <div className="f"><label htmlFor="s-a">Address</label><input id="s-a" maxLength={200} aria-invalid={bad('address')} value={f.address} onChange={set('address')} onBlur={touch('address')} />{err('address')}</div>
+      <div className="row">
+        <div className="f"><label htmlFor="s-g">GSTIN</label><input id="s-g" className="mono" maxLength={15} placeholder="24AAAAA1111A1Z5" autoComplete="off" spellCheck={false} aria-invalid={bad('gstin')} value={f.gstin} onChange={(e) => { const g = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); setF({ ...f, gstin: g, state: f.state || (g.length >= 2 ? stateForCode(g.slice(0, 2)) : '') }) }} onBlur={touch('gstin')} />{err('gstin')}</div>
+        <div className="f"><label htmlFor="s-s">State</label><select id="s-s" aria-invalid={bad('state')} value={f.state} onChange={set('state')} onBlur={touch('state')}>
+          <option value="">Select state</option>
+          {f.state && !STATE_OPTIONS.includes(f.state) && <option value={f.state}>{f.state} (choose from the list)</option>}
+          {STATE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>{err('state')}</div>
+      </div>
+      <div><button className="btn p" disabled={invalid} title={invalid ? 'Fix the highlighted fields first' : undefined} onClick={() => void run(() => window.api.settings.saveShop(f), 'Shop details saved.').then((s) => s && onSaved(s))}>Save</button></div>
     </>
   )
 }
@@ -181,7 +202,7 @@ function CoinsTab({ all, onSaved }: { all: AllSettings; onSaved: (c: AllSettings
 interface StaffForm { id?: string; name: string; role: Role; maxDiscountPct: string; commissionPct: string; canCancel: boolean; canChangePrice: boolean; active: boolean; pin: string }
 const blankStaff: StaffForm = { name: '', role: 'cashier', maxDiscountPct: '10', commissionPct: '1', canCancel: false, canChangePrice: false, active: true, pin: '' }
 
-function StaffTab() {
+export function StaffTab() {
   const [rows, setRows] = useState<StaffAdminRow[]>([])
   const [edit, setEdit] = useState<StaffForm | null>(null)
   const { run, node } = useMsg()

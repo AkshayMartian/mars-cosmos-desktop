@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react'
 import { formatRupees } from '@shared/money'
+import type { LicenceInfo } from '@shared/licence'
 import { homeFor, menuFor, type AppInfo, type MenuId, type StaffPublic } from '@shared/types'
 import { Alterations } from './screens/Alterations'
+import { Activate } from './screens/Licence'
 import { Bills } from './screens/Bills'
 import { Billing } from './screens/Billing'
 import { Customers } from './screens/Customers'
@@ -53,6 +55,15 @@ export function App() {
   const [logo, setLogo] = useState<string | null>(null) // downloaded once, kept in the database
   useEffect(() => { void window.api.app.logo().then(setLogo) }, [])
   const [user, setUser] = useState<StaffPublic | null>(null)
+  // Licence: nothing opens until this PC is activated; an expired licence is read-only (banner below, bills blocked in the main process).
+  const [lic, setLic] = useState<LicenceInfo | null>(null)
+  useEffect(() => {
+    const f = () => void window.api.licence.status().then(setLic)
+    f()
+    window.addEventListener('mars:licence-changed', f)
+    return () => window.removeEventListener('mars:licence-changed', f)
+  }, [])
+  const needsActivation = !!lic && (lic.state === 'none' || lic.state === 'invalid') && !lic.skip
   const [view, setView] = useState<MenuId>('products')
   const [intent, setIntent] = useState<string | undefined>(undefined)
   const go = useCallback((v: MenuId, i?: string) => { setIntent(i); setView(v) }, [])
@@ -130,7 +141,9 @@ export function App() {
           </>
         )}
       </header>
-      {!user ? (
+      {needsActivation ? (
+        <Activate info={lic} onDone={setLic} />
+      ) : !user ? (
         <Login info={info} onDone={(s) => { lastActive.current = Date.now(); setUser(s); go(homeFor(s.role)) }} />
       ) : (
         <div className="body">
@@ -150,6 +163,14 @@ export function App() {
               <div className="chip warn" role="status" style={{ alignSelf: 'stretch', padding: '8px 12px', borderRadius: 8, whiteSpace: 'normal' }}>
                 {info.backupDays === null ? 'No backup has been taken yet.' : `The last backup is ${info.backupDays} days old.`}{' '}
                 {user.role === 'owner' ? <button className="btn sm" onClick={() => go('settings')}>Back up now</button> : 'Ask the owner to back up (Settings → Backup).'}
+              </div>
+            )}
+            {lic && (lic.state === 'expired' || lic.state === 'expiring' || lic.staleCheck) && (
+              <div className={`chip ${lic.state === 'expired' ? 'bad' : 'warn'}`} role={lic.state === 'expired' ? 'alert' : 'status'} style={{ alignSelf: 'stretch', padding: '8px 12px', borderRadius: 8, whiteSpace: 'normal' }}>
+                {lic.state === 'expired' ? 'The licence has expired: you can see and reprint old bills, but new bills are blocked.'
+                  : lic.state === 'expiring' ? (lic.daysLeft === 0 ? 'The licence ends today.' : `The licence ends in ${lic.daysLeft} days.`)
+                  : `This PC has not reached the MARS server for ${lic.checkedDaysAgo} days.`}{' '}
+                {user.role === 'owner' ? <button className="btn sm" onClick={() => go('settings')}>Renew in Settings → Licence</button> : 'Ask the owner to renew.'}
               </div>
             )}
             {info && !info.recoveryCodeSet && user.role === 'owner' && !wizard && (

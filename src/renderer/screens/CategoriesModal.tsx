@@ -5,7 +5,8 @@ import { Modal, useMsg } from '../ui'
 const gstText = (c: CategoryDto): string =>
   c.mode === 'auto' ? 'Clothing auto (5% / 18%)' : c.mode === 'fixed' ? `${c.rate}% fixed` : 'Exempt'
 
-export function CategoriesModal({ onClose }: { onClose: () => void }) {
+/** The category list + add form; used in the Categories window and in the first-run wizard. */
+export function CategoriesPanel() {
   const [cats, setCats] = useState<CategoryDto[]>([])
   const [name, setName] = useState('')
   const [hsn, setHsn] = useState('')
@@ -21,7 +22,7 @@ export function CategoriesModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Modal title="Categories" onClose={onClose}>
+    <>
       {node}
       <div className="tw">
         <table>
@@ -40,6 +41,14 @@ export function CategoriesModal({ onClose }: { onClose: () => void }) {
         <button className="btn" onClick={() => void add()}>Add</button>
       </div>
       <div className="hint">Ask your CA to confirm the HSN code and GST rate before you start selling.</div>
+    </>
+  )
+}
+
+export function CategoriesModal({ onClose }: { onClose: () => void }) {
+  return (
+    <Modal title="Categories" onClose={onClose}>
+      <CategoriesPanel />
       <div className="mfoot"><button className="btn p" onClick={onClose}>Done</button></div>
     </Modal>
   )

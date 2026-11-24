@@ -17,6 +17,7 @@ import { receiptText, receiptWidth } from '@shared/receipt'
 import { addMove, stockOf } from './stock'
 import { bunchProblem, bunchSerials, findBunch, findPiece, freeSerials, heldSerials, isTracked, movePieces, packedBunchOf, pieceProblem, resolveSticker, takeFree } from './serials'
 import { SERIAL_MSG } from '@shared/serials'
+import { assertCanSell } from './licence'
 import { coinCfg, coinBalance, liveBalance, recordSale } from './coins'
 import { coinPaise, maxCoinsFor } from '@shared/coins'
 
@@ -201,6 +202,7 @@ const SERVICE = '__service'
 
 export function createBill(input: NewBillInput, internals: BillInternals = {}): BillDto {
   const actor = requireRole(...SELLERS)
+  assertCanSell() // an expired licence is read-only
   const db = getDb()
   const session = openSessionRow()
   if (!session) throw new Error('Start the day first: enter the opening cash.')

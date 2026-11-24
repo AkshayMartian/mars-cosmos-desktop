@@ -11,6 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "template": "tsx scripts/make-import-template.ts",
+    "licence": "tsx scripts/licence.ts",
+    "licence-server": "tsx scripts/dev-licence-server.ts",
     "dist": "electron-vite build && electron-builder --win nsis"
   },
   "dependencies": {

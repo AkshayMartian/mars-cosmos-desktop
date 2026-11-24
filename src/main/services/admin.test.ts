@@ -36,7 +36,7 @@ describe('Settings access', () => {
 describe('Shop and GST', () => {
   it('saves the shop and the top bar follows', () => {
     saveShop(shop)
-    expect(getAllSettings().shop).toEqual(shop)
+    expect(getAllSettings().shop).toEqual({ ...shop, phone: '9825000010' }) // the mobile is kept as plain digits
     expect(appInfo().shopName).toBe('Raj Fashion')
     expect(getDb().prepare("SELECT 1 FROM audit_log WHERE action='settings_change'").get()).toBeTruthy()
   })
@@ -45,6 +45,16 @@ describe('Shop and GST', () => {
     expect(() => saveShop({ ...shop, gstin: '123' })).toThrow('GSTIN')
     expect(() => saveShop({ ...shop, phone: 'abc' })).toThrow('phone')
     expect(saveShop({ ...shop, gstin: '' }).gstin).toBe('')
+    expect(() => saveShop({ ...shop, phone: '67876678996996969699' })).toThrow('phone')
+    expect(() => saveShop({ ...shop, phone: '5555555555' })).toThrow('phone')
+    expect(() => saveShop({ ...shop, gstin: '99AAAAA1111A1Z5' })).toThrow('GSTIN')
+    expect(() => saveShop({ ...shop, state: '12345' })).toThrow('list')
+    expect(() => saveShop({ ...shop, state: '27 Maharashtra' })).toThrow('GSTIN starts with 24')
+    expect(() => saveShop({ ...shop, name: 'A' })).toThrow('short')
+    expect(() => saveShop({ ...shop, phone: '022 2345 6789' })).toThrow('mobile') // landlines are not accepted
+    expect(saveShop({ ...shop, phone: '+91 98250 00010' }).phone).toBe('9825000010')
+    expect(saveShop({ ...shop, phone: '' }).phone).toBe('')
+    expect(saveShop({ ...shop, gstin: '24aaaaa1111a1z5' }).gstin).toBe('24AAAAA1111A1Z5')
   })
   it('keeps the receipt wording when the shop is saved', () => {
     saveReceipt({ footer: 'Thanks!', policy: 'No returns after 7 days', review: '', returnDays: 7, creditNoteDays: 90, width: '80 mm' })

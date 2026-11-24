@@ -4,6 +4,8 @@ import type {
   AllSettings, BackupInfo, CoinSettings, PrinterSettings, ReceiptSettings, ShopSettings, StaffAdminRow, StaffSaveInput
 } from '@shared/settings'
 import type { GstScheme, Role } from '@shared/types'
+import { checkMobile } from '@shared/mobile'
+import { shopErrors } from '@shared/shopValidation'
 import { audit } from './auth'
 import { backupFolder, runBackup } from './backup'
 import { hashPin, isWeakPin } from './pin'
@@ -39,13 +41,12 @@ export function getAllSettings(): AllSettings {
 
 export function saveShop(s: ShopSettings): ShopSettings {
   const a = owner()
-  const name = text(s.name, 80)
-  if (!name) throw new Error('Type the shop name.')
-  const gstin = text(s.gstin, 15).toUpperCase()
-  if (gstin && !/^\d{2}[A-Z]{5}\d{4}[A-Z][A-Z\d]Z[A-Z\d]$/.test(gstin)) throw new Error('The GSTIN is not valid. It has 15 characters, like 24AAAAA1111A1Z5.')
-  const phone = text(s.phone, 20)
-  if (phone && !/^[\d\s+-]{7,20}$/.test(phone)) throw new Error('The phone number is not valid.')
-  const next = { ...getSetting<Record<string, unknown>>('shop', {}), name, phone, address: text(s.address, 200), gstin, state: text(s.state, 40) }
+  const clean = { name: text(s.name, 80), phone: text(s.phone, 20), address: text(s.address, 200), gstin: text(s.gstin, 15).toUpperCase(), state: text(s.state, 40) }
+  const bad = Object.values(shopErrors({ ...clean, name: String(s.name ?? ''), phone: String(s.phone ?? ''), address: String(s.address ?? ''), gstin: String(s.gstin ?? ''), state: String(s.state ?? '') }))[0]
+  if (bad) throw new Error(bad)
+  const { name, gstin } = clean
+  const phone = checkMobile(clean.phone, true) // stored as the plain 10 digits
+  const next = { ...getSetting<Record<string, unknown>>('shop', {}), name, phone, address: clean.address, gstin, state: clean.state }
   put('shop', next)
   audit(a.id, 'settings_change', { key: 'shop' })
   return getAllSettings().shop

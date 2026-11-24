@@ -18,3 +18,16 @@ export function resolveDbPath(userData: string, env: NodeJS.ProcessEnv = process
   }
   return join(userData, 'mars-pos.db')
 }
+
+/**
+ * Address of the MARS licence server (activation, free trial, weekly check). MARS_LICENCE_URL, else "licenceServer" in
+ * <userData>\config.json. Empty until the server exists: activation then uses the request / response code instead.
+ */
+export function resolveLicenceServer(userData: string, env: NodeJS.ProcessEnv = process.env): string {
+  if (env['MARS_LICENCE_URL']) return env['MARS_LICENCE_URL']
+  try {
+    const cfg = JSON.parse(readFileSync(join(userData, 'config.json'), 'utf8')) as { licenceServer?: unknown }
+    if (typeof cfg.licenceServer === 'string') return cfg.licenceServer.trim()
+  } catch { /* none */ }
+  return ''
+}

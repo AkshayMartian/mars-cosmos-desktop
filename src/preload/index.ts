@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { WaOutboxRow, WaRunResult, WaSaveInput, WaSettings, WishKind } from '@shared/whatsapp'
+import type { LicenceInfo } from '@shared/licence'
 import type { AppInfo, LoginResult, StaffPublic } from '@shared/types'
 import type { CloseDayResult, DayEndSummary } from '@shared/dayend'
 import type { CelebrationDto, CustomerListRow, CustomerProfile, CustomerSaveInput } from '@shared/customers'
@@ -29,6 +30,15 @@ async function call<T>(channel: string, ...args: unknown[]): Promise<T> {
 
 const api = {
   app: { info: () => call<AppInfo>('app:info'), logo: () => call<string | null>('app:logo'), mySales: () => call<number>('app:mySales') },
+  licence: {
+    status: () => call<LicenceInfo>('licence:status'),
+    request: (key: string, mobile: string) => call<string>('licence:request', key, mobile),
+    activateCode: (code: string) => call<LicenceInfo>('licence:activateCode', code),
+    activateOnline: (key: string, mobile: string) => call<LicenceInfo>('licence:activateOnline', key, mobile),
+    trialOtp: (mobile: string) => call<true>('licence:trialOtp', mobile),
+    trialVerify: (mobile: string, otp: string, shop: string) => call<LicenceInfo>('licence:trialVerify', mobile, otp, shop),
+    refresh: () => call<LicenceInfo>('licence:refresh')
+  },
   auth: {
     staff: () => call<StaffPublic[]>('auth:staff'),
     login: (id: string, pin: string) => call<LoginResult>('auth:login', id, pin),
