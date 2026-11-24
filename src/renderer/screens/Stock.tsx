@@ -62,13 +62,13 @@ function Levels({ user }: { user: StaffPublic }) {
       {rows.length ? (
         <div className="tw">
           <table>
-            <thead><tr><th>Item</th><th>Barcode</th><th className="r">In stock</th><th className="r">Min</th><th className="r">Value at cost</th><th /></tr></thead>
+            <thead><tr><th>Item</th><th>Barcode</th><th className="r">In stock</th><th className="r">Value at cost</th><th /></tr></thead>
             <tbody>
               {rows.map((r) => (
                 <tr key={r.variantId}>
                   <td>{r.label}{r.tracked && <span className="chip muted" style={{ marginLeft: 6 }} title="Every piece has its own serial number">serials</span>}</td><td className="mono">{r.barcode}</td>
                   <td className="r num">{r.qty <= r.minStock ? <span className={`chip ${r.qty <= 0 ? 'bad' : 'warn'}`}>{r.qty}</span> : r.qty}</td>
-                  <td className="r num">{r.minStock}</td><td className="r num">{formatRupees(r.costValue)}</td>
+                  <td className="r num">{formatRupees(r.costValue)}</td>
                   <td><div className="row"><button className="btn sm" onClick={() => setHist(r)}>History</button><button className="btn sm" onClick={() => setAdj(r)}>Adjust</button></div></td>
                 </tr>
               ))}
