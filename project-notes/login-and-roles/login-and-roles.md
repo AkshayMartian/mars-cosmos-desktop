@@ -124,6 +124,11 @@ All calls return `{ ok:true, data }` or `{ ok:false, error:"message" }` at the I
 - **Errors:** `Not logged in.`
 - **Query:** `SELECT COALESCE(SUM(grand),0) FROM bills WHERE status='completed' AND COALESCE(sales_by,staff_id)=? AND at>=<start of today, local>`.
 
+### `window.api.app.tourDone()` · channel `app:tourDone`
+- **Called from:** the guided tour (`src/renderer/Tour.tsx`) when it is finished or skipped · **Roles:** logged in.
+- **Response:** `true`. **Errors:** `Not logged in.`
+- **Effect:** writes `settings.tour_done = true`; `app:info` then returns `tourDone: true`. The tour opens by itself only once, right after the setup wizard; "Take a tour" at the bottom of the menu replays it any time.
+
 ### `window.api.stock.approvers()` · channel `app:approvers`
 - **Called from:** approval dialogs in Stock out and Stock · **Roles:** logged in.
 - **Response:** `[{ "id":"3b6f…","name":"Owner","role":"owner" }, { "id":"9c21…","name":"Manager","role":"manager" }]`.

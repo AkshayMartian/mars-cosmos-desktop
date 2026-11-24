@@ -10,7 +10,7 @@ import * as cat from './services/catalogue'
 import { celebrationsToday, createCustomer, deleteCustomer, findCustomerByMobile, getCustomer, listCustomers, saveCustomer } from './services/customers'
 import { commitImport } from './services/importer'
 import * as alterations from './services/alterations'
-import { appInfo, mySalesToday } from './services/settings'
+import { appInfo, markTourDone, mySalesToday } from './services/settings'
 import { logoDataUri } from './services/branding'
 import { createRecoveryCode, resetOwnerPin, resetPinByApprover } from './services/pinreset'
 import { logoReady } from './logo'
@@ -47,6 +47,7 @@ export function registerIpc(): void {
   h('app:info', appInfo)
   h('app:logo', async () => { await logoReady(); return logoDataUri() })
   h('app:mySales', mySalesToday)
+  h('app:tourDone', markTourDone)
   h('auth:staff', listActiveStaff)
   h('auth:login', (id: string, pin: string) => { licence.assertActivated(); return login(id, pin) }) // closed until this PC is activated
   h('licence:status', () => licence.licenceStatus())

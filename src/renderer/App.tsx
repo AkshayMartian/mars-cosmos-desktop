@@ -4,6 +4,8 @@ import type { LicenceInfo } from '@shared/licence'
 import { homeFor, menuFor, type AppInfo, type MenuId, type StaffPublic } from '@shared/types'
 import { Alterations } from './screens/Alterations'
 import { Activate } from './screens/Licence'
+import { Tour } from './Tour'
+import { tourSteps } from '@shared/tour'
 import { Bills } from './screens/Bills'
 import { Billing } from './screens/Billing'
 import { Customers } from './screens/Customers'
@@ -84,6 +86,9 @@ export function App() {
   // A PC activated in this session always starts with the setup wizard (Shop step first), even when the database already has data.
   const [onboarding, setOnboarding] = useState(false)
   useEffect(() => { if (user?.role === 'owner' && info && (!info.setupDone || onboarding)) setWizard(true); if (!user) setWizard(false) }, [user, info, onboarding])
+  // Guided tour: opens once, right after the setup wizard is finished or skipped (the shop is marked in the database); replay it any time from "Take a tour" in the menu.
+  const [tour, setTour] = useState(false)
+  const closeTour = () => { setTour(false); void window.api.app.tourDone().then(() => window.api.app.info().then(setInfo), () => undefined) }
   // "My sales today" chip: refreshed on login, on every screen change, with the clock and right after a bill is saved.
   const [salesTick, setSalesTick] = useState(0)
   useEffect(() => { if (user) void window.api.app.mySales().then(setSales, () => undefined) }, [user, view, clock, salesTick])
@@ -137,9 +142,9 @@ export function App() {
         <button className="btn-top" data-theme-btn title="Auto = dark from 7 pm to 7 am. Click to change." onClick={cycleTheme}>Theme: {THEME_LABEL[themeMode]}</button>
         {user && (
           <>
-            <span className="chip good" title="Your sales today as salesperson">My sales today {formatRupees(sales)}</span>
+            <span className="chip good" data-tour="my-sales" title="Your sales today as salesperson">My sales today {formatRupees(sales)}</span>
             <span className="who">{user.name}<small>{roleName[user.role]}</small></span>
-            <button className="btn-top" onClick={lock}>Lock</button>
+            <button className="btn-top" data-tour="lock" onClick={lock}>Lock</button>
           </>
         )}
       </header>
@@ -153,12 +158,14 @@ export function App() {
             {items.map((m, i) => (
               <div key={m.id} style={{ display: 'contents' }}>
                 {i > 0 && items[i - 1]!.group !== m.group && <div className="sep" />}
-                <button aria-current={view === m.id ? 'page' : undefined} onClick={() => go(m.id)}>
+                <button data-tour={'menu-' + m.id} aria-current={view === m.id ? 'page' : undefined} onClick={() => go(m.id)}>
                   <span>{m.label}</span>
                   {m.key && <kbd>{m.key}</kbd>}
                 </button>
               </div>
             ))}
+            <div className="sep" />
+            <button data-tour="menu-tour" onClick={() => setTour(true)} title="Show the guided tour again"><span>Take a tour</span></button>
           </nav>
           <main className="work">
             {info?.backupWarn && (user.role === 'owner' || user.role === 'manager') && (
@@ -182,11 +189,12 @@ export function App() {
             )}
             {/* key = remount on switch so each screen reloads fresh data */}
             {wizard
-              ? <Setup onDone={() => { setWizard(false); setOnboarding(false); void window.api.app.info().then(setInfo); go(homeFor(user.role)) }} />
+              ? <Setup onDone={() => { setWizard(false); setOnboarding(false); void window.api.app.info().then((i) => { setInfo(i); if (!i.tourDone) setTour(true) }); go(homeFor(user.role)) }} />
               : Screen ? <Screen key={view} user={user} go={go} intent={intent} /> : <Placeholder title={items.find((m) => m.id === view)?.label ?? ''} />}
           </main>
         </div>
       )}
+      {tour && user && !wizard && <Tour steps={tourSteps(user.role, items.map((m) => m.id))} onClose={closeTour} />}
     </div>
   )
 }

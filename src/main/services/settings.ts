@@ -30,6 +30,13 @@ export function appInfo(): AppInfo {
   const backupDays = last ? Math.floor((Date.now() - new Date(last.at).getTime()) / 864e5) : null
   return {
     shopName: shop.name || 'Your Shop', counter: getSetting('counter', 'C1'), idleMinutes: security.idleMinutes ?? 10,
-    recoveryCodeSet: !!getSetting('recovery', null), setupDone, backupDays, backupWarn: used && (backupDays === null || backupDays > 2)
+    recoveryCodeSet: !!getSetting('recovery', null), tourDone: getSetting<boolean>('tour_done', false), setupDone, backupDays, backupWarn: used && (backupDays === null || backupDays > 2)
   }
+}
+
+/** The guided tour was shown or skipped: it does not open by itself again (anyone can replay it from the menu). */
+export function markTourDone(): true {
+  current() // someone must be logged in
+  getDb().prepare("INSERT INTO settings (key,value) VALUES ('tour_done','true') ON CONFLICT(key) DO UPDATE SET value=excluded.value").run()
+  return true
 }

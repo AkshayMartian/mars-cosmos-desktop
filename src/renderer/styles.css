@@ -153,3 +153,17 @@ td input[type=number]{width:80px;padding:5px 7px}
 .lblprev{display:flex;justify-content:center;align-items:center;padding:16px 10px;background:var(--sunk);border-radius:10px;overflow:hidden}.lblprev .lbl{border:1px solid #111;border-radius:3px;zoom:1.5;flex:none}.printer-line{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
 
 .btn-top[data-theme-btn]{min-width:86px}
+
+/* guided tour (new): dimmed screen, spotlight on one element, a card beside it */
+.tour{position:fixed;inset:0;z-index:80}
+.tour-dim{position:absolute;inset:0;background:rgba(20,16,12,.62)}
+.tour-spot{position:absolute;border-radius:10px;box-shadow:0 0 0 9999px rgba(20,16,12,.62),0 0 0 2px var(--accent);pointer-events:none;transition:all .18s ease}
+.tour-card{position:absolute;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:8px;box-shadow:0 12px 40px rgba(0,0,0,.35)}
+.tour-card h2{font-size:18px;margin:0}
+.tour-card p{margin:0;color:var(--muted)}
+.tour-count{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--accent-ink)}
+.tour-dots{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
+.tour-dots i{width:6px;height:6px;border-radius:50%;background:var(--line)}
+.tour-dots i.on{background:var(--accent)}
+.tour-foot{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px}
+@media (prefers-reduced-motion:reduce){.tour-spot{transition:none}}

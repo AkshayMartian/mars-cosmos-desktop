@@ -33,6 +33,8 @@ export interface AppInfo {
   backupWarn: boolean
   /** false until the owner has made a recovery code (the way back in if the owner PIN is forgotten) */
   recoveryCodeSet: boolean
+  /** the guided tour was shown (or skipped) once for this shop; it can still be replayed from the menu */
+  tourDone: boolean
 }
 
 export type MenuId =

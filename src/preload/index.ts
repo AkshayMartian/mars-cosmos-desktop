@@ -29,7 +29,7 @@ async function call<T>(channel: string, ...args: unknown[]): Promise<T> {
 }
 
 const api = {
-  app: { info: () => call<AppInfo>('app:info'), logo: () => call<string | null>('app:logo'), mySales: () => call<number>('app:mySales') },
+  app: { info: () => call<AppInfo>('app:info'), logo: () => call<string | null>('app:logo'), mySales: () => call<number>('app:mySales'), tourDone: () => call<true>('app:tourDone') },
   licence: {
     status: () => call<LicenceInfo>('licence:status'),
     request: (key: string, mobile: string) => call<string>('licence:request', key, mobile),
