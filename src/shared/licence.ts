@@ -8,6 +8,8 @@ export type LicenceState =
   | 'invalid'   // a licence is saved but is not valid on this PC (copied from another PC, tampered)
 
 export const EXPIRY_WARN_DAYS = 14
+/** A trial is only 14 days long, so it warns later (otherwise it would be "expiring" from the first minute). */
+export const TRIAL_WARN_DAYS = 5
 /** An online-activated licence that has not reached the server for this long shows a warning (the app keeps working). */
 export const STALE_CHECK_DAYS = 30
 export const TRIAL_DAYS = 14

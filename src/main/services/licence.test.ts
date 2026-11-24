@@ -72,6 +72,12 @@ describe('key typing', () => {
 })
 
 describe('licence life', () => {
+  it('a fresh 14-day trial is not "expiring"; it warns only in its last 5 days', () => {
+    activateWithCode(licence({ kind: 'trial', expires: ymd(14) }))
+    expect(licenceStatus()).toMatchObject({ state: 'active', kind: 'trial' })
+    activateWithCode(licence({ kind: 'trial', expires: ymd(5) }))
+    expect(licenceStatus().state).toBe('expiring')
+  })
   it('warns in the last 14 days, still works', () => {
     activateWithCode(licence({ expires: ymd(10) }))
     expect(licenceStatus()).toMatchObject({ state: 'expiring', daysLeft: 10 })

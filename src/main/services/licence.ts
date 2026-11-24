@@ -3,7 +3,7 @@ import { hostname, networkInterfaces, platform } from 'node:os'
 import { getDb } from '../db'
 import { checkMobile } from '@shared/mobile'
 import {
-  EXPIRY_WARN_DAYS, KEY_MSG, KEY_RE, STALE_CHECK_DAYS, normaliseKey, type LicenceInfo, type LicencePayload
+  EXPIRY_WARN_DAYS, KEY_MSG, KEY_RE, STALE_CHECK_DAYS, TRIAL_WARN_DAYS, normaliseKey, type LicenceInfo, type LicencePayload
 } from '@shared/licence'
 import { audit } from './auth'
 import { LICENCE_PUBLIC_KEY } from './licenceKey'
@@ -90,7 +90,7 @@ function compute(now: number): Omit<LicenceInfo, 'skip'> {
   const checkedDaysAgo = s.via === 'online' && s.checkedAt ? Math.floor((now - new Date(s.checkedAt).getTime()) / DAY) : null
   const info = { ...base, daysLeft, checkedDaysAgo, staleCheck: checkedDaysAgo !== null && checkedDaysAgo >= STALE_CHECK_DAYS }
   if (now > end) return { ...info, state: 'expired', daysLeft: 0 }
-  return { ...info, state: daysLeft <= EXPIRY_WARN_DAYS ? 'expiring' : 'active' }
+  return { ...info, state: daysLeft <= (p.kind === 'trial' ? TRIAL_WARN_DAYS : EXPIRY_WARN_DAYS) ? 'expiring' : 'active' }
 }
 
 /** Developers can skip activation: MARS_SKIP_LICENCE=1. Never set on a shop PC. */
