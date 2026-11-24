@@ -4,7 +4,7 @@ export type LicenceState =
   | 'none'      // not activated yet: only the activation screen is shown
   | 'active'
   | 'expiring'  // active, but fewer than EXPIRY_WARN_DAYS left
-  | 'expired'   // read-only: old bills can be seen and reprinted, no new bills
+  | 'expired'   // the application is blocked until it is renewed (data is kept)
   | 'invalid'   // a licence is saved but is not valid on this PC (copied from another PC, tampered)
 
 export const EXPIRY_WARN_DAYS = 14
@@ -64,4 +64,17 @@ export function formatKey(raw: string): string {
   t = t.slice(0, 12)
   if (!t) return ''
   return 'MARS-' + (t.match(/.{1,4}/g) ?? []).join('-')
+}
+
+/**
+ * What is wrong with text pasted as the response code, or '' when it looks right. Shape only; the signature is checked in the main process.
+ * A full code is `MARSL1.<details>.<signature>`; the request code the PC shows itself starts with MARSR1 and has no signature.
+ */
+export function responseCodeProblem(text: string): string {
+  const t = String(text ?? '').trim().replace(/\s+/g, '')
+  if (!t) return ''
+  if (t.startsWith('MARSR1')) return 'This is the request code that this PC made. Send it to MARS support, then paste the response code they send back.'
+  if (!t.startsWith('MARSL1.')) return 'The response code starts with MARSL1. Check that you pasted the code MARS support sent.'
+  if (t.split('.').length !== 3 || !t.split('.')[2]) return 'This code is incomplete. A response code has three parts separated by dots; copy all of it.'
+  return ''
 }

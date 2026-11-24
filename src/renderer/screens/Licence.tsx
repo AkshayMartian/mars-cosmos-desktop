@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { LicenceInfo } from '@shared/licence'
-import { KEY_MSG, KEY_RE, TRIAL_DAYS, formatKey } from '@shared/licence'
+import { KEY_MSG, KEY_RE, TRIAL_DAYS, formatKey, responseCodeProblem } from '@shared/licence'
 import { MOBILE_MSG, cleanMobile, isIndianMobile } from '@shared/mobile'
 import { useMsg } from '../ui'
 
@@ -31,6 +31,7 @@ export function Activate({ info, onDone }: { info: LicenceInfo | null; onDone: (
     if (l) onDone(l)
   }
   const pick = (m: typeof mode) => { setMode(m); setMsg(null) }
+  const respProblem = responseCodeProblem(response)
   const keyOk = KEY_RE.test(key)
   const mobileOk = isIndianMobile(mobile)
   const keyBox = (
@@ -75,8 +76,9 @@ export function Activate({ info, onDone }: { info: LicenceInfo | null; onDone: (
                 <div className="hint">PC ID {info?.machine}. Support sends back a response code.</div></div>
             )}
             <div className="f"><label htmlFor="ac-rs">3. Type or paste the response code</label>
-              <textarea id="ac-rs" rows={3} className="mono" placeholder="MARSL1.…" value={response} onChange={(e) => setResponse(e.target.value)} /></div>
-            <button className="btn p lg" disabled={busy || !response.trim().startsWith('MARSL1.')} onClick={() => void go(async () => window.api.licence.activateCode(response))}>Activate</button>
+              <textarea id="ac-rs" rows={3} className="mono" placeholder="MARSL1.…" value={response} aria-invalid={!!respProblem} onChange={(e) => { setResponse(e.target.value); setMsg(null) }} />
+              {respProblem && <div role="alert" style={{ color: 'var(--bad)', fontWeight: 600, fontSize: 13 }}>{respProblem}</div>}</div>
+            <button className="btn p lg" disabled={busy || !response.trim() || !!respProblem} onClick={() => void go(async () => window.api.licence.activateCode(response))}>Activate</button>
           </>
         )}
 
@@ -113,13 +115,12 @@ export function LicenceTab({ onChange }: { onChange?: (l: LicenceInfo) => void }
   useEffect(() => { void run(() => window.api.licence.status()).then((l) => l && setInfo(l)) }, [run])
   const changed = (l: LicenceInfo) => { setInfo(l); onChange?.(l) }
   if (!info) return <div className="empty">Loading…</div>
-  const chip = info.state === 'expired' ? <span className="chip bad">Expired: read-only</span>
+  const chip = info.state === 'expired' ? <span className="chip bad">Expired</span>
     : info.state === 'expiring' ? <span className="chip warn">{info.daysLeft === 0 ? 'Last day' : `${info.daysLeft} days left`}</span>
     : info.state === 'active' ? <span className="chip good">Active</span> : <span className="chip muted">Not activated</span>
   return (
     <>
       {node}
-      {info.state === 'expired' && <div className="banner bad" role="alert">The licence has expired. You can see and reprint old bills, but new bills are blocked until you renew. Nothing is deleted.</div>}
       {info.staleCheck && <div className="banner" role="status">This PC has not reached the MARS server for {info.checkedDaysAgo} days. Billing still works; connect to the internet when you can.</div>}
       <div className="tw"><table><tbody>
         <tr><th scope="row">Status</th><td>{chip}{info.kind === 'trial' && <> <span className="chip muted">Free trial</span></>}</td></tr>
@@ -136,5 +137,35 @@ export function LicenceTab({ onChange }: { onChange?: (l: LicenceInfo) => void }
         <div className="hint">Online shops renew by themselves. Use this when there is no internet: tell support your PC ID, then paste the code they send.</div></div>
       <div><button className="btn p" disabled={!code.trim()} onClick={() => void run(async () => window.api.licence.activateCode(code)).then((l) => { if (l) { setCode(''); changed(l); setMsg({ ok: true, text: 'Licence renewed.' }) } })}>Renew</button></div>
     </>
+  )
+}
+
+/** Shown instead of the whole application when the licence has expired. Only renewing is possible; the data is untouched. */
+export function Expired({ info, onDone }: { info: LicenceInfo; onDone: (l: LicenceInfo) => void }) {
+  const [code, setCode] = useState('')
+  const [busy, setBusy] = useState(false)
+  const { run, node, setMsg } = useMsg()
+  const problem = responseCodeProblem(code)
+  const go = async (fn: () => Promise<LicenceInfo>, okText?: string) => {
+    setBusy(true)
+    const l = await run(fn, okText)
+    setBusy(false)
+    if (l) { setMsg(null); onDone(l) }
+  }
+  return (
+    <div className="login">
+      <div className="lcard">
+        <div><div className="sub">{info.shopName || 'Mars Cosmos'}</div><h1>Licence expired</h1></div>
+        <div className="banner bad" role="alert">The licence ended on {dmy(info.expires)}. The application is locked until it is renewed. Your data is safe; nothing has been deleted.</div>
+        <p>Renew over the internet, or call MARS support with this PC ID and type the renewal code they give you.</p>
+        <div className="f"><label>PC ID</label><div className="mono">{info.machine}</div></div>
+        <button className="btn" disabled={busy} onClick={() => void go(() => window.api.licence.refresh())}>{busy ? 'Checking…' : 'Renew over the internet'}</button>
+        <div className="f"><label htmlFor="ex-c">Renewal code</label>
+          <textarea id="ex-c" rows={3} className="mono" placeholder="MARSL1.…" value={code} aria-invalid={!!problem} onChange={(e) => { setCode(e.target.value); setMsg(null) }} />
+          {problem && <div role="alert" style={{ color: 'var(--bad)', fontWeight: 600, fontSize: 13 }}>{problem}</div>}</div>
+        <button className="btn p lg" disabled={busy || !code.trim() || !!problem} onClick={() => void go(async () => window.api.licence.activateCode(code))}>Renew</button>
+        {node}
+      </div>
+    </div>
   )
 }

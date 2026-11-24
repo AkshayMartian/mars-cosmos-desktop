@@ -23,7 +23,7 @@ Start here to review any module. Each module has one note (copy of [_module-temp
 | [Day end](day-end/day-end.md) | **done** | Cash reconciliation, expenses, close and backup |
 | [Settings](settings/settings.md) | **done** | Shop, GST, receipt, printers, staff, backup |
 | [Backup](backup/backup.md) | partial | Automatic backup on day close and at app start; warning bar |
-| [Licence and onboarding](licence/licence.md) | **built, untested** | Activation (online / offline code / trial), expiry = read-only, first-run wizard |
+| [Licence and onboarding](licence/licence.md) | **built, untested** | Activation (online / offline code / trial), expiry blocks the app, first-run wizard |
 | [Installer](installer/installer.md) | **built, untested** | `npm run dist` makes the Windows setup .exe |
 
 ## 7. Database schema

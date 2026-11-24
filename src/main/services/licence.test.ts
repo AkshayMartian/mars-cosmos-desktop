@@ -1,6 +1,6 @@
 import { generateKeyPairSync } from 'node:crypto'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { formatKey, type LicencePayload } from '@shared/licence'
+import { formatKey, responseCodeProblem, type LicencePayload } from '@shared/licence'
 import { getDb, openDb } from '../db'
 import { setCurrent } from './session'
 import {
@@ -41,7 +41,7 @@ describe('activation', () => {
     expect(() => requestCode('NOPE', '9876543210')).toThrow('MARS-XXXX')
     expect(() => requestCode(KEY, '123')).toThrow('valid Indian mobile')
     expect(() => requestCode(KEY, '5555555555')).toThrow('starting with 6, 7, 8 or 9')
-    expect(() => activateWithCode('hello')).toThrow('not a MARS licence code')
+    expect(() => activateWithCode('hello')).toThrow('starts with MARSL1')
     const [h, body, sig] = licence().split('.') as [string, string, string]
     const mid = sig.length >> 1 // the last base64 char can carry unused bits, so change one in the middle
     const forged = [h, body, sig.slice(0, mid) + (sig[mid] === 'A' ? 'B' : 'A') + sig.slice(mid + 1)].join('.')
@@ -57,6 +57,19 @@ describe('activation', () => {
   it('the developer bypass opens the app without a licence', () => {
     process.env['MARS_SKIP_LICENCE'] = '1'
     expect(() => assertActivated()).not.toThrow()
+  })
+})
+
+describe('response code shape', () => {
+  it('explains a request code, a wrong prefix and a code with no signature', () => {
+    expect(responseCodeProblem('')).toBe('')
+    expect(responseCodeProblem(requestCode(KEY, '9876543210'))).toContain('request code')
+    expect(responseCodeProblem('hello')).toContain('starts with MARSL1')
+    expect(responseCodeProblem('MARSL1.abc')).toContain('incomplete')
+    expect(responseCodeProblem('MARSL1.abc.')).toContain('incomplete')
+    expect(responseCodeProblem(licence())).toBe('')
+    expect(() => activateWithCode(requestCode(KEY, '9876543210'))).toThrow('request code that this PC made')
+    expect(() => activateWithCode('MARSL1.abc')).toThrow('incomplete')
   })
 })
 
@@ -83,13 +96,14 @@ describe('licence life', () => {
     expect(licenceStatus()).toMatchObject({ state: 'expiring', daysLeft: 10 })
     expect(() => assertCanSell()).not.toThrow()
   })
-  it('an expired licence is read-only: no new bills, login still opens, and a renewal code fixes it', () => {
+  it('an expired licence blocks the whole application until a renewal code is entered', () => {
     activateWithCode(licence({ expires: ymd(-1) }))
     expect(licenceStatus().state).toBe('expired')
-    expect(() => assertActivated()).not.toThrow()
+    expect(() => assertActivated()).toThrow('licence has expired') // the gate every screen and call goes through
     expect(() => assertCanSell()).toThrow('expired')
-    activateWithCode(licence({ expires: ymd(365) }))
+    activateWithCode(licence({ expires: ymd(365) })) // the renewal screen can still accept a code
     expect(licenceStatus().state).toBe('active')
+    expect(() => assertActivated()).not.toThrow()
     expect(() => assertCanSell()).not.toThrow()
   })
   it('the last day itself is still valid', () => {

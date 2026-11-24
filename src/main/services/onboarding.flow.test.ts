@@ -22,7 +22,7 @@ import { join } from 'node:path'
 
 /**
  * The whole onboarding journey of a new shop, against a real HTTP licence server (a stand-in that signs like the real one):
- * activate -> log in -> setup wizard -> tour flag -> first sale -> expiry (read-only) -> renewal -> trial.
+ * activate -> log in -> setup wizard -> tour flag -> first sale -> expiry (application blocked) -> renewal -> trial.
  */
 const pair = generateKeyPairSync('ed25519')
 const PEM = pair.privateKey.export({ type: 'pkcs8', format: 'pem' }) as string
@@ -167,7 +167,7 @@ describe('3. online activation, then the whole first-run', () => {
   })
 })
 
-describe('4. expiry is read-only, renewal brings it back', () => {
+describe('4. expiry blocks the application, renewal brings it back', () => {
   async function shopWithStock() {
     await activateOnline(KEY, MOBILE)
     as('owner')
@@ -177,7 +177,7 @@ describe('4. expiry is read-only, renewal brings it back', () => {
   }
   const sale = (variantId: string) => createBill({ lines: [{ variantId, qty: 1, disc: 0 }], customerId: null, billDisc: 0, salesBy: null, payments: [{ mode: 'cash', amount: 149_900 }] })
 
-  it('warns near the end, blocks bills after it, keeps login and backup, then a renewal unblocks', async () => {
+  it('warns near the end, blocks everything after it, then a renewal unblocks', async () => {
     const v = await shopWithStock()
     setCurrent(null); as('cashier'); openDay(0)
     expect(sale(v.id).status).toBe('completed')
@@ -187,21 +187,21 @@ describe('4. expiry is read-only, renewal brings it back', () => {
     expect(licenceStatus()).toMatchObject({ state: 'expiring', daysLeft: 5 })
     expect(sale(v.id).status).toBe('completed')
 
-    // expired yesterday: read-only
+    // expired yesterday: the application is blocked (the screens and every call go through assertActivated)
     activateWithCode(token({ expires: ymd(-1) }))
     expect(licenceStatus().state).toBe('expired')
-    expect(() => assertActivated()).not.toThrow() // login still opens
-    expect(login(id('cashier'), '3333').ok).toBe(true)
+    expect(() => assertActivated()).toThrow('licence has expired')
     as('cashier')
     expect(() => sale(v.id)).toThrow('licence has expired')
     as('owner')
-    expect(() => runBackup()).not.toThrow() // data stays safe
-    expect(getAllSettings().shop).toBeTruthy() // settings still readable
+    expect(getDb().prepare('SELECT COUNT(*) n FROM bills').get()).toMatchObject({ n: 2 }) // the data is still there, nothing deleted
+    expect(() => runBackup()).not.toThrow()
 
     // renewal over the internet (the weekly check, forced)
     nextRefresh = ymd(365)
     const renewed = await refreshLicence(true)
     expect(renewed.state).toBe('active')
+    expect(() => assertActivated()).not.toThrow()
     as('cashier')
     expect(sale(v.id).status).toBe('completed')
     expect(hits).toContain('/v1/refresh')

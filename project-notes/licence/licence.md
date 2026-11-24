@@ -2,7 +2,7 @@
 
 ## 1. Summary
 
-- **What it does:** a new PC opens on the **Activate this PC** screen; nothing else works until it is activated. After activation the owner logs in and is walked through the **first-run wizard** (shop, GST, categories, printers, own PIN, staff). From then on the app works without internet. Expired licence = read-only (see old bills, reprint, back up; no new bills). Data is never deleted.
+- **What it does:** a new PC opens on the **Activate this PC** screen; nothing else works until it is activated. After activation the owner logs in and is walked through the **first-run wizard** (shop, GST, categories, printers, own PIN, staff). From then on the app works without internet. An expired licence **blocks the whole application**: only the "Licence expired" screen (renew over the internet, or type a renewal code) opens. Data is never deleted.
 - **Screens:** `src/renderer/screens/Licence.tsx` (`Activate`, and `LicenceTab` in Settings → Licence), `src/renderer/screens/Setup.tsx` (wizard), banners in `src/renderer/App.tsx`.
 - **Who can use it:** anyone at the PC can activate / renew (the codes are signed by MARS). The wizard and Settings → Licence are owner only.
 - **Status:** built, not yet tried against a real licence server (the server and admin portal are not in this repo).
@@ -17,7 +17,7 @@
 | No internet tab: Make the request code / Copy / response box / Activate | buttons, field | offline activation, see flow below |
 | Free trial tab: Send me the code / Start free trial | buttons | 14-day trial with a mobile one-time code |
 | Settings → Licence: Check with MARS now, Renewal code + Renew | button, field | weekly check on demand; offline renewal |
-| Top bar chip | banner | "ends in N days", "expired", "no server contact for N days" |
+| Top bar chip | banner | "ends in N days", "no server contact for N days"; the full-screen "Licence expired" renewal screen |
 
 ## 3. Flows
 
@@ -45,7 +45,7 @@ Server contract (not built here): every reply is JSON; an error is `{error: "mes
 | `licence:trialVerify` | mobile, otp, shop | `LicenceInfo` |
 | `licence:refresh` | none | `LicenceInfo` (Check with MARS now) |
 
-`auth:login` now first checks that the PC is activated (`assertActivated`). `billing:create` calls `assertCanSell` (blocked when expired).
+Every call except `licence:*`, `app:info`, `app:logo` and `auth:logout` first runs `assertActivated` in `ipc.ts`: it refuses when the PC is not activated, the licence is invalid, or it has expired. `billing:create` also calls `assertCanSell`. The screen re-checks the licence every minute and locks a logged-in user the moment it expires.
 
 ## 5. Database
 
@@ -56,7 +56,7 @@ Server contract (not built here): every reply is JSON; an error is `{error: "mes
 - A licence is signed (Ed25519) by MARS; the app holds only the public key (`licenceKey.ts`, a **development key** until a production pair is made with `npm run licence -- keygen`).
 - Bound to this PC: id = hash of host name + OS + first network adapter. A licence copied to another PC shows "belongs to another PC". Changing the network adapter or the PC name needs a release from MARS.
 - Expiry date is inclusive. Warning from 14 days before. An online licence with no server contact for 30 days shows a warning only.
-- Expired: login still opens, bills are blocked, everything else works.
+- Expired: the application is blocked (login, billing, reports, backup buttons; everything) until renewed. The renewal screen offers "Renew over the internet" and a renewal-code box. The data stays on the PC.
 - Developers: `MARS_SKIP_LICENCE=1` skips the activation screen and the expiry block. Server address: `MARS_LICENCE_URL` or `licenceServer` in `config.json`.
 - Not built yet: the cloud server, the admin portal, "Release PC", the 14-day trial lead capture on the server side, licence-bound cloud restore.
 
@@ -68,7 +68,7 @@ Server contract (not built here): every reply is JSON; an error is `{error: "mes
 | Request code → response code activates | state active | pass | 2026-11-24 |
 | Forged / other-key / other-PC / bad codes | refused with a readable message | pass | 2026-11-24 |
 | 10 days left | state expiring, still sells | pass | 2026-11-24 |
-| Expired | login ok, `assertCanSell` throws; renewal code fixes it | pass | 2026-11-24 |
+| Expired | `assertActivated` and `assertCanSell` throw; data still there; a renewal code or a server renewal unblocks | pass | 2026-11-24 |
 | Licence on another PC; renewal for another key | invalid; refused | pass | 2026-11-24 |
 
 ## 8. Changelog

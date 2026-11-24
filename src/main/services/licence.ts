@@ -3,7 +3,7 @@ import { hostname, networkInterfaces, platform } from 'node:os'
 import { getDb } from '../db'
 import { checkMobile } from '@shared/mobile'
 import {
-  EXPIRY_WARN_DAYS, KEY_MSG, KEY_RE, STALE_CHECK_DAYS, TRIAL_WARN_DAYS, normaliseKey, type LicenceInfo, type LicencePayload
+  EXPIRY_WARN_DAYS, KEY_MSG, KEY_RE, STALE_CHECK_DAYS, TRIAL_WARN_DAYS, responseCodeProblem, normaliseKey, type LicenceInfo, type LicencePayload
 } from '@shared/licence'
 import { audit } from './auth'
 import { LICENCE_PUBLIC_KEY } from './licenceKey'
@@ -14,7 +14,7 @@ import { getSetting } from './settings'
  * of two ways, and both end in `saveToken`, so there is one verifier:
  *   - online: the licence server returns it after the key + mobile are checked;
  *   - offline: the PC shows a request code, support signs a response code, the owner types it in.
- * The licence is bound to this PC (`machineId`). Expired = read-only (nobody's data is ever deleted).
+ * The licence is bound to this PC (`machineId`). An expired licence blocks the whole application until it is renewed; nothing is ever deleted.
  */
 
 const DAY = 864e5
@@ -48,6 +48,8 @@ const validKey = (key: string): string => {
 /** Checks the signature and the shape. Throws a readable message; never trusts the payload before the signature passes. */
 export function verifyToken(token: string): LicencePayload {
   const parts = String(token ?? '').trim().replace(/\s+/g, '').split('.')
+  const shape = responseCodeProblem(parts.join('.'))
+  if (shape) throw new Error(shape)
   if (parts.length !== 3 || parts[0] !== 'MARSL1') throw new Error('This is not a MARS licence code. Check that you copied all of it.')
   let ok = false
   try {
@@ -96,17 +98,18 @@ function compute(now: number): Omit<LicenceInfo, 'skip'> {
 /** Developers can skip activation: MARS_SKIP_LICENCE=1. Never set on a shop PC. */
 const skipped = (): boolean => process.env['MARS_SKIP_LICENCE'] === '1'
 
-/** The login screen only opens on an activated PC (an expired licence still opens, read-only). */
+/** The application only works on an activated PC with a licence that has not expired. Everything but the licence screens asks this first (ipc.ts). */
 export function assertActivated(): void {
   if (skipped()) return
   const st = licenceStatus().state
   if (st === 'none' || st === 'invalid') throw new Error('Activate this PC first.')
+  if (st === 'expired') throw new Error('The licence has expired. Enter a renewal code or call MARS support. Your data is safe.')
 }
 
-/** New bills are blocked once the licence has expired. Everything else (view, reprint, backup) keeps working. */
+/** Second lock for new bills, in case a call reaches billing without the gate above. Only an expired licence stops it here; activation is the gate's job. */
 export function assertCanSell(): void {
   if (skipped()) return
-  if (licenceStatus().state === 'expired') throw new Error('The licence has expired, so new bills cannot be made. Enter a renewal code in Settings → Licence, or call MARS support. Your data is safe.')
+  if (licenceStatus().state === 'expired') throw new Error('The licence has expired. Enter a renewal code or call MARS support. Your data is safe.')
 }
 
 function saveToken(token: string, via: Saved['via']): LicenceInfo {

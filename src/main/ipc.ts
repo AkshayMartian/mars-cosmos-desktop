@@ -33,9 +33,13 @@ type Result<T> = { ok: true; data: T } | { ok: false; error: string }
  * calls these. Errors thrown by services reach the UI as readable messages.
  * Add new domains (bills, ...) as more `h(...)` lines.
  */
+/** Open to everyone: the licence screens and the little the top bar needs. Every other call needs an activated, unexpired licence. */
+const UNLICENSED_OK = (channel: string): boolean => channel.startsWith('licence:') || channel === 'app:info' || channel === 'app:logo' || channel === 'auth:logout'
+
 function h<A extends unknown[], R>(channel: string, fn: (...a: A) => R | Promise<R>): void {
   ipcMain.handle(channel, async (_e, ...args): Promise<Result<R>> => {
     try {
+      if (!UNLICENSED_OK(channel)) licence.assertActivated()
       return { ok: true, data: await fn(...(args as A)) }
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : 'Something went wrong.' }
@@ -49,7 +53,7 @@ export function registerIpc(): void {
   h('app:mySales', mySalesToday)
   h('app:tourDone', markTourDone)
   h('auth:staff', listActiveStaff)
-  h('auth:login', (id: string, pin: string) => { licence.assertActivated(); return login(id, pin) }) // closed until this PC is activated
+  h('auth:login', login)
   h('licence:status', () => licence.licenceStatus())
   h('licence:request', licence.requestCode)
   h('licence:activateCode', licence.activateWithCode)
