@@ -27,7 +27,7 @@ async function call<T>(channel: string, ...args: unknown[]): Promise<T> {
 }
 
 const api = {
-  app: { info: () => call<AppInfo>('app:info'), mySales: () => call<number>('app:mySales') },
+  app: { info: () => call<AppInfo>('app:info'), logo: () => call<string | null>('app:logo'), mySales: () => call<number>('app:mySales') },
   auth: {
     staff: () => call<StaffPublic[]>('auth:staff'),
     login: (id: string, pin: string) => call<LoginResult>('auth:login', id, pin),

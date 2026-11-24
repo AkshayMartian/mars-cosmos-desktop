@@ -16,6 +16,7 @@ import { Products } from './screens/Products'
 import { Settings } from './screens/Settings'
 import { Stickers } from './screens/Stickers'
 import { Stock } from './screens/Stock'
+import defaultLogo from './assets/logo.svg' // shown until the downloaded logo is in the database
 import { StockIn } from './screens/StockIn'
 import { StockOut } from './screens/StockOut'
 
@@ -49,6 +50,8 @@ const clockText = (): string =>
 
 export function App() {
   const [info, setInfo] = useState<AppInfo | null>(null)
+  const [logo, setLogo] = useState<string | null>(null) // downloaded once, kept in the database
+  useEffect(() => { void window.api.app.logo().then(setLogo) }, [])
   const [user, setUser] = useState<StaffPublic | null>(null)
   const [view, setView] = useState<MenuId>('products')
   const [intent, setIntent] = useState<string | undefined>(undefined)
@@ -114,7 +117,7 @@ export function App() {
   return (
     <div className="app">
       <header className="top">
-        <span className="logo"><i />Mars Cosmos</span>
+        <span className="logo"><img src={logo ?? defaultLogo} alt="" />Mars Cosmos</span>
         <span className="shop">{info?.shopName ?? ''} · Counter {info?.counter ?? ''}</span>
         <span className="sp" />
         <span className="shop num">{clock}</span>

@@ -21,8 +21,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 /* top bar */
 .top{position:sticky;top:0;z-index:20;background:var(--bar);color:var(--bar-ink);display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:9px 16px}
 .logo{font-weight:800;letter-spacing:.02em;display:flex;align-items:center;gap:8px}
-.logo i{width:22px;height:22px;border-radius:6px;background:var(--accent);display:inline-block;position:relative}
-.logo i::after{content:"";position:absolute;inset:6px;border-radius:50%;background:var(--bar)}
+.logo img{width:28px;height:28px;display:block}
 .top .shop{color:var(--bar-muted);font-size:13px}
 .top .sp{flex:1}
 .top .who{font-size:13px;text-align:right;line-height:1.2}

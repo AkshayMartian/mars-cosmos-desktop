@@ -10,6 +10,8 @@ import { celebrationsToday, createCustomer, deleteCustomer, findCustomerByMobile
 import { commitImport } from './services/importer'
 import * as alterations from './services/alterations'
 import { appInfo, mySalesToday } from './services/settings'
+import { logoDataUri } from './services/branding'
+import { logoReady } from './logo'
 import * as returns from './services/returns'
 import * as stickers from './services/stickers'
 import * as admin from './services/admin'
@@ -39,6 +41,7 @@ function h<A extends unknown[], R>(channel: string, fn: (...a: A) => R | Promise
 
 export function registerIpc(): void {
   h('app:info', appInfo)
+  h('app:logo', async () => { await logoReady(); return logoDataUri() })
   h('app:mySales', mySalesToday)
   h('auth:staff', listActiveStaff)
   h('auth:login', login)

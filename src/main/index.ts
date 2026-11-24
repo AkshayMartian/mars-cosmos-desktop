@@ -1,4 +1,6 @@
 import { app, BrowserWindow, shell } from 'electron'
+import { startLogoSync, storedIcon } from './logo'
+import icon from '../../build/icon.ico?asset'
 import { join } from 'node:path'
 import { resolveDbPath } from './config'
 import { openDb } from './db'
@@ -15,6 +17,7 @@ function createWindow(): void {
     minHeight: 640,
     show: false,
     autoHideMenuBar: true,
+    icon: storedIcon() ?? icon, // the downloaded logo if there is one, else the built-in icon
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -48,6 +51,7 @@ app.whenReady().then(() => {
   purgeTemp(24 * 60 * 60 * 1000) // photos chosen but never saved
   setBackupDir(join(app.getPath('userData'), 'backups')) // until a USB / second-disk folder is chosen in Settings
   registerIpc()
+  startLogoSync() // first start with internet downloads the logo into the database; later starts only act if its address changed
   autoBackupIfDue()
   // A shop that leaves the app open all night still gets its daily backup: look again every hour.
   setInterval(autoBackupIfDue, 60 * 60 * 1000)
