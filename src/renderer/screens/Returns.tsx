@@ -55,6 +55,13 @@ export function Returns() {
   const walkIn = bill ? !bill.customerId : false
   const effectiveSettle = walkIn ? 'cash' : settle
 
+  // live search while typing; clearing the box brings back the latest bills
+  useEffect(() => {
+    let stale = false
+    const t = setTimeout(() => { void window.api.returns.find(q).then((r) => { if (!stale) setFound(r) }, () => undefined) }, 200)
+    return () => { stale = true; clearTimeout(t) }
+  }, [q])
+
   async function find() {
     const r = await run(() => window.api.returns.find(q))
     if (r) setFound(r)

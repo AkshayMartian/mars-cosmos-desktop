@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { formatRupees, toPaise } from '@shared/money'
 import {
   ALT_NEXT, ALT_STATUS, altDue, readyMessage, type AltContext, type AltJobDto, type AltKpis, type GarmentChoice, type TailorDto
@@ -35,9 +35,11 @@ export function Alterations(_props: { user: StaffPublic }) {
   const [dlg, setDlg] = useState<Dlg>(null)
   const { run, setMsg, node } = useMsg()
 
+  const loadSeq = useRef(0)
   const load = useCallback(async () => {
+    const mine = ++loadSeq.current // an older, slower search must not replace a newer one
     const r = await run(() => window.api.alterations.list(q))
-    if (r) { setJobs(r.jobs); setKpis(r.kpis) }
+    if (r && mine === loadSeq.current) { setJobs(r.jobs); setKpis(r.kpis) }
   }, [run, q])
   const loadCtx = useCallback(() => run(() => window.api.alterations.context()).then((c) => c && setCtx(c)), [run])
   useEffect(() => { void load() }, [load])
