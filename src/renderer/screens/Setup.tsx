@@ -23,7 +23,7 @@ export function Setup({ onDone }: { onDone: () => void }) {
     <>
       <div className="head">
         <div><h1>Set up your shop</h1><div className="sub">Six quick steps. You can change all of this later in Settings.</div></div>
-        <button className="btn" onClick={() => void finish()}>Skip for now</button>
+        <button className="btn" onClick={() => void finish()} title="Leave the setup. Everything can be done later in Settings.">Skip setup</button>
       </div>
       {node}
       <div className="panel">
@@ -39,6 +39,7 @@ export function Setup({ onDone }: { onDone: () => void }) {
           : <StaffTab />}
         <div className="mfoot" style={{ justifyContent: 'space-between' }}>
           <button className="btn" disabled={step === 0} onClick={() => setStep(step - 1)}>Back</button>
+          {step < STEPS.length - 1 && <button className="btn" style={{ marginLeft: 'auto' }} onClick={() => setStep(step + 1)}>Skip this step</button>}
           {step < STEPS.length - 1
             ? <button className="btn p" disabled={step === 0 && !named} title={step === 0 && !named ? 'Type the shop name and press Save first' : undefined} onClick={() => setStep(step + 1)}>Next</button>
             : <button className="btn p" onClick={() => void finish()}>Finish</button>}

@@ -60,18 +60,20 @@ export function ShopTab({ all, onSaved }: { all: AllSettings; onSaved: (s: AllSe
     <>
       {node}
       <div className="row">
-        <div className="f"><label htmlFor="s-n">Shop name *</label><input id="s-n" maxLength={80} aria-invalid={bad('name')} value={f.name} onChange={set('name')} onBlur={touch('name')} />{err('name')}</div>
-        <div className="f"><label htmlFor="s-p">Phone</label><input id="s-p" inputMode="numeric" placeholder="10-digit mobile number" aria-invalid={bad('phone')} value={f.phone} onChange={set('phone', cleanMobile)} onBlur={touch('phone')} />{err('phone')}</div>
+        <div className="f"><label htmlFor="s-n">Shop name *</label><input id="s-n" maxLength={80} aria-invalid={bad('name')} value={f.name} onChange={set('name')} onBlur={touch('name')} /></div>
+        <div className="f"><label htmlFor="s-p">Phone</label><input id="s-p" inputMode="numeric" placeholder="10-digit mobile number" aria-invalid={bad('phone')} value={f.phone} onChange={set('phone', cleanMobile)} onBlur={touch('phone')} /></div>
       </div>
+      {(err('name') || err('phone')) && <div className="row"><div className="f">{err('name')}</div><div className="f">{err('phone')}</div></div>}
       <div className="f"><label htmlFor="s-a">Address</label><input id="s-a" maxLength={200} aria-invalid={bad('address')} value={f.address} onChange={set('address')} onBlur={touch('address')} />{err('address')}</div>
       <div className="row">
-        <div className="f"><label htmlFor="s-g">GSTIN</label><input id="s-g" className="mono" maxLength={15} placeholder="24AAAAA1111A1Z5" autoComplete="off" spellCheck={false} aria-invalid={bad('gstin')} value={f.gstin} onChange={(e) => { const g = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); setF({ ...f, gstin: g, state: f.state || (g.length >= 2 ? stateForCode(g.slice(0, 2)) : '') }) }} onBlur={touch('gstin')} />{err('gstin')}</div>
+        <div className="f"><label htmlFor="s-g">GSTIN</label><input id="s-g" className="mono" maxLength={15} placeholder="24AAAAA1111A1Z5" autoComplete="off" spellCheck={false} aria-invalid={bad('gstin')} value={f.gstin} onChange={(e) => { const g = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); setF({ ...f, gstin: g, state: f.state || (g.length >= 2 ? stateForCode(g.slice(0, 2)) : '') }) }} onBlur={touch('gstin')} /></div>
         <div className="f"><label htmlFor="s-s">State</label><select id="s-s" aria-invalid={bad('state')} value={f.state} onChange={set('state')} onBlur={touch('state')}>
           <option value="">Select state</option>
           {f.state && !STATE_OPTIONS.includes(f.state) && <option value={f.state}>{f.state} (choose from the list)</option>}
           {STATE_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
-        </select>{err('state')}</div>
+        </select></div>
       </div>
+      {(err('gstin') || err('state')) && <div className="row"><div className="f">{err('gstin')}</div><div className="f">{err('state')}</div></div>}
       <div><button className="btn p" disabled={invalid} title={invalid ? 'Fix the highlighted fields first' : undefined} onClick={() => void run(() => window.api.settings.saveShop(f), 'Shop details saved.').then((s) => s && onSaved(s))}>Save</button></div>
     </>
   )

@@ -81,7 +81,9 @@ export function App() {
   useEffect(() => { if (user) void window.api.app.info().then(setInfo) }, [user])
   // The wizard stays until the owner finishes it: saving the shop name in step 1 already makes the shop count as set up.
   const [wizard, setWizard] = useState(false)
-  useEffect(() => { if (user?.role === 'owner' && info && !info.setupDone) setWizard(true); if (!user) setWizard(false) }, [user, info])
+  // A PC activated in this session always starts with the setup wizard (Shop step first), even when the database already has data.
+  const [onboarding, setOnboarding] = useState(false)
+  useEffect(() => { if (user?.role === 'owner' && info && (!info.setupDone || onboarding)) setWizard(true); if (!user) setWizard(false) }, [user, info, onboarding])
   // "My sales today" chip: refreshed on login, on every screen change, with the clock and right after a bill is saved.
   const [salesTick, setSalesTick] = useState(0)
   useEffect(() => { if (user) void window.api.app.mySales().then(setSales, () => undefined) }, [user, view, clock, salesTick])
@@ -142,7 +144,7 @@ export function App() {
         )}
       </header>
       {needsActivation ? (
-        <Activate info={lic} onDone={setLic} />
+        <Activate info={lic} onDone={(l) => { setOnboarding(true); setLic(l) }} />
       ) : !user ? (
         <Login info={info} onDone={(s) => { lastActive.current = Date.now(); setUser(s); go(homeFor(s.role)) }} />
       ) : (
@@ -180,7 +182,7 @@ export function App() {
             )}
             {/* key = remount on switch so each screen reloads fresh data */}
             {wizard
-              ? <Setup onDone={() => { setWizard(false); void window.api.app.info().then(setInfo); go(homeFor(user.role)) }} />
+              ? <Setup onDone={() => { setWizard(false); setOnboarding(false); void window.api.app.info().then(setInfo); go(homeFor(user.role)) }} />
               : Screen ? <Screen key={view} user={user} go={go} intent={intent} /> : <Placeholder title={items.find((m) => m.id === view)?.label ?? ''} />}
           </main>
         </div>
