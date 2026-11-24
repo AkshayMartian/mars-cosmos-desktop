@@ -47,6 +47,9 @@ describe('finding the bill', () => {
     expect(findBillsForReturn('9999999999')).toEqual([])
     expect(findBillsForReturn('1').map((b) => b.id)).toEqual([bill.id]) // just the running number
     expect(findBillsForReturn('2')).toEqual([])
+    expect(findBillsForReturn('98765').map((b) => b.id)).toEqual([bill.id]) // part of the mobile
+    expect(findBillsForReturn('00045').map((b) => b.id)).toEqual([bill.id])
+    expect(findBillsForReturn(bill.no.slice(0, -1)).map((b) => b.id)).toEqual([bill.id]) // part of the bill number
     expect(findBillsForReturn('').map((b) => b.id)).toEqual([bill.id]) // empty = latest bills
   })
 })

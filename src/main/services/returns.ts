@@ -36,16 +36,23 @@ export function findBillsForReturn(q: string): ReturnBillRow[] {
       .prepare("SELECT b.id,b.no,b.at,c.name AS customerName,b.grand FROM bills b LEFT JOIN customers c ON c.id=b.customer_id WHERE b.type='sale' AND b.status='completed' ORDER BY b.at DESC, b.rowid DESC LIMIT 10")
       .all() as ReturnBillRow[]
   }
-  const seq = /^\d{1,9}$/.test(t) ? Number(t) : -1 // the running number at the end of the bill number: 1, 12 or 0012
+  // Partial matches while typing: digits = part of the running number, or part of a mobile (2+ digits);
+  // text = part of the bill number or the customer name.
+  const like = (x: string): string => `%${x.replace(/[\\%_]/g, '\\$&')}%`
+  const onlyDigits = /^\d+$/.test(t)
+  const runNo = "replace(b.no, rtrim(b.no, '0123456789'), '')"
+  const cond = onlyDigits
+    ? `(${runNo} LIKE ? ESCAPE '\\' OR (length(?)>=2 AND c.mobile LIKE ? ESCAPE '\\'))`
+    : `(lower(b.no) LIKE lower(?) ESCAPE '\\' OR c.name LIKE ? ESCAPE '\\' OR (length(?)>=2 AND c.mobile LIKE ? ESCAPE '\\'))`
+  const args = onlyDigits ? [like(t), digits, like(digits)] : [like(t), like(t), digits, like(digits)]
   return getDb()
     .prepare(
       `SELECT b.id,b.no,b.at,c.name AS customerName,b.grand
        FROM bills b LEFT JOIN customers c ON c.id=b.customer_id
-       WHERE b.type='sale' AND b.status='completed'
-         AND (lower(b.no)=lower(?) OR b.no LIKE ? OR CAST(replace(b.no, rtrim(b.no, '0123456789'), '') AS INTEGER)=? OR (? <> '' AND length(?)=10 AND c.mobile=?))
-       ORDER BY b.at DESC, b.rowid DESC LIMIT 10`
+       WHERE b.type='sale' AND b.status='completed' AND ${cond}
+       ORDER BY b.at DESC, b.rowid DESC LIMIT 20`
     )
-    .all(t, `%/${t.replace(/[%_]/g, '')}`, seq, digits, digits, digits) as ReturnBillRow[]
+    .all(...args) as ReturnBillRow[]
 }
 
 interface BillHead { id: string; no: string; at: string; type: string; status: string; customer_id: string | null; sales_by: string | null; grand: number }
