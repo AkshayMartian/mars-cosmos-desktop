@@ -52,8 +52,8 @@ app.whenReady().then(() => {
   purgeTemp(24 * 60 * 60 * 1000) // photos chosen but never saved
   setBackupDir(join(app.getPath('userData'), 'backups')) // until a USB / second-disk folder is chosen in Settings
   registerIpc()
-  // licence server: MARS_LICENCE_URL / config.json; a dev run (npm run dev) falls back to the local test server (npm run licence-server)
-  setLicenceServer(resolveLicenceServer(app.getPath('userData')) || (app.isPackaged ? '' : 'http://localhost:4000'))
+  // licence server: MARS_LICENCE_URL / config.json; a dev run (npm run dev) falls back to the local admin portal on :4100 (set MARS_LICENCE_URL=http://localhost:4000 for the fake test server, npm run licence-server)
+  setLicenceServer(resolveLicenceServer(app.getPath('userData')) || (app.isPackaged ? '' : 'http://localhost:4100'))
   void refreshLicence() // about weekly while online; never blocks the shop
   setInterval(() => void refreshLicence(), 6 * 60 * 60 * 1000)
   startLogoSync() // first start with internet downloads the logo into the database; later starts only act if its address changed

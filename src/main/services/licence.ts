@@ -158,7 +158,7 @@ async function post<T>(path: string, body: unknown): Promise<T> {
     res = await fetch(serverUrl + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(15_000) })
   } catch {
     // a development run talks to the local test server: say that, instead of blaming the internet
-    if (/^https?:\/\/(localhost|127\.0\.0\.1)[:/]/.test(serverUrl + '/')) throw new Error(`Could not reach the MARS server. The local test licence server (${serverUrl}) is not running: start it with "npm run licence-server".`)
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)[:/]/.test(serverUrl + '/')) throw new Error(`Could not reach the MARS server. The local MARS server (${serverUrl}) is not running: start the admin portal ("npm run dev" in mars-admin-portal).`)
     throw new Error('Could not reach the MARS server. Check the internet, or use "No internet? Activate with a code".')
   }
   const j = (await res.json().catch(() => ({}))) as { licence?: string; error?: string } & T
