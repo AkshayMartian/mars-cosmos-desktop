@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { formatRupees } from '@shared/money'
-import { receiptText } from '@shared/receipt'
+import { receiptText, whatsappText } from '@shared/receipt'
 import type { BillDetail, BillListRow, BillPeriod } from '@shared/bills'
 import type { BillingContext } from '@shared/billing'
 import type { StaffPublic } from '@shared/types'
-import { fmtDate, Modal, useMsg, waNote } from '../ui'
+import { fmtDate, Modal, useMsg } from '../ui'
 import { ApprovalModal } from './Billing'
 
 const modeName = (m: string): string => m.replace('_', ' ').toUpperCase()
@@ -61,8 +61,7 @@ export function Bills(_props: { user: StaffPublic }) {
   const b = detail?.bill
   const mobile = b?.customer?.mobile
   const noConsent = !!b?.customer && b.customer.waConsent === false // they have not agreed to WhatsApp bills
-  const canWa = !!b && !!mobile && !noConsent && b.type === 'sale'
-  const sendWa = async () => { if (!b) return; const r = await run(() => window.api.whatsapp.bill(b.id)); if (r) setMsg({ ok: true, text: waNote(r.pasted) }) }
+  const wa = b && ctx && mobile && !noConsent && b.type === 'sale' ? `https://wa.me/91${mobile}?text=${encodeURIComponent(whatsappText(b, ctx.shop))}` : null
 
   return (
     <>
@@ -109,7 +108,7 @@ export function Bills(_props: { user: StaffPublic }) {
               </div>
               <div className="row">
                 <button className="btn" onClick={() => setDlg({ t: 'receipt' })}>Reprint</button>
-                {canWa ? <button className="btn" onClick={() => void sendWa()}>Send on WhatsApp</button> : <button className="btn" disabled title={b.type === 'return' ? 'Not for return bills' : noConsent ? 'This customer has not agreed to WhatsApp bills. Edit the customer to record their consent.' : 'This bill has no customer mobile'}>Send on WhatsApp</button>}
+                {wa ? <a className="btn" href={wa} target="_blank" rel="noopener noreferrer">Send on WhatsApp</a> : <button className="btn" disabled title={b.type === 'return' ? 'Not for return bills' : noConsent ? 'This customer has not agreed to WhatsApp bills. Edit the customer to record their consent.' : 'This bill has no customer mobile'}>Send on WhatsApp</button>}
                 {detail.cancellable && <button className="btn danger" onClick={() => { setReason(''); setDlg({ t: 'cancel' }) }}>Cancel bill</button>}
               </div>
               {detail.cancelHint && b.status === 'completed' && b.type === 'sale' && <div className="hint">{detail.cancelHint}</div>}

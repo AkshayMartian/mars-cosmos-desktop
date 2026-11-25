@@ -32,7 +32,7 @@ SQLite, money in integer paise, timestamps ISO-8601 text. Migrations are in `src
 
 | Area | Tables |
 |---|---|
-| Setup and people | `settings`, `staff`, `approval_attempts`, `audit_log`, `backups`, `wa_outbox` |
+| Setup and people | `settings`, `staff`, `approval_attempts`, `audit_log`, `backups` |
 | Catalogue | `categories`, `products`, `variants`, `product_photos` |
 | Serial numbers | `pieces`, `piece_events`, `bunches`, `stock_count_pieces` |
 | Stock | `stock_moves` (stock is the sum of moves), `suppliers`, `purchases`, `purchase_lines`, `stock_outs`, `stock_out_lines`, `stock_counts`, `stock_count_lines` |
@@ -53,7 +53,6 @@ SQLite, money in integer paise, timestamps ISO-8601 text. Migrations are in `src
 | 6 | Serial numbers: `products.track_serials`, `pieces`, `piece_events`, `bunches`, `stock_count_pieces` |
 | 7 | `products.gst_rate`: a GST % typed on the product (NULL = follow the category rule) |
 | 8 | `bill_lines.item_disc`: the item's own discount, kept apart from its share of the bill discount (NULL on bills made before) |
-| 9 | `wa_outbox`: automatic birthday / anniversary WhatsApp wishes, one row per customer, kind and year (queued / sent / failed) |
 
 ## 8. Roles and permissions
 

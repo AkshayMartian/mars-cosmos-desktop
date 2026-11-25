@@ -17,7 +17,7 @@
 | *Period* | dropdown | Today / Last 7 days / All |
 | Bill row | click | Opens the bill on the right (status chip: Paid, Cancelled, Return) |
 | **Reprint** | button | Shows the receipt marked "DUPLICATE" |
-| **Send on WhatsApp** | button | Makes the bill PDF, copies it to the clipboard and opens the customer's WhatsApp chat; staff press Ctrl+V then Send. Disabled without a customer mobile, without WhatsApp consent and for return bills |
+| **Send on WhatsApp** | button | Opens WhatsApp with the bill text; disabled without a customer mobile and for return bills |
 | **Cancel bill** | button (only when allowed) | Opens the reason dialog |
 | Cancel dialog | dialog | *Reason* (required), **Keep**, **Cancel bill**; asks for a manager's PIN when the user may not cancel alone |
 | Hint under the buttons | text | Says why a bill cannot be cancelled (old day, items already returned, exchange sale) |

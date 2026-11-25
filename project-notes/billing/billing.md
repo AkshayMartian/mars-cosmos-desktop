@@ -64,12 +64,7 @@
 
 **Hold** → `billing.hold({lines, customerId})` → writes `held_bills` (JSON). **Resume** → `billing.resume(id)` returns the payload and **deletes** the held row; the screen re-reads items (`billing.variants`), keeps only what is still in stock and says what changed.
 
-**WhatsApp (bill as a PDF)** → *Send on WhatsApp* calls `window.api.whatsapp.bill(billId, mobile?)` → `whatsapp:bill` → `sendBillOnWhatsApp()` (`src/main/whatsapp.ts`): refuses return bills and customers without WhatsApp consent; uses the customer's mobile (or the typed one for a walk-in, 10-digit Indian mobile); makes the receipt PDF (same roll size and font as the printed receipt, `receiptPdf` in `print.ts`); saves it as `Bill-<no>.pdf` in the PC's temp folder `mars-whatsapp-bills` (files older than 24 h are deleted on each send); **copies the PDF to the clipboard as a file** (PowerShell `Set-Clipboard`); opens `https://wa.me/91<mobile>?text=<short message>` with the system browser/WhatsApp. Staff press **Ctrl+V** (the PDF attaches) and **Send**. If the copy fails, the folder with the PDF is opened instead and staff attach it by hand. Nothing is sent by the app. Writes `audit_log` `whatsapp_bill`.
-
-### `window.api.whatsapp.bill(billId, mobile?)` · channel `whatsapp:bill`
-- **Called from:** Billing receipt dialog, Bills detail · **Roles:** billing roles (owner, manager, cashier).
-- **Response:** `{ "pasted": true, "file": "C:\...\Bill-B-0012.pdf" }` (`pasted:false` = clipboard copy failed, folder opened).
-- **Errors:** `Only sale bills can be sent on WhatsApp.` · `This customer has not agreed to WhatsApp bills. ...` · the mobile message when a walk-in's number is not a valid Indian mobile.
+**WhatsApp** → the receipt dialog builds `https://wa.me/91<mobile>?text=…`; the Electron window opens it in the browser (the only link type allowed). The shop staff press Send. Nothing is sent automatically.
 
 ## 4. APIs
 

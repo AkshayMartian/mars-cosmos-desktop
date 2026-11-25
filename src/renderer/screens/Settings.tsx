@@ -5,13 +5,12 @@ import { GST_SCHEMES, ROLE_NAMES, type AllSettings, type BackupInfo, type StaffA
 import { LABEL_SIZES } from '@shared/stickers'
 import type { GstScheme, Role } from '@shared/types'
 import { cleanMobile } from '@shared/mobile'
-import { WISH_SUGGESTIONS, type WaOutboxRow, type WaSaveInput, type WaSettings } from '@shared/whatsapp'
 import { MobileHint, Modal, fmtDate, num, useMsg } from '../ui'
 import { LicenceTab } from './Licence'
 import { shopErrors } from '@shared/shopValidation'
 import { STATE_OPTIONS, stateForCode } from '@shared/states'
 
-const TABS = [['shop', 'Shop'], ['gst', 'GST'], ['receipt', 'Receipt'], ['printers', 'Printers'], ['coins', 'Coins'], ['staff', 'Staff'], ['whatsapp', 'WhatsApp'], ['alter', 'Alterations'], ['backup', 'Backup'], ['licence', 'Licence']] as const
+const TABS = [['shop', 'Shop'], ['gst', 'GST'], ['receipt', 'Receipt'], ['printers', 'Printers'], ['coins', 'Coins'], ['staff', 'Staff'], ['alter', 'Alterations'], ['backup', 'Backup'], ['licence', 'Licence']] as const
 type Tab = (typeof TABS)[number][0]
 
 const changed = (): void => { window.dispatchEvent(new Event('mars:settings-saved')) }
@@ -34,7 +33,6 @@ export function Settings() {
           : tab === 'printers' ? <PrintersTab all={all} onSaved={(printers) => setAll({ ...all, printers })} />
           : tab === 'coins' ? <CoinsTab all={all} onSaved={(coins) => setAll({ ...all, coins })} />
           : tab === 'staff' ? <StaffTab />
-          : tab === 'whatsapp' ? <WhatsAppTab />
           : tab === 'alter' ? <AlterTab />
           : tab === 'licence' ? <LicenceTab onChange={() => window.dispatchEvent(new Event('mars:licence-changed'))} />
           : <BackupTab />}
@@ -424,75 +422,5 @@ function RecoveryCode() {
         </Modal>
       )}
     </div>
-  )
-}
-
-/* ---------- WhatsApp: automatic birthday and anniversary wishes ---------- */
-
-const WA_STATUS: Record<WaOutboxRow['status'], string> = { queued: 'Waiting', sent: 'Sent', failed: 'Failed' }
-
-function WhatsAppTab() {
-  const [s, setS] = useState<WaSettings | null>(null)
-  const [f, setF] = useState<WaSaveInput | null>(null)
-  const [rows, setRows] = useState<WaOutboxRow[]>([])
-  const [testNo, setTestNo] = useState('')
-  const { run, node } = useMsg()
-  const load = useCallback(async () => {
-    const v = await run(() => window.api.settings.waGet())
-    if (v) { setS(v); setF({ on: v.on, phoneNumberId: v.phoneNumberId, birthday: v.birthday, anniversary: v.anniversary, sendHour: v.sendHour, accessToken: '' }) }
-    const o = await run(() => window.api.settings.waOutbox())
-    if (o) setRows(o)
-  }, [run])
-  useEffect(() => { void load() }, [load])
-  if (!s || !f) return <div className="empty">Loading…</div>
-  const tpl = (k: 'birthday' | 'anniversary', label: string) => (
-    <div className="row">
-      <div className="f"><label htmlFor={`wa-${k}`}>{label} template name</label><input id={`wa-${k}`} value={f[k].name} onChange={(e) => setF({ ...f, [k]: { ...f[k], name: e.target.value.trim() } })} /></div>
-      <div className="f"><label htmlFor={`wa-${k}-l`}>Language code</label><input id={`wa-${k}-l`} style={{ maxWidth: 110 }} value={f[k].language} onChange={(e) => setF({ ...f, [k]: { ...f[k], language: e.target.value.trim() } })} /></div>
-    </div>
-  )
-  return (
-    <>
-      {node}
-      <div className="banner">Wishes go out by themselves through the official WhatsApp Business API: once a day, to customers whose birthday or anniversary is today and who agreed to offers and wishes. The PC needs internet at that time; wishes wait and retry when it is offline. Meta charges per message.</div>
-      <label className="check"><input type="checkbox" checked={f.on} onChange={(e) => setF({ ...f, on: e.target.checked })} /> Send birthday and anniversary wishes automatically</label>
-      <div className="row">
-        <div className="f"><label htmlFor="wa-pid">Phone number ID</label><input id="wa-pid" inputMode="numeric" value={f.phoneNumberId} onChange={(e) => setF({ ...f, phoneNumberId: e.target.value.replace(/\D/g, '') })} /></div>
-        <div className="f"><label htmlFor="wa-tok">Access token {s.hasToken && <span className="chip good">saved</span>}</label>
-          <input id="wa-tok" type="password" autoComplete="off" placeholder={s.hasToken ? 'Leave empty to keep the saved token' : 'Paste the permanent token'} value={f.accessToken ?? ''} onChange={(e) => setF({ ...f, accessToken: e.target.value })} /></div>
-        <div className="f"><label htmlFor="wa-hr">Send after (hour, 0-23)</label><input id="wa-hr" type="number" min="0" max="23" style={{ maxWidth: 110 }} value={f.sendHour} onChange={(e) => setF({ ...f, sendHour: Number(e.target.value) })} /></div>
-      </div>
-      {tpl('birthday', 'Birthday')}
-      {tpl('anniversary', 'Anniversary')}
-      <details>
-        <summary>How to set this up in Meta</summary>
-        <ol className="hint">
-          <li>In Meta Business Suite, create a WhatsApp Business account and add a phone number that is not used in the WhatsApp app.</li>
-          <li>In WhatsApp Manager → Message templates, create two <b>Marketing</b> templates and wait for approval. Use two variables: {'{{1}}'} the customer name and {'{{2}}'} the shop name.</li>
-          <li>Birthday: <i>{WISH_SUGGESTIONS.birthday}</i></li>
-          <li>Anniversary: <i>{WISH_SUGGESTIONS.anniversary}</i></li>
-          <li>Copy the <b>Phone number ID</b> and make a permanent access token (System user in Business settings). Paste them above and type each template's name exactly as approved.</li>
-          <li>Press Save, send yourself a test, then switch it on.</li>
-        </ol>
-      </details>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button className="btn p" onClick={() => void run(() => window.api.settings.waSave(f), 'WhatsApp settings saved.').then((v) => v && void load())}>Save</button>
-        <input aria-label="Mobile for a test wish" inputMode="numeric" maxLength={10} placeholder="Your mobile for a test" style={{ width: 190 }} value={testNo} onChange={(e) => setTestNo(cleanMobile(e.target.value))} />
-        <button className="btn" onClick={() => void run(() => window.api.settings.waTest(testNo, 'birthday'), 'Test birthday wish sent. Check that phone.')}>Send test</button>
-        <button className="btn" disabled={!s.on} onClick={() => void run(() => window.api.settings.waRunNow()).then((r) => { if (r) void load() })}>Send today's wishes now</button>
-      </div>
-      <h3 style={{ margin: '12px 0 0' }}>Recent wishes</h3>
-      {rows.length === 0 ? <div className="empty">Nothing yet. Wishes appear here on the day.</div> : (
-        <div className="tw"><table>
-          <thead><tr><th>Date</th><th>Customer</th><th>Wish</th><th>Status</th><th /></tr></thead>
-          <tbody>{rows.map((r) => (
-            <tr key={r.id}><td>{fmtDate(r.at)}</td><td>{r.name} <span className="sub">{r.mobile}</span></td><td>{r.kind === 'birthday' ? 'Birthday' : 'Anniversary'}</td>
-              <td><span className={`chip ${r.status === 'sent' ? 'good' : r.status === 'failed' ? 'bad' : 'warn'}`}>{WA_STATUS[r.status]}</span></td>
-              <td className="sub">{r.error ?? ''}</td></tr>
-          ))}</tbody>
-        </table></div>
-      )}
-      {rows.some((r) => r.status === 'failed') && <div><button className="btn" onClick={() => void run(() => window.api.settings.waRetry(), 'Failed wishes will be tried again.').then(() => load())}>Try failed wishes again</button></div>}
-    </>
   )
 }

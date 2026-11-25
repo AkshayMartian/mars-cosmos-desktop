@@ -1,6 +1,5 @@
 import { app, BrowserWindow, shell } from 'electron'
 import { startLogoSync, storedIcon } from './logo'
-import { startWhatsAppJob } from './waJob'
 import icon from '../../build/icon.ico?asset'
 import { join } from 'node:path'
 import { resolveDbPath, resolveLicenceServer } from './config'
@@ -58,7 +57,6 @@ app.whenReady().then(() => {
   void refreshLicence() // about weekly while online; never blocks the shop
   setInterval(() => void refreshLicence(), 6 * 60 * 60 * 1000)
   startLogoSync() // first start with internet downloads the logo into the database; later starts only act if its address changed
-  startWhatsAppJob() // birthday and anniversary wishes by themselves, once the owner has set up WhatsApp Business
   autoBackupIfDue()
   // A shop that leaves the app open all night still gets its daily backup: look again every hour.
   setInterval(autoBackupIfDue, 60 * 60 * 1000)

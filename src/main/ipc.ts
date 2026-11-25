@@ -21,8 +21,6 @@ import * as reports from './services/reports'
 import { exportExcel, exportPdf } from './reportExport'
 import { listPrinters, printDayEnd, openDrawer, printAlteration, printReceipt, printStickers, testReceipt, testSticker } from './print'
 import { restoreFromFile, restoreListed } from './restore'
-import { sendBillOnWhatsApp } from './whatsapp'
-import { getWaSettings, retryFailedWishes, runWaNow, saveWaSettings, sendWaTest, waOutbox } from './services/wasend'
 import * as stock from './services/stock'
 import { pieceHistory } from './services/serials'
 
@@ -124,17 +122,10 @@ export function registerIpc(): void {
   h('settings:saveBackupFolder', admin.saveBackupFolder)
   h('settings:finishSetup', admin.finishSetup)
   h('settings:recoveryCode', createRecoveryCode)
-  h('settings:waGet', getWaSettings)
-  h('settings:waSave', saveWaSettings)
-  h('settings:waTest', (mobile: string, kind: 'birthday' | 'anniversary') => sendWaTest(mobile, kind))
-  h('settings:waOutbox', () => waOutbox())
-  h('settings:waRunNow', () => runWaNow())
-  h('settings:waRetry', retryFailedWishes)
   h('settings:backupNow', admin.backupNow)
   h('settings:restore', restoreListed)
   h('settings:restoreFromFile', restoreFromFile)
   h('print:receipt', printReceipt)
-  h('whatsapp:bill', sendBillOnWhatsApp)
   h('print:alteration', printAlteration)
   h('print:testReceipt', testReceipt)
   h('print:testSticker', testSticker)
