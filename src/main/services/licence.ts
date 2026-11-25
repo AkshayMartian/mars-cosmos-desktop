@@ -6,7 +6,7 @@ import {
   EXPIRY_WARN_DAYS, KEY_MSG, KEY_RE, STALE_CHECK_DAYS, TRIAL_WARN_DAYS, responseCodeProblem, normaliseKey, type LicenceInfo, type LicencePayload
 } from '@shared/licence'
 import { audit } from './auth'
-import { LICENCE_PUBLIC_KEY } from './licenceKey'
+import { LICENCE_PUBLIC_KEYS } from './licenceKey'
 import { getSetting } from './settings'
 
 /**
@@ -20,9 +20,9 @@ import { getSetting } from './settings'
 const DAY = 864e5
 let machineOverride: string | null = null
 let serverUrl = ''
-let publicKey = LICENCE_PUBLIC_KEY
+let publicKeys: readonly string[] = LICENCE_PUBLIC_KEYS
 export const setMachineIdForTests = (m: string | null): void => { machineOverride = m }
-export const setPublicKeyForTests = (k: string | null): void => { publicKey = k ?? LICENCE_PUBLIC_KEY }
+export const setPublicKeyForTests = (k: string | null): void => { publicKeys = k ? [k] : LICENCE_PUBLIC_KEYS }
 export const setLicenceServer = (url: string): void => { serverUrl = url.trim().replace(/\/+$/, '') }
 
 const put = (key: string, value: unknown): void => {
@@ -53,7 +53,7 @@ export function verifyToken(token: string): LicencePayload {
   if (parts.length !== 3 || parts[0] !== 'MARSL1') throw new Error('This is not a MARS licence code. Check that you copied all of it.')
   let ok = false
   try {
-    ok = verify(null, Buffer.from(parts[1]!, 'base64url'), createPublicKey({ key: Buffer.from(publicKey, 'base64'), format: 'der', type: 'spki' }), Buffer.from(parts[2]!, 'base64url'))
+    ok = publicKeys.some((k) => verify(null, Buffer.from(parts[1]!, 'base64url'), createPublicKey({ key: Buffer.from(k, 'base64'), format: 'der', type: 'spki' }), Buffer.from(parts[2]!, 'base64url')))
   } catch { ok = false }
   if (!ok) throw new Error('This code is not valid. Check that you copied all of it, or ask MARS support for a new one.')
   let p: LicencePayload
