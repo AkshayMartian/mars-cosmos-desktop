@@ -52,7 +52,7 @@ export function Login({ info, onDone }: { info: AppInfo | null; onDone: (s: Staf
     return () => window.removeEventListener('keydown', onKey)
   })
 
-  if (forgot && sel) return <ForgotPin who={sel} staff={staff} onBack={(m) => { setForgot(false); setPin(''); setErr(''); setNote(m ?? '') }} />
+  if (forgot && sel) return <ForgotPin who={sel} onBack={(m) => { setForgot(false); setPin(''); setErr(''); setNote(m ?? '') }} />
 
   if (newPin && sel) {
     return (
@@ -96,62 +96,95 @@ export function Login({ info, onDone }: { info: AppInfo | null; onDone: (s: Staf
         ) : <p className="sub" style={{ textAlign: 'center' }}>Tap your name, then type your PIN (keyboard works too).</p>}
         <div className="err" role="alert">{err}</div>
         {note && <div role="status" style={{ textAlign: 'center', color: 'var(--good)', fontWeight: 600 }}>{note}</div>}
-        {sel && <button className="btn sm" style={{ alignSelf: 'center' }} onClick={() => { setForgot(true); setErr(''); setNote('') }}>Forgot PIN?</button>}
+        {sel?.role === 'owner' && <button className="btn sm" style={{ alignSelf: 'center' }} onClick={() => { setForgot(true); setErr(''); setNote('') }}>Forgot PIN?</button>}
       </div>
     </div>
   )
 }
 
-/** "Forgot PIN": the owner uses the recovery code; everyone else is reset by a manager / the owner approving with their own PIN. */
-function ForgotPin({ who, staff, onBack }: { who: StaffPublic; staff: StaffPublic[]; onBack: (message?: string) => void }) {
-  const isOwner = who.role === 'owner'
-  const approvers = staff.filter((s) => s.id !== who.id && (who.role === 'manager' ? s.role === 'owner' : s.role === 'owner' || s.role === 'manager'))
-  const [code, setCode] = useState('')
-  const [approver, setApprover] = useState(approvers[0]?.id ?? '')
-  const [apin, setApin] = useState('')
-  const [p1, setP1] = useState('')
-  const [p2, setP2] = useState('')
+/**
+ * Owner "Forgot PIN" (online only). The app asks the MARS server to email a link to the owner's email on file, shows a masked hint of the
+ * address, and checks every few seconds until the owner has chosen the new PIN on the web page. Other staff have no Forgot PIN here:
+ * the owner (or a manager) sets their PIN in Settings → Staff.
+ */
+function ForgotPin({ who, onBack }: { who: StaffPublic; onBack: (message?: string) => void }) {
+  const [phase, setPhase] = useState<'starting' | 'waiting' | 'failed' | 'expired'>('starting')
+  const [hint, setHint] = useState('')
+  const [left, setLeft] = useState(0)
   const [err, setErr] = useState('')
-  const digits = (v: string) => v.replace(/\D/g, '').slice(0, 4)
+  const [note, setNote] = useState('')
+  const started = useRef(false)
+  const msg = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback)
 
-  async function save() {
-    if (p1 !== p2) return setErr('The two PINs do not match.')
+  async function start() {
+    setPhase('starting'); setErr(''); setNote('')
     try {
-      if (isOwner) await window.api.auth.resetOwnerPin(code, p1)
-      else await window.api.auth.resetPin({ staffId: who.id, approverId: approver, approverPin: apin, newPin: p1 })
-      onBack(isOwner ? 'PIN changed. Log in with your new PIN, then make a new recovery code in Settings → Staff.' : 'PIN reset. Log in with the temporary PIN; you will then choose your own.')
-    } catch (e) { setApin(''); setErr(e instanceof Error ? e.message : 'Could not reset the PIN.') }
+      const r = await window.api.auth.forgotPinStart()
+      setHint(r.emailHint); setLeft(r.resendsLeft); setPhase('waiting')
+    } catch (e) { setErr(msg(e, 'Could not start the PIN reset.')); setPhase('failed') }
+  }
+  useEffect(() => { if (!started.current) { started.current = true; void start() } }, [])
+
+  // check the server every few seconds while waiting; a dropped connection shows a message and keeps trying
+  useEffect(() => {
+    if (phase !== 'waiting') return
+    let stop = false
+    const tick = async () => {
+      try {
+        const r = await window.api.auth.forgotPinStatus()
+        if (stop) return
+        if (r.status === 'applied') return onBack('PIN changed. Log in with your new PIN.')
+        if (r.status === 'expired') return setPhase('expired')
+        setErr('')
+      } catch (e) { if (!stop) setErr(msg(e, 'Could not check the PIN reset.')) }
+    }
+    const t = setInterval(() => void tick(), 4000)
+    return () => { stop = true; clearInterval(t) }
+  }, [phase, onBack])
+
+  async function resend() {
+    setErr(''); setNote('')
+    try {
+      const r = await window.api.auth.forgotPinResend()
+      setHint(r.emailHint); setLeft(r.resendsLeft); setNote('Email sent again.')
+    } catch (e) { setErr(msg(e, 'Could not send the email again.')) }
   }
 
   return (
     <div className="login">
       <div className="lcard">
         <div><div className="sub">{who.name} · {roleName[who.role]}</div><h1>Forgot PIN</h1></div>
-        {isOwner ? (
+        {phase === 'starting' && <p role="status">Contacting MARS…</p>}
+        {phase === 'failed' && (
           <>
-            <p>Type the recovery code the owner wrote down (Settings → Staff), then choose a new PIN.</p>
-            <div className="f"><label htmlFor="fp-c">Recovery code</label>
-              <input id="fp-c" autoFocus autoComplete="off" spellCheck={false} placeholder="XXXX-XXXX-XXXX" value={code} onChange={(e) => setCode(e.target.value.toUpperCase().slice(0, 14))} /></div>
-          </>
-        ) : approvers.length === 0 ? <p>There is no one who can approve this. Contact the owner.</p> : (
-          <>
-            <p>{who.role === 'manager' ? 'The owner' : 'A manager or the owner'} must approve with their own PIN, then you get a temporary PIN.</p>
-            <div className="f"><label htmlFor="fp-a">Approved by</label>
-              <select id="fp-a" value={approver} onChange={(e) => setApprover(e.target.value)}>
-                {approvers.map((s) => <option key={s.id} value={s.id}>{s.name} ({roleName[s.role]})</option>)}</select></div>
-            <div className="f"><label htmlFor="fp-ap">Their PIN</label>
-              <input id="fp-ap" type="password" inputMode="numeric" maxLength={4} autoFocus value={apin} onChange={(e) => setApin(digits(e.target.value))} /></div>
+            <div className="err" role="alert">{err}</div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between' }}>
+              <button className="btn" onClick={() => onBack()}>Back</button>
+              <button className="btn p" onClick={() => void start()}>Try again</button>
+            </div>
           </>
         )}
-        <div className="f"><label htmlFor="fp-1">{isOwner ? 'New PIN' : 'Temporary PIN'} (4 digits)</label>
-          <input id="fp-1" type="password" inputMode="numeric" maxLength={4} value={p1} onChange={(e) => setP1(digits(e.target.value))} /></div>
-        <div className="f"><label htmlFor="fp-2">Confirm</label>
-          <input id="fp-2" type="password" inputMode="numeric" maxLength={4} value={p2} onChange={(e) => setP2(digits(e.target.value))} onKeyDown={(e) => e.key === 'Enter' && void save()} /></div>
-        <div className="err" role="alert">{err}</div>
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between' }}>
-          <button className="btn" onClick={() => onBack()}>Back</button>
-          <button className="btn p" disabled={!isOwner && approvers.length === 0} onClick={() => void save()}>Reset PIN</button>
-        </div>
+        {phase === 'expired' && (
+          <>
+            <p>The link has expired or was already used. Send a new email to try again.</p>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between' }}>
+              <button className="btn" onClick={() => onBack()}>Back</button>
+              <button className="btn p" onClick={() => void start()}>Send a new email</button>
+            </div>
+          </>
+        )}
+        {phase === 'waiting' && (
+          <>
+            <p>We sent a link to <b>{hint}</b>. Open it on your phone or any computer and choose a new 4-digit PIN.</p>
+            <p role="status" style={{ fontWeight: 600 }}>Waiting for you to set the new PIN…</p>
+            <div className="err" role="alert">{err}</div>
+            {note && <div role="status" style={{ color: 'var(--good)', fontWeight: 600 }}>{note}</div>}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between' }}>
+              <button className="btn" onClick={() => onBack()}>Back</button>
+              <button className="btn" disabled={left <= 0} onClick={() => void resend()} title={left <= 0 ? 'The email was already sent three times' : undefined}>Resend email{left > 0 ? ` (${left} left)` : ''}</button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )

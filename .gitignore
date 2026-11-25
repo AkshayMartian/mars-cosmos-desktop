@@ -8,3 +8,5 @@ dist/
 package-lock.json
 
 scripts/.keys/
+
+.local-server/

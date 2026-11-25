@@ -13,6 +13,7 @@ import * as alterations from './services/alterations'
 import { appInfo, markTourDone, mySalesToday } from './services/settings'
 import { logoDataUri } from './services/branding'
 import { createRecoveryCode, resetOwnerPin, resetPinByApprover } from './services/pinreset'
+import { checkOwnerReset, resendOwnerReset, startOwnerReset } from './services/pinresetOnline'
 import { logoReady } from './logo'
 import * as returns from './services/returns'
 import * as stickers from './services/stickers'
@@ -63,6 +64,9 @@ export function registerIpc(): void {
   h('auth:logout', logout)
   h('auth:resetPin', resetPinByApprover)
   h('auth:resetOwnerPin', resetOwnerPin)
+  h('auth:forgotPinStart', startOwnerReset)
+  h('auth:forgotPinStatus', checkOwnerReset)
+  h('auth:forgotPinResend', resendOwnerReset)
 
   h('cat:categories', cat.listCategories)
   h('cat:addCategory', cat.createCategory)

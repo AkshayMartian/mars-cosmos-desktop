@@ -166,6 +166,36 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return j
 }
 
+export const NO_INTERNET = 'No internet connection. Connect to the internet to reset your PIN, then try again.'
+
+/**
+ * A call to the MARS server for the signed-in-by-licence features (PIN reset). Identity is the licence key + this PC's id, which the caller adds.
+ * Unlike `post`, a failure to connect is reported as "no internet" and nothing is retried here.
+ */
+export async function serverRequest<T>(method: 'GET' | 'POST', path: string, payload: Record<string, string | boolean>): Promise<T> {
+  if (!serverUrl) throw new Error('This PC is not set up to reach the MARS server. Contact MARS support.')
+  const qs = method === 'GET' ? '?' + new URLSearchParams(Object.entries(payload).map(([k, v]) => [k, String(v)])).toString() : ''
+  let res: Response
+  try {
+    res = await fetch(serverUrl + path + qs, {
+      method, headers: { 'content-type': 'application/json' }, body: method === 'POST' ? JSON.stringify(payload) : undefined, signal: AbortSignal.timeout(15_000)
+    })
+  } catch {
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)[:/]/.test(serverUrl + '/')) throw new Error(`The local MARS server (${serverUrl}) is not running: start the admin portal ("npm run dev" in mars-admin-portal).`)
+    throw new Error(NO_INTERNET)
+  }
+  const j = (await res.json().catch(() => ({}))) as { error?: string } & T
+  if (!res.ok) throw new Error(j.error || 'The MARS server could not do this. Try again in a moment.')
+  return j
+}
+
+/** The licence key and PC id that identify this shop to the server. Needs an activated licence. */
+export function licenceIdentity(): { key: string; machine: string } {
+  const s = saved()
+  if (!s) throw new Error('This PC is not activated, so the PIN cannot be reset online.')
+  return { key: verifyToken(s.token).key, machine: machineId() }
+}
+
 export async function activateOnline(key: string, mobile: string): Promise<LicenceInfo> {
   const r = await post<{ licence: string }>('/v1/activate', { key: validKey(key), mobile: mobile10(mobile), machine: machineId() })
   return saveToken(r.licence ?? '', 'online')

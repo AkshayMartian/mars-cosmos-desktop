@@ -5,7 +5,7 @@ import react from '@vitejs/plugin-react'
 const alias = { '@shared': resolve(import.meta.dirname, 'src/shared') }
 
 export default defineConfig({
-  main: { plugins: [externalizeDepsPlugin()], resolve: { alias } },
+  main: { plugins: [externalizeDepsPlugin({ include: ['mongodb', 'nodemailer'] })], resolve: { alias } },
   preload: { plugins: [externalizeDepsPlugin()], resolve: { alias } },
   renderer: { root: 'src/renderer', plugins: [react()], resolve: { alias } }
 })

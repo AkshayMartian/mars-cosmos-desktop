@@ -53,8 +53,16 @@ app.whenReady().then(() => {
   setBackupDir(join(app.getPath('userData'), 'backups')) // until a USB / second-disk folder is chosen in Settings
   registerIpc()
   // licence server: MARS_LICENCE_URL / config.json; a dev run (npm run dev) falls back to the local admin portal on :4100 (set MARS_LICENCE_URL=http://localhost:4000 for the fake test server, npm run licence-server)
-  setLicenceServer(resolveLicenceServer(app.getPath('userData')) || (app.isPackaged ? '' : 'http://localhost:4100'))
-  void refreshLicence() // about weekly while online; never blocks the shop
+  const configuredServer = resolveLicenceServer(app.getPath('userData'))
+  setLicenceServer(configuredServer || (app.isPackaged ? '' : 'http://localhost:4100'))
+  if (!configuredServer && !app.isPackaged) {
+    // development only: stand in for the admin portal, with its secrets read from .local-server/ (git-ignored, never packaged). Without that folder the app uses the portal on :4100.
+    void import('./devserver')
+      .then((m) => m.startDevServer(app.getAppPath()))
+      .then((srv) => { if (srv) { setLicenceServer(srv.url); app.on('will-quit', () => void srv.close()) } })
+      .catch((e: unknown) => console.error('[mars-pos] embedded dev server not started:', e instanceof Error ? e.message : e))
+      .finally(() => void refreshLicence())
+  } else void refreshLicence() // about weekly while online; never blocks the shop
   setInterval(() => void refreshLicence(), 6 * 60 * 60 * 1000)
   startLogoSync() // first start with internet downloads the logo into the database; later starts only act if its address changed
   autoBackupIfDue()

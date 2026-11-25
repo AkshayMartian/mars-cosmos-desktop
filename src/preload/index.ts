@@ -44,7 +44,10 @@ const api = {
     changePin: (pin: string) => call<{ ok: boolean; error?: string; staff?: StaffPublic }>('auth:changePin', pin),
     logout: () => call<void>('auth:logout'),
     resetPin: (i: { staffId: string; approverId: string; approverPin: string; newPin: string }) => call<true>('auth:resetPin', i),
-    resetOwnerPin: (code: string, newPin: string) => call<true>('auth:resetOwnerPin', code, newPin)
+    resetOwnerPin: (code: string, newPin: string) => call<true>('auth:resetOwnerPin', code, newPin),
+    forgotPinStart: () => call<{ emailHint: string; resendsLeft: number; expiresInSeconds: number }>('auth:forgotPinStart'),
+    forgotPinStatus: () => call<{ status: 'waiting' | 'expired' | 'applied' }>('auth:forgotPinStatus'),
+    forgotPinResend: () => call<{ emailHint: string; resendsLeft: number; expiresInSeconds: number }>('auth:forgotPinResend')
   },
   catalogue: {
     categories: () => call<CategoryDto[]>('cat:categories'),

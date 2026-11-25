@@ -96,17 +96,27 @@ All calls return `{ ok:true, data }` or `{ ok:false, error:"message" }` at the I
 - **Tables:** none. **Side effect:** session cleared in memory. (Logout is not written to `audit_log`.)
 
 ### `window.api.auth.resetPin({ staffId, approverId, approverPin, newPin })` · channel `auth:resetPin`
-- **Called from:** Login → *Forgot PIN?* (cashier, store staff or manager) · **Roles:** nobody is logged in; an owner/manager approves by name + PIN.
+- **Called from:** no screen now (the Login "Forgot PIN?" button is for the owner only, and goes online). The service stays for a future Settings → Staff use · **Roles:** nobody is logged in; an owner/manager approves by name + PIN.
 - **Rules:** the owner resets a manager, cashier or store staff; a manager resets only cashier or store staff; nobody approves their own reset; the owner's own PIN cannot be reset here (use the recovery code). `newPin` is the *temporary* PIN: 4 digits, not weak. The person must choose their own at the next login (`must_change_pin=1`).
 - **Approver check:** `checkApprover()`, so wrong approver PINs are counted and lock exactly like other approvals (5 wrong = locked 1, 2, 4... up to 15 min; the right PIN is refused while locked). Works before anyone is logged in (audit actor is then empty).
 - **Errors:** `Unknown staff member.` · `The owner PIN can only be reset with the recovery code.` · `Only the owner can reset a manager PIN.` · `Someone else must approve your PIN reset.` · `The new PIN must be 4 digits.` · `Choose a PIN that is harder to guess.` · approval messages.
 - **Tables:** write `staff` (`pin_hash`, `must_change_pin=1`, failed counters cleared), `approval_attempts`, `audit_log` (`pin_reset`, `approval_failed`).
 
 ### `window.api.auth.resetOwnerPin(code, newPin)` · channel `auth:resetOwnerPin`
-- **Called from:** Login → Owner → *Forgot PIN?* · **Roles:** nobody is logged in.
+- **Called from:** no screen now (Login → Owner → *Forgot PIN?* uses the online reset above). Kept as the offline recovery path · **Roles:** nobody is logged in.
 - **What it does:** checks the recovery code (case and spaces/dashes ignored) against the stored hash, sets the new owner PIN (no forced change), clears the owner's lockout, and **uses the code up** (setting `recovery` is deleted; the owner is shown a banner to make a new one).
 - **Limits:** 5 wrong codes lock it for 1 minute, then 2, 4... up to 15 (setting `recovery_tries`); `audit_log` `recovery_failed`; success writes `pin_reset` (`by:"recovery_code"`).
 - **Errors:** `No recovery code has been made yet. Ask the owner to make one in Settings → Staff.` · `That recovery code is not correct (N tries left).` · `Too many wrong codes. Try again in N seconds.` · new-PIN errors as above.
+
+### Owner "Forgot PIN" over the internet · channels `auth:forgotPinStart`, `auth:forgotPinStatus`, `auth:forgotPinResend`
+- **Called from:** Login → tap the **Owner** tile → *Forgot PIN?* (only the Owner tile shows the button; other staff are reset by the owner in Settings → Staff) · **Roles:** nobody is logged in. Code: `services/pinresetOnline.ts`, screen `ForgotPin` in `screens/Login.tsx`.
+- **`window.api.auth.forgotPinStart()`:** sends `POST /v1/pin-reset/request {key, machine}` (the licence key and this PC's id). The server emails a one-time link to the owner's email on file and answers `{resetId, emailHint:"ni•••@gmail.com", expiresInSec}`. **Response:** `{emailHint, resendsLeft:3, expiresInSeconds}`. The full email is never sent to the app. The screen then shows "Waiting for you to set the new PIN…".
+- **`window.api.auth.forgotPinStatus()`:** polled every 4 seconds by the screen. `GET /v1/pin-reset/status?key&machine&resetId` answers `{status:"waiting"|"ready"|"expired", pinHash?}`. When `ready`, the scrypt hash (`scrypt$<32 hex>$<64 hex>`, the same format as `hashPin`) becomes the owner's `pin_hash` (`must_change_pin=0`, failed counters cleared), then `POST /v1/pin-reset/applied` lets the server delete its copy. **Response:** `{status:"waiting"|"expired"|"applied"}`. A hash in any other format is refused and nothing changes.
+- **`window.api.auth.forgotPinResend()`:** same request again with `resend:true`; at most 3 per reset. **Response:** as start.
+- **No internet:** every call stops with `No internet connection. Connect to the internet to reset your PIN, then try again.` and nothing changes (no table write, no audit row). A development run against `localhost` says the local server is not running instead.
+- **Errors:** the server's own message is shown as it is (for example too many requests) · `This PC is not activated, so the PIN cannot be reset online.` · `Start the PIN reset again.` · `The email was already sent three times...`
+- **Tables:** write `staff` (on success only), `audit_log` (`pin_reset_requested`, `pin_reset_resent`, `pin_reset` with `by:"email_link"`).
+- **Server contract:** the portal (`mars-admin-portal`) must build `POST /v1/pin-reset/request`, `GET /v1/pin-reset/status`, `POST /v1/pin-reset/applied`; the owner's web page hashes the new PIN with scrypt in this format and keeps the same hash in MongoDB.
 
 ### `window.api.app.logo()` · channel `app:logo`
 - **Called from:** App top bar · **Roles:** anyone · **Response:** the shop logo as a base64 data URI, or `null` if none has been downloaded yet (the top bar then shows the built-in logo).
