@@ -28,7 +28,7 @@ export function Setup({ onDone }: { onDone: () => void }) {
       {node}
       <div className="panel">
         <div className="tabs" role="list" aria-label="Setup steps">
-          {STEPS.map((s, i) => <button key={s} role="listitem" aria-current={step === i ? 'step' : undefined} aria-selected={step === i} disabled={i > step} onClick={() => setStep(i)}>{i + 1}. {s}</button>)}
+          {STEPS.map((s, i) => <button key={s} role="listitem" aria-current={step === i ? 'step' : undefined} aria-selected={step === i} disabled={i > 0 && !named} title={i > 0 && !named ? 'Type the shop name and press Save first' : undefined} onClick={() => setStep(i)}>{i + 1}. {s}</button>)}
         </div>
         {!all ? <div className="empty">Loading…</div>
           : step === 0 ? <ShopTab all={all} onSaved={(shop) => { setAll({ ...all, shop }); window.dispatchEvent(new Event('mars:settings-saved')) }} />
