@@ -7,6 +7,7 @@ import { createTransport } from 'nodemailer'
 import type { LicencePayload } from '@shared/licence'
 import { hashPin, isWeakPin } from '../services/pin'
 import { signLicence } from '../services/licenceSign'
+import { pinChangedEmail, pinResetEmail, type Email } from './emailTemplates'
 import { RESET_PAGE } from './page'
 
 /**
@@ -63,9 +64,9 @@ export async function startDevServer(root: string, log: (m: string) => void = co
   const mail = cfg.smtpUrl ? createTransport(cfg.smtpUrl) : null
   const baseUrl = `http://127.0.0.1:${PORT}`
 
-  const sendMail = async (to: string, subject: string, text: string): Promise<void> => {
-    if (!mail) return log(`[dev server] email to ${maskEmail(to)}: ${subject}\n${text}`) // no SMTP login: print instead
-    await mail.sendMail({ from: cfg.smtpFrom, to, subject, text })
+  const sendMail = async (to: string, m: Email): Promise<void> => {
+    if (!mail) return log(`[dev server] email to ${maskEmail(to)}: ${m.subject}\n${m.text}`) // no SMTP login: print instead
+    await mail.sendMail({ from: cfg.smtpFrom, to, subject: m.subject, text: m.text, html: m.html })
   }
 
   /** The shop and owner behind a licence key, only for the PC the key was activated on. */
@@ -154,8 +155,7 @@ export async function startDevServer(root: string, log: (m: string) => void = co
     }
     const email = String(who.owner['email'])
     try {
-      await sendMail(email, 'Reset your MARS Cosmos PIN',
-        `Someone asked to reset the owner PIN for ${who.shop['name']}.\n\nOpen this link and choose a new 4-digit PIN. It works once and expires in ${RESET_MINUTES} minutes:\n\n${baseUrl}/reset-pin?token=${token}\n\nIf this was not you, ignore this email: nothing changes until a PIN is saved.`)
+      await sendMail(email, pinResetEmail(String(who.shop['name']), `${baseUrl}/reset-pin?token=${token}`, RESET_MINUTES))
     } catch (e) {
       log(`[dev server] reset email failed: ${e instanceof Error ? e.message : e}`)
       await pins.updateOne({ resetId: id }, { $set: { status: 'expired' } })
@@ -191,7 +191,7 @@ export async function startDevServer(root: string, log: (m: string) => void = co
     await audit(d, tenantId, 'pin_reset_completed')
     const owner = await d.collection('owners').findOne({ tenantId })
     const shop = await d.collection('shops').findOne({ tenantId })
-    if (owner) await sendMail(String(owner['email']), 'Your MARS Cosmos PIN was changed', `The owner PIN for ${shop?.['name'] ?? 'your shop'} was just changed from the reset link.\n\nIf this was not you, call MARS support right away.`).catch((e: unknown) => log(`[dev server] PIN changed email failed: ${e instanceof Error ? e.message : e}`))
+    if (owner) await sendMail(String(owner['email']), pinChangedEmail(String(shop?.['name'] ?? 'your shop'))).catch((e: unknown) => log(`[dev server] PIN changed email failed: ${e instanceof Error ? e.message : e}`))
     return { ok: true }
   }
 
