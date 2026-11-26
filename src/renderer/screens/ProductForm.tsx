@@ -45,7 +45,7 @@ function PhotosPanel({ rows, editable, onAdd, onRemove, children }: {
 
 const split = (s: string): string[] => [...new Set(s.split(',').map((x) => x.trim()).filter(Boolean))]
 
-export function NewProduct({ onDone }: { onDone: (notice?: string, stickers?: string[]) => void }) {
+export function NewProduct({ onDone, backLabel = 'Back to products' }: { onDone: (notice?: string, stickers?: string[]) => void; backLabel?: string }) {
   const [cats, setCats] = useState<CategoryDto[]>([])
   const [f, setF] = useState({ name: '', brand: '', categoryId: '', mrp: '', sale: '', cost: '', sizes: 'S, M, L, XL', colours: 'Blue' })
   const [grid, setGrid] = useState<Record<string, string>>({})
@@ -101,7 +101,7 @@ export function NewProduct({ onDone }: { onDone: (notice?: string, stickers?: st
     <>
       <div className="head">
         <div><h1>Add product</h1><div className="sub">Each size × colour becomes its own item with its own barcode.</div></div>
-        <button className="btn" onClick={() => onDone()}>Back to products</button>
+        <button className="btn" onClick={() => onDone()}>{backLabel}</button>
       </div>
       {node}
       <div className="cols">

@@ -30,6 +30,8 @@ interface ScreenProps {
   /** jump to another screen; `intent` tells it what to open, e.g. go('products', 'new') */
   go: (view: MenuId, intent?: string) => void
   intent?: string
+  /** set when this screen was opened from another screen (not from the menu): returns there */
+  back?: { label: string; go: () => void }
 }
 
 const SCREENS: Partial<Record<MenuId, (p: ScreenProps) => ReactElement>> = {
@@ -37,7 +39,7 @@ const SCREENS: Partial<Record<MenuId, (p: ScreenProps) => ReactElement>> = {
   bills: (p) => <Bills user={p.user} />,
   alterations: (p) => <Alterations user={p.user} />,
   returns: () => <Returns />,
-  products: (p) => <Products user={p.user} intent={p.intent} onStickers={(ids) => p.go('stickers', 'variants:' + ids.join(','))} />,
+  products: (p) => <Products user={p.user} intent={p.intent} back={p.back} onStickers={(ids) => p.go('stickers', 'variants:' + ids.join(','))} />,
   reports: () => <Reports />,
   settings: () => <Settings />,
   stickers: (p) => <Stickers intent={p.intent} />,
@@ -75,7 +77,11 @@ export function App() {
   useEffect(() => { if (expired && user) { void window.api.auth.logout(); setUser(null) } }, [expired, user])
   const [view, setView] = useState<MenuId>('products')
   const [intent, setIntent] = useState<string | undefined>(undefined)
-  const go = useCallback((v: MenuId, i?: string) => { setIntent(i); setView(v) }, [])
+  // `from` = the screen that sent the user here (a button on another screen or a banner), so a Back button can return there.
+  // Choosing from the menu, F1 or logging in clears it: those are fresh starts, not jumps.
+  const [from, setFrom] = useState<MenuId | null>(null)
+  const go = useCallback((v: MenuId, i?: string) => { setFrom(null); setIntent(i); setView(v) }, [])
+  const jump = useCallback((v: MenuId, i?: string) => { setFrom(v === view ? null : view); setIntent(i); setView(v) }, [view])
   const [clock, setClock] = useState(clockText())
   const [sales, setSales] = useState(0)
   const lastActive = useRef(Date.now())
@@ -138,6 +144,10 @@ export function App() {
 
   const items = user ? menuFor(user.role) : []
   const Screen = SCREENS[view]
+  const fromLabel = from ? items.find((m) => m.id === from)?.label : undefined
+  const back = from && fromLabel ? { label: fromLabel, go: () => go(from) } : undefined
+  // Add product opened from Stock in shows its own "Back to Stock in" in the form, so no second button above it.
+  const screenOwnsBack = view === 'products' && intent === 'new'
 
   return (
     <div className="app">
@@ -180,25 +190,28 @@ export function App() {
             {info?.backupWarn && (user.role === 'owner' || user.role === 'manager') && (
               <div className="chip warn" role="status" style={{ alignSelf: 'stretch', padding: '8px 12px', borderRadius: 8, whiteSpace: 'normal' }}>
                 {info.backupDays === null ? 'No backup has been taken yet.' : `The last backup is ${info.backupDays} days old.`}{' '}
-                {user.role === 'owner' ? <button className="btn sm" onClick={() => go('settings')}>Back up now</button> : 'Ask the owner to back up (Settings → Backup).'}
+                {user.role === 'owner' ? <button className="btn sm" onClick={() => jump('settings')}>Back up now</button> : 'Ask the owner to back up (Settings → Backup).'}
               </div>
             )}
             {lic && (lic.state === 'expiring' || lic.staleCheck) && (
               <div className="chip warn" role="status" style={{ alignSelf: 'stretch', padding: '8px 12px', borderRadius: 8, whiteSpace: 'normal' }}>
                 {lic.state === 'expiring' ? (lic.daysLeft === 0 ? 'The licence ends today.' : `The licence ends in ${lic.daysLeft} days.`)
                   : `This PC has not reached the MARS server for ${lic.checkedDaysAgo} days.`}{' '}
-                {user.role === 'owner' ? <button className="btn sm" onClick={() => go('settings')}>Renew in Settings → Licence</button> : 'Ask the owner to renew.'}
+                {user.role === 'owner' ? <button className="btn sm" onClick={() => jump('settings')}>Renew in Settings → Licence</button> : 'Ask the owner to renew.'}
               </div>
             )}
             {info && !info.recoveryCodeSet && user.role === 'owner' && !wizard && (
               <div className="chip warn" role="status" style={{ alignSelf: 'stretch', padding: '8px 12px', borderRadius: 8, whiteSpace: 'normal' }}>
-                No forgot-PIN recovery code yet. <button className="btn sm" onClick={() => go('settings')}>Make it in Settings → Staff</button>
+                No forgot-PIN recovery code yet. <button className="btn sm" onClick={() => jump('settings')}>Make it in Settings → Staff</button>
               </div>
             )}
             {/* key = remount on switch so each screen reloads fresh data */}
             {wizard
               ? <Setup onDone={() => { setWizard(false); setOnboarding(false); void window.api.app.info().then((i) => { setInfo(i); if (!i.tourDone) setTour(true) }); go(homeFor(user.role)) }} />
-              : Screen ? <Screen key={view} user={user} go={go} intent={intent} /> : <Placeholder title={items.find((m) => m.id === view)?.label ?? ''} />}
+              : Screen ? <>
+                  {back && !screenOwnsBack && <div><button className="btn sm" data-back onClick={back.go}>&larr; Back to {back.label}</button></div>}
+                  <Screen key={view} user={user} go={jump} intent={intent} back={back} />
+                </> : <Placeholder title={items.find((m) => m.id === view)?.label ?? ''} />}
           </main>
         </div>
       )}
