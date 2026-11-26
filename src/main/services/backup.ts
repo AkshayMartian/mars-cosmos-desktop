@@ -20,25 +20,35 @@ export const backupFolder = (): string => getSetting<string>('backup_folder', ''
 const sqlQuote = (s: string): string => `'${s.replace(/'/g, "''")}'`
 
 /**
- * A restore brings everything back except PINs: the PINs people use today stay.
- * `pinSnapshot` reads them from the database in use (before the swap); `keepPins` writes them into the restored one.
- * Staff are matched by id. Someone who exists only in the backup keeps the backup's PIN; the owner's forgot-PIN recovery code also stays the current one.
+ * A restore brings the shop data back, but not what belongs to this PC and today:
+ *  - PINs: the PINs people use today stay (staff matched by id; someone only in the backup keeps the backup's PIN), and the owner's recovery code stays the current one.
+ *  - Activation: this PC's licence stays, so restoring a backup made before activation (or before a renewal) never asks for the activation key again.
+ *  - The setup wizard and guided tour, once finished on this PC, do not come back.
+ * `pinSnapshot` reads these from the database in use (before the swap); `keepPins` writes them into the restored one.
  */
-export interface PinSnapshot { staff: Array<{ id: string; pin_hash: string; must_change_pin: number }>; recovery: string | null }
+const KEPT_SETTINGS = ['licence', 'setup_done', 'tour_done'] as const
+export interface PinSnapshot {
+  staff: Array<{ id: string; pin_hash: string; must_change_pin: number }>
+  recovery: string | null
+  settings: Array<{ key: string; value: string }>
+}
 export function pinSnapshot(): PinSnapshot {
   const d = getDb()
   const staff = d.prepare('SELECT id, pin_hash, must_change_pin FROM staff').all() as PinSnapshot['staff']
   const rec = d.prepare("SELECT value FROM settings WHERE key='recovery'").get() as { value: string } | undefined
-  return { staff, recovery: rec?.value ?? null }
+  const settings = d.prepare(`SELECT key, value FROM settings WHERE key IN (${KEPT_SETTINGS.map(() => '?').join(',')})`).all(...KEPT_SETTINGS) as PinSnapshot['settings']
+  return { staff, recovery: rec?.value ?? null, settings }
 }
 export function keepPins(s: PinSnapshot): number {
   const d = getDb()
   const upd = d.prepare('UPDATE staff SET pin_hash=?, must_change_pin=?, failed_attempts=0, locked_until=0 WHERE id=?')
+  const putSetting = d.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value')
   let n = 0
   d.transaction(() => {
     for (const r of s.staff) n += upd.run(r.pin_hash, r.must_change_pin, r.id).changes
-    if (s.recovery) d.prepare("INSERT INTO settings(key,value) VALUES('recovery',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(s.recovery)
+    if (s.recovery) putSetting.run('recovery', s.recovery)
     else d.prepare("DELETE FROM settings WHERE key='recovery'").run()
+    for (const r of s.settings ?? []) putSetting.run(r.key, r.value) // only what this PC has now; a value missing today leaves the backup's
   })()
   return n
 }

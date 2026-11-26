@@ -385,7 +385,7 @@ function BackupTab() {
       <div className="hint">Day end also backs up automatically. Restoring replaces everything in the app with the backup, so use it only when needed.</div>
       {ask && (
         <Modal title="Restore this backup?" onClose={() => setAsk(null)}>
-          <p style={{ margin: 0 }}>The app will be replaced with <b>{ask.label}</b>. Everything entered after that backup will be gone, except PINs: everyone keeps the PIN they use today. A safety copy of the current data is taken first. Then the app reloads and you log in again.</p>
+          <p style={{ margin: 0 }}>The app will be replaced with <b>{ask.label}</b>. Everything entered after that backup will be gone, except PINs and this PC's activation: everyone keeps the PIN they use today and the app stays activated. A safety copy of the current data is taken first. Then the app reloads and you log in again.</p>
           <div className="mfoot">
             <button className="btn" onClick={() => setAsk(null)}>Keep current data</button>
             <button className="btn danger" onClick={() => { const a = ask; setAsk(null); void run(() => (a.file ? window.api.settings.restore(a.file) : window.api.settings.restoreFromFile())).then((r) => { if (r) setMsg({ ok: true, text: 'Restored. Reloading the app: log in again…' }) }) }}>Restore</button>

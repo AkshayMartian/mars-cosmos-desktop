@@ -216,6 +216,8 @@ describe('Restore checks', () => {
     setStaffPin(cashier, '5826') // changed after the backup
     saveShop({ ...shop, name: 'Renamed later' })
     getDb().prepare("INSERT INTO settings(key,value) VALUES('recovery','{\"hash\":\"now\"}')").run()
+    // activated after the backup was made: the backup has no licence
+    getDb().prepare("INSERT INTO settings(key,value) VALUES('licence','{\"token\":\"MARSL1.now\"}'),('setup_done','true')").run()
     const pins = pinSnapshot()
     openDb(made) // what restore does: the backup file becomes the database
     keepPins(pins)
@@ -224,6 +226,9 @@ describe('Restore checks', () => {
     expect(login(cashier, '7391')).toMatchObject({ ok: false }) // the old PIN does not come back
     expect(login(cashier, '5826')).toMatchObject({ ok: true })
     expect(getDb().prepare("SELECT value FROM settings WHERE key='recovery'").get()).toEqual({ value: '{"hash":"now"}' })
+    // this PC stays activated and set up
+    expect(getDb().prepare("SELECT value FROM settings WHERE key='licence'").get()).toEqual({ value: '{"token":"MARSL1.now"}' })
+    expect(getDb().prepare("SELECT value FROM settings WHERE key='setup_done'").get()).toEqual({ value: 'true' })
   })
 })
 
