@@ -115,6 +115,7 @@ const api = {
     saveBackupFolder: (f: string) => call<BackupInfo>('settings:saveBackupFolder', f),
     finishSetup: () => call<true>('settings:finishSetup'),
     backupNow: () => call<BackupInfo>('settings:backupNow'),
+    deleteBackup: (file: string) => call<BackupInfo>('settings:deleteBackup', file),
     restore: (file: string) => call<{ restarting: true }>('settings:restore', file),
     restoreFromFile: () => call<{ restarting: true } | null>('settings:restoreFromFile')
   },

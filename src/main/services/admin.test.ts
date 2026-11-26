@@ -1,16 +1,16 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { getDb, openDb } from '../db'
-import { backupNow, backupInfo, getAllSettings, listStaffAdmin, saveBackupFolder, saveCoins, saveGst, savePrinters, saveReceipt, saveShop, saveStaff, setStaffPin } from './admin'
+import { backupNow, backupInfo, deleteBackup, getAllSettings, listStaffAdmin, saveBackupFolder, saveCoins, saveGst, savePrinters, saveReceipt, saveShop, saveStaff, setStaffPin } from './admin'
 import { login } from './auth'
 import { setBackupDir } from './backup'
 import { appInfo } from './settings'
 import { setCurrent } from './session'
 import { alterationContext, getAltJob } from './alterations'
 import { receiptTextFor, openDay, createBill } from './billing'
-import { validateBackup } from './backup'
+import { keepPins, pinSnapshot, validateBackup } from './backup'
 import { createProduct, getProduct, listCategories } from './catalogue'
 import { MIGRATIONS } from '../db/schema'
-import { writeFileSync } from 'node:fs'
+import { existsSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { mkdtempSync } from 'node:fs'
@@ -192,6 +192,38 @@ describe('Restore checks', () => {
     writeFileSync(junk, 'not a database')
     expect(validateBackup(junk, latest)).toMatchObject({ ok: false, error: expect.stringContaining('not a Mars Cosmos') })
     expect(validateBackup(made, latest - 1)).toMatchObject({ ok: false, error: expect.stringContaining('newer') })
+  })
+
+  it('deletes a listed backup (file and row), owner only, and refuses anything not in the list', () => {
+    setBackupDir(mkdtempSync(join(tmpdir(), 'mars-rs-')))
+    const made = backupNow().list[0]!.file
+    expect(existsSync(made)).toBe(true)
+    as('manager')
+    expect(() => deleteBackup(made)).toThrow()
+    as('owner')
+    expect(() => deleteBackup('C:/Windows/notepad.exe')).toThrow('not in the list')
+    expect(deleteBackup(made).list.some((b) => b.file === made)).toBe(false)
+    expect(existsSync(made)).toBe(false)
+  })
+
+  it('brings back everything except PINs: today\'s PINs and recovery code stay', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mars-rs-'))
+    setBackupDir(dir)
+    const cashier = id('cashier')
+    setStaffPin(cashier, '7391') // the PIN in the backup
+    saveShop(shop)
+    const made = backupNow().list[0]!.file
+    setStaffPin(cashier, '5826') // changed after the backup
+    saveShop({ ...shop, name: 'Renamed later' })
+    getDb().prepare("INSERT INTO settings(key,value) VALUES('recovery','{\"hash\":\"now\"}')").run()
+    const pins = pinSnapshot()
+    openDb(made) // what restore does: the backup file becomes the database
+    keepPins(pins)
+    expect(appInfo().shopName).toBe('Raj Fashion') // the data is the backup's
+    setCurrent(null)
+    expect(login(cashier, '7391')).toMatchObject({ ok: false }) // the old PIN does not come back
+    expect(login(cashier, '5826')).toMatchObject({ ok: true })
+    expect(getDb().prepare("SELECT value FROM settings WHERE key='recovery'").get()).toEqual({ value: '{"hash":"now"}' })
   })
 })
 

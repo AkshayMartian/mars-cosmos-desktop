@@ -19,6 +19,30 @@ export const backupFolder = (): string => getSetting<string>('backup_folder', ''
 
 const sqlQuote = (s: string): string => `'${s.replace(/'/g, "''")}'`
 
+/**
+ * A restore brings everything back except PINs: the PINs people use today stay.
+ * `pinSnapshot` reads them from the database in use (before the swap); `keepPins` writes them into the restored one.
+ * Staff are matched by id. Someone who exists only in the backup keeps the backup's PIN; the owner's forgot-PIN recovery code also stays the current one.
+ */
+export interface PinSnapshot { staff: Array<{ id: string; pin_hash: string; must_change_pin: number }>; recovery: string | null }
+export function pinSnapshot(): PinSnapshot {
+  const d = getDb()
+  const staff = d.prepare('SELECT id, pin_hash, must_change_pin FROM staff').all() as PinSnapshot['staff']
+  const rec = d.prepare("SELECT value FROM settings WHERE key='recovery'").get() as { value: string } | undefined
+  return { staff, recovery: rec?.value ?? null }
+}
+export function keepPins(s: PinSnapshot): number {
+  const d = getDb()
+  const upd = d.prepare('UPDATE staff SET pin_hash=?, must_change_pin=?, failed_attempts=0, locked_until=0 WHERE id=?')
+  let n = 0
+  d.transaction(() => {
+    for (const r of s.staff) n += upd.run(r.pin_hash, r.must_change_pin, r.id).changes
+    if (s.recovery) d.prepare("INSERT INTO settings(key,value) VALUES('recovery',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(s.recovery)
+    else d.prepare("DELETE FROM settings WHERE key='recovery'").run()
+  })()
+  return n
+}
+
 export function runBackup(): { file: string; sizeBytes: number } {
   const folder = backupFolder()
   if (!folder) throw new Error('No backup folder is set.')

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { rmSync } from 'node:fs'
 import { getDb } from '../db'
 import type {
   AllSettings, BackupInfo, CoinSettings, PrinterSettings, ReceiptSettings, ShopSettings, StaffAdminRow, StaffSaveInput
@@ -172,5 +173,19 @@ export function backupNow(): BackupInfo {
   const a = owner()
   const r = runBackup()
   audit(a.id, 'backup', { file: r.file })
+  return backupInfo()
+}
+
+/** Deletes one backup from the list: the file (if it is still there) and its row. Only files this app made can be deleted. */
+export function deleteBackup(file: string): BackupInfo {
+  const a = owner()
+  const d = getDb()
+  const row = d.prepare('SELECT id FROM backups WHERE file=?').get(String(file ?? '')) as { id: number } | undefined
+  if (!row) throw new Error('That backup is not in the list.')
+  try { rmSync(file, { force: true }) } catch {
+    throw new Error('Could not delete the file. Close any program that has it open, or check the drive is connected, and try again.')
+  }
+  d.prepare('DELETE FROM backups WHERE id=?').run(row.id)
+  audit(a.id, 'backup_delete', { file })
   return backupInfo()
 }

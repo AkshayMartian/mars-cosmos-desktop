@@ -358,6 +358,7 @@ function BackupTab() {
   const [folder, setFolder] = useState('')
   const [busy, setBusy] = useState(false)
   const [ask, setAsk] = useState<{ file?: string; label: string } | null>(null)
+  const [del, setDel] = useState<{ file: string; label: string } | null>(null)
   const { run, setMsg, node } = useMsg()
   const take = (i: BackupInfo) => { setInfo(i); setFolder(i.folder) }
   useEffect(() => { void run(() => window.api.settings.backups()).then((i) => i && take(i)) }, [run])
@@ -378,16 +379,26 @@ function BackupTab() {
       {info.list.length > 0 && (
         <div className="tw"><table>
           <thead><tr><th>Backup file</th><th>When</th><th className="r">Size</th><th /></tr></thead>
-          <tbody>{info.list.map((b) => <tr key={b.file}><td className="mono">{b.file}</td><td>{fmtDate(b.at)}</td><td className="r num">{mb(b.sizeBytes)}</td><td><button className="btn sm" onClick={() => setAsk({ file: b.file, label: fmtDate(b.at) })}>Restore</button></td></tr>)}</tbody>
+          <tbody>{info.list.map((b) => <tr key={b.file}><td className="mono">{b.file}</td><td>{fmtDate(b.at)}</td><td className="r num">{mb(b.sizeBytes)}</td><td><div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}><button className="btn sm" onClick={() => setAsk({ file: b.file, label: fmtDate(b.at) })}>Restore</button><button className="btn sm danger" onClick={() => setDel({ file: b.file, label: fmtDate(b.at) })}>Delete</button></div></td></tr>)}</tbody>
         </table></div>
       )}
       <div className="hint">Day end also backs up automatically. Restoring replaces everything in the app with the backup, so use it only when needed.</div>
       {ask && (
         <Modal title="Restore this backup?" onClose={() => setAsk(null)}>
-          <p style={{ margin: 0 }}>The app will be replaced with <b>{ask.label}</b>. Everything entered after that backup will be gone. A safety copy of the current data is taken first. The app restarts when it is done.</p>
+          <p style={{ margin: 0 }}>The app will be replaced with <b>{ask.label}</b>. Everything entered after that backup will be gone, except PINs: everyone keeps the PIN they use today. A safety copy of the current data is taken first. Then the app reloads and you log in again.</p>
           <div className="mfoot">
             <button className="btn" onClick={() => setAsk(null)}>Keep current data</button>
-            <button className="btn danger" onClick={() => { const a = ask; setAsk(null); void run(() => (a.file ? window.api.settings.restore(a.file) : window.api.settings.restoreFromFile())).then((r) => { if (r) setMsg({ ok: true, text: 'Restored. The app is restarting…' }) }) }}>Restore</button>
+            <button className="btn danger" onClick={() => { const a = ask; setAsk(null); void run(() => (a.file ? window.api.settings.restore(a.file) : window.api.settings.restoreFromFile())).then((r) => { if (r) setMsg({ ok: true, text: 'Restored. Reloading the app: log in again…' }) }) }}>Restore</button>
+          </div>
+        </Modal>
+      )}
+      {del && (
+        <Modal title="Delete this backup?" onClose={() => setDel(null)}>
+          <p style={{ margin: 0 }}>The backup from <b>{del.label}</b> will be deleted from this PC and cannot be used to restore any more. Your current data is not changed.</p>
+          <p className="mono" style={{ margin: '8px 0 0', fontSize: 12, wordBreak: 'break-all', color: 'var(--muted)' }}>{del.file}</p>
+          <div className="mfoot">
+            <button className="btn" onClick={() => setDel(null)}>Keep it</button>
+            <button className="btn danger" onClick={() => { const f = del.file; setDel(null); void run(() => window.api.settings.deleteBackup(f), 'Backup deleted.').then((i) => i && take(i)) }}>Delete</button>
           </div>
         </Modal>
       )}

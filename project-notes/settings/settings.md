@@ -19,7 +19,7 @@
 | Coins | *Coins on*, *1 coin for every ₹*, *1 coin is worth ₹*, *Expire after (months)*, *Max use per bill (%)*, **Save** |
 | Staff | Table (name, role, max discount, commission, cancel, change price, status), **Edit**, **+ Add staff**. Dialog: name, role, max discount %, commission %, two permission ticks, Active, PIN for a new person, **Change PIN** when editing |
 | Alterations | Tailor table with **Make inactive / active**, add-tailor form, *Rules* (*Default ready in (days)*, *GST on alteration charge %*, *Print tailor tag on*), **Save** |
-| Backup | *Backup folder* + **Save folder**, last backup, copies kept (of 30), **Back up now**, list of backup files each with **Restore**, **Restore from backup file…** (choose a file, for example from a USB drive). Restoring asks first, takes a safety copy, replaces the database and restarts the app |
+| Backup | *Backup folder* + **Save folder**, last backup, copies kept (of 30), **Back up now**, list of backup files each with **Restore** and **Delete** (asks first; deletes the file and removes it from the list), **Restore from backup file…** (choose a file, for example from a USB drive). Restoring asks first, takes a safety copy, replaces the database, opens it again and reloads the window (log in again) |
 
 ## 3. Flows
 
@@ -41,7 +41,8 @@ Open → `window.api.settings.get()` → `settings:get` → `getAllSettings`. Ea
 - `settings:backups` · `backups()`: `{ folder, isDefault, copies, keep, list:[{file, at, sizeBytes}] }`.
 - `settings:saveBackupFolder` · `saveBackupFolder(folder)`: empty means the default folder.
 - `settings:backupNow` · `backupNow()`: runs a backup now (same as Day end's). Audit `backup`.
-- `settings:restore` · `restore(file)`: restores one of the files in the backup list. `settings:restoreFromFile` · `restoreFromFile()`: opens a file dialog and restores the chosen file (null when cancelled). Both check the file is a Mars Cosmos database (our tables, not from a newer app), take a safety backup, close the database, copy the file over it and restart. Errors: "That backup is not in the list." · "This is not a Mars Cosmos backup file." · "This backup is from a newer version…" · "That is the database in use."
+- `settings:deleteBackup` · `deleteBackup(file)`: owner only. Deletes one backup in the list: the file (already gone is fine) and its row; returns the new `BackupInfo`. Audit `backup_delete`. Errors: "That backup is not in the list." · "Could not delete the file…"
+- `settings:restore` · `restore(file)`: restores one of the files in the backup list. `settings:restoreFromFile` · `restoreFromFile()`: opens a file dialog and restores the chosen file (null when cancelled). Both check the file is a Mars Cosmos database (our tables, not from a newer app), take a safety backup, close the database, copy the file over it, open it again (older backups are brought up to the current schema), put back today's PINs and recovery code (PINs are never restored), log everyone out and reload the window. Errors: "That backup is not in the list." · "This is not a Mars Cosmos backup file." · "This backup is from a newer version…" · "That is the database in use."
 - Printing (used by the screens): `print:receipt` (bill id, duplicate flag: prints the receipt text at the paper width), `print:alteration` (job id, `tag` or `slip`), `print:testReceipt`, `print:testSticker`, `print:openDrawer` (a one-line job to the receipt printer; set the printer driver to open the drawer on a job). With no printer chosen the Windows print dialog opens. Errors: "Printing was cancelled." · "The printer did not accept the job…"
 
 ## 5. Database

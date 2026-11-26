@@ -46,7 +46,7 @@ DELETE FROM backups WHERE id=?;
 - **Names:** `mars-YYYY-MM-DD.db`; later the same day `-HHMMSS`, then `-N`. Never overwrites.
 - **Retention:** newest 30.
 - **A failed backup never blocks closing the day** (D-20).
-- **Restore** is in Settings → Backup (a listed backup or a file you choose): a safety copy is taken, the file is swapped and the app restarts. Tried in the real app on 2026-11-16: bills and stock went back to the backup. The list of backups shown afterwards is the one stored inside the restored file, so newer copies (and the safety copy) are not listed; use "Restore from backup file…" to pick them.
+- **Restore** is in Settings → Backup (a listed backup or a file you choose): a safety copy is taken, the file is swapped, the database is opened again in the same app and the window reloads (everyone logs in again). PINs are not restored: everyone keeps today's PIN (matched by staff id; someone only in the backup keeps the backup's PIN), and the owner's recovery code stays the current one. It used to restart the whole program, which broke a development run (npm run dev stopped with it). Tried in the real app on 2026-11-16: bills and stock went back to the backup. The list of backups shown afterwards is the one stored inside the restored file, so newer copies (and the safety copy) are not listed; use "Restore from backup file…" to pick them.
 
 ## 7. Test cases
 

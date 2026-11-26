@@ -12,13 +12,13 @@ import { RESET_PAGE } from './page'
 
 /**
  * DEVELOPMENT ONLY. Stands in for the MARS admin portal so the desktop app can be tried without starting it:
- * the same addresses (/v1/activate, /v1/pin-reset/*), the same MongoDB, the same emails. It reads its secrets (MongoDB link, SMTP login,
+ * the same addresses (/v1/activate, /v1/refresh, /v1/pin-reset/*), the same MongoDB, the same emails. It reads its secrets (MongoDB link, SMTP login,
  * licence signing key) from `.local-server/` in this project, which is git-ignored and not part of the installer. An installed app never
  * loads this file (index.ts only imports it when the app is not packaged), so shop PCs never hold these secrets.
  * The reset link in the email opens a small page served from here (http://127.0.0.1:4150/reset-pin), so it works on this PC only.
  */
 
-const PORT = 4150
+const PORT = Number(process.env['MARS_DEV_SERVER_PORT']) || 4150 // another port only to try a second copy beside a running app
 const RESET_MINUTES = 15
 const MAX_SENDS = 4
 const MAX_EMAILS_PER_HOUR = 5
@@ -122,6 +122,27 @@ export async function startDevServer(root: string, log: (m: string) => void = co
       v: 1, key, machine, shop: shop['name'], plan: shop['plan'], mode: shop['mode'], counters: shop['counters'] ?? 1, kind: 'full', expires: licenceExpires!, issued: licenceIssued!
     }
     return { licence: signLicence(payload, cfg!.privatePem) }
+  }
+
+  /* ---------- check-in: a fresh licence from what MongoDB holds now (renewals, plan changes) ---------- */
+  async function refresh(b: Doc): Promise<Doc> {
+    const d = await db()
+    const { key, machine } = identity(b)
+    const doc = await d.collection('activation_keys').findOne({ key })
+    if (!doc) throw new HttpError(403, NOT_ACTIVATED)
+    if (doc['status'] === 'revoked') throw new HttpError(403, 'This licence has been cancelled. Contact MARS support.')
+    if (doc['status'] !== 'activated' || doc['machineId'] !== machine) throw new HttpError(403, 'This licence belongs to another PC. Contact MARS support.')
+    if (!doc['licenceIssued'] || !doc['licenceExpires']) throw new HttpError(500, 'This licence record is incomplete. Contact MARS support.')
+    const tenantId = doc['tenantId'] as string
+    const shop = await d.collection('shops').findOne({ tenantId })
+    if (!shop) throw new HttpError(500, 'This shop record is incomplete. Contact MARS support.')
+    if (shop['status'] === 'suspended') throw new HttpError(403, 'This shop is suspended. Contact MARS support.')
+    const now = new Date()
+    await d.collection('devices').updateOne({ tenantId, machineId: machine }, { $set: { key, lastCheckAt: now }, $setOnInsert: { activatedAt: now } }, { upsert: true })
+    const payload: LicencePayload = {
+      v: 1, key, machine, shop: shop['name'], plan: shop['plan'], mode: shop['mode'], counters: shop['counters'] ?? 1, kind: 'full', expires: doc['licenceExpires'], issued: doc['licenceIssued']
+    }
+    return { licence: signLicence(payload, cfg!.privatePem), expires: doc['licenceExpires'] }
   }
 
   /* ---------- owner forgot PIN ---------- */
@@ -236,6 +257,7 @@ export async function startDevServer(root: string, log: (m: string) => void = co
       try {
         if (req.method === 'GET' && u.pathname === '/reset-pin') return send(res, 200, RESET_PAGE, 'text/html; charset=utf-8')
         if (req.method === 'POST' && u.pathname === '/v1/activate') return send(res, 200, await activate(await readJson(req)))
+        if (req.method === 'POST' && u.pathname === '/v1/refresh') return send(res, 200, await refresh(await readJson(req)))
         if (req.method === 'POST' && u.pathname === '/v1/pin-reset/request') return send(res, 200, await pinRequest(await readJson(req)))
         if (req.method === 'GET' && u.pathname === '/v1/pin-reset/validate') return send(res, 200, await pinValidate(u.searchParams))
         if (req.method === 'POST' && u.pathname === '/v1/pin-reset/complete') return send(res, 200, await pinComplete(await readJson(req)))

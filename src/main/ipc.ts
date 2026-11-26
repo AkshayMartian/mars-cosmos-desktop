@@ -127,6 +127,7 @@ export function registerIpc(): void {
   h('settings:finishSetup', admin.finishSetup)
   h('settings:recoveryCode', createRecoveryCode)
   h('settings:backupNow', admin.backupNow)
+  h('settings:deleteBackup', admin.deleteBackup)
   h('settings:restore', restoreListed)
   h('settings:restoreFromFile', restoreFromFile)
   h('print:receipt', printReceipt)
