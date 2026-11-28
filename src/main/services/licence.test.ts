@@ -124,3 +124,12 @@ describe('licence life', () => {
     expect((getDb().prepare("SELECT value FROM settings WHERE key='licence'").get() as { value: string }).value).toContain('"via":"code"')
   })
 })
+
+describe('this PC id', () => {
+  it('is 32 hex characters and the same on every call (not tied to which network adapter comes first)', () => {
+    setMachineIdForTests(null)
+    const a = machineId()
+    expect(a).toMatch(/^[0-9A-F]{32}$/)
+    expect(machineId()).toBe(a)
+  })
+})

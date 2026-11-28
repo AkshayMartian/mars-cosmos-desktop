@@ -359,6 +359,9 @@ function BackupTab() {
   const [busy, setBusy] = useState(false)
   const [ask, setAsk] = useState<{ file?: string; label: string } | null>(null)
   const [del, setDel] = useState<{ file: string; label: string } | null>(null)
+  const [pick, setPick] = useState(false) // "Back up now": on this PC or to the MARS cloud
+  const [busyCloud, setBusyCloud] = useState(false)
+  const [cloudAsk, setCloudAsk] = useState<{ at: string; records: number } | null>(null) // restore from the MARS cloud: the copy that would come back
   const { run, setMsg, node } = useMsg()
   const take = (i: BackupInfo) => { setInfo(i); setFolder(i.folder) }
   useEffect(() => { void run(() => window.api.settings.backups()).then((i) => i && take(i)) }, [run])
@@ -374,8 +377,8 @@ function BackupTab() {
         </div>
         {info.isDefault && <div className="hint">This is the default folder on this PC. A copy on a USB drive or second disk protects you if this PC fails.</div>}
       </div>
-      <div className="tot"><span>Last backup</span><b>{last ? fmtDate(last.at) : 'Never'}</b><span>Copies kept</span><span>{info.copies} of {info.keep}</span></div>
-      <div style={{ display: 'flex', gap: 8 }}><button className="btn p" disabled={busy} onClick={() => { setBusy(true); void run(() => window.api.settings.backupNow(), 'Backup saved.').then((i) => { setBusy(false); if (i) take(i) }) }}>{busy ? 'Backing up…' : 'Back up now'}</button><button className="btn" onClick={() => setAsk({ label: 'a backup file you choose' })}>Restore from backup file…</button></div>
+      <div className="tot"><span>Last backup</span><b>{last ? fmtDate(last.at) : 'Never'}</b><span>Copies kept</span><span>{info.copies} of {info.keep}</span><span>Last cloud backup</span><span>{info.cloud ? `${fmtDate(info.cloud.at)} · ${info.cloud.records.toLocaleString('en-IN')} records` : 'Never'}</span></div>
+      <div style={{ display: 'flex', gap: 8 }}><button className="btn p" disabled={busy || busyCloud} onClick={() => setPick(true)}>{busy ? 'Backing up…' : busyCloud ? 'Uploading to cloud…' : 'Back up now'}</button><button className="btn" onClick={() => setAsk({ label: 'a backup file you choose' })}>Restore from backup file…</button><button className="btn" disabled={busyCloud} onClick={() => { setBusyCloud(true); void run(() => window.api.settings.cloudLatest()).then((c) => { setBusyCloud(false); if (c === null) setMsg({ ok: false, text: 'There is no cloud backup for this shop yet. Use "Back up now" → "Save to MARS cloud" first.' }); else if (c) setCloudAsk(c) }) }}>Restore from MARS cloud…</button></div>
       {info.list.length > 0 && (
         <div className="tw"><table>
           <thead><tr><th>Backup file</th><th>When</th><th className="r">Size</th><th /></tr></thead>
@@ -389,6 +392,37 @@ function BackupTab() {
           <div className="mfoot">
             <button className="btn" onClick={() => setAsk(null)}>Keep current data</button>
             <button className="btn danger" onClick={() => { const a = ask; setAsk(null); void run(() => (a.file ? window.api.settings.restore(a.file) : window.api.settings.restoreFromFile())).then((r) => { if (r) setMsg({ ok: true, text: 'Restored. Reloading the app: log in again…' }) }) }}>Restore</button>
+          </div>
+        </Modal>
+      )}
+      {pick && (
+        <Modal title="Where should the backup go?" onClose={() => setPick(false)}>
+          <div style={{ display: 'grid', gap: 10 }}>
+            <button className="radio-card" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => { setPick(false); setBusy(true); void run(() => window.api.settings.backupNow(), 'Backup saved on this PC.').then((i) => { setBusy(false); if (i) take(i) }) }}>
+              <span><b>Save on this PC</b><br /><span className="sub">A copy of the database in the backup folder above. Works without internet.</span></span>
+            </button>
+            <button className="radio-card" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => {
+              setPick(false); setBusyCloud(true)
+              void run(() => window.api.settings.backupCloud()).then(async (c) => {
+                setBusyCloud(false)
+                if (!c) return
+                const i = await window.api.settings.backups().catch(() => null)
+                if (i) take(i)
+                setMsg({ ok: true, text: `Uploaded to the MARS cloud: ${c.records.toLocaleString('en-IN')} records from ${c.tables} tables.` })
+              })
+            }}>
+              <span><b>Save to MARS cloud (MongoDB)</b><br /><span className="sub">Uploads all the shop's data, with your shop id on every record. Needs internet. PINs and the licence are never uploaded.</span></span>
+            </button>
+          </div>
+          <div className="mfoot"><button className="btn" onClick={() => setPick(false)}>Cancel</button></div>
+        </Modal>
+      )}
+      {cloudAsk && (
+        <Modal title="Restore from the MARS cloud?" onClose={() => setCloudAsk(null)}>
+          <p style={{ margin: 0 }}>The app will be replaced with the cloud backup from <b>{fmtDate(cloudAsk.at)}</b> ({cloudAsk.records.toLocaleString('en-IN')} records). Everything entered after that backup will be gone, except PINs and this PC's activation: everyone keeps the PIN they use today and the app stays activated. A safety copy of the current data is saved on this PC first. Then the app reloads and you log in again.</p>
+          <div className="mfoot">
+            <button className="btn" onClick={() => setCloudAsk(null)}>Keep current data</button>
+            <button className="btn danger" onClick={() => { setCloudAsk(null); setBusyCloud(true); setMsg({ ok: true, text: 'Downloading the cloud backup…' }); void run(() => window.api.settings.restoreCloud()).then((r) => { setBusyCloud(false); if (r) setMsg({ ok: true, text: 'Restored from the MARS cloud. Reloading the app: log in again…' }) }) }}>Restore</button>
           </div>
         </Modal>
       )}

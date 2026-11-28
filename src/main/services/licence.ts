@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { createHash, createPublicKey, verify } from 'node:crypto'
 import { hostname, networkInterfaces, platform } from 'node:os'
 import { getDb } from '../db'
@@ -30,10 +31,30 @@ const put = (key: string, value: unknown): void => {
 }
 
 /** Stable for this PC: hostname + OS + first real network adapter. Not secret; it only ties a licence to one machine. */
+/**
+ * This PC's id. On Windows it comes from the Windows installation id (MachineGuid), which stays the same through restarts,
+ * network changes, VPNs and renaming the PC; it changes only when Windows is reinstalled.
+ * (It used to come from the first network adapter, but a virtual adapter such as Hyper-V's "Default Switch" can come first and
+ * change its address on a restart, so the PC "became another PC" and the licence stopped working.)
+ */
+let cachedId: string | null = null
 export function machineId(): string {
   if (machineOverride) return machineOverride
-  const mac = Object.values(networkInterfaces()).flat().find((n) => n && !n.internal && n.mac !== '00:00:00:00:00:00')?.mac ?? ''
-  return createHash('sha256').update(`${hostname()}|${platform()}|${mac}`).digest('hex').slice(0, 32).toUpperCase()
+  return (cachedId ??= computeMachineId())
+}
+function computeMachineId(): string {
+  const guid = windowsMachineGuid()
+  if (guid) return createHash('sha256').update(`win-guid|${guid.toLowerCase()}`).digest('hex').slice(0, 32).toUpperCase()
+  // other systems (development only): the physical adapters' addresses, sorted, so their order does not matter
+  const macs = [...new Set(Object.values(networkInterfaces()).flat().filter((n) => n && !n.internal && n.mac !== '00:00:00:00:00:00').map((n) => n!.mac))].sort()
+  return createHash('sha256').update(`${hostname()}|${platform()}|${macs.join(',')}`).digest('hex').slice(0, 32).toUpperCase()
+}
+function windowsMachineGuid(): string | null {
+  if (platform() !== 'win32') return null
+  try {
+    const out = execFileSync('reg', ['query', 'HKLM\\SOFTWARE\\Microsoft\\Cryptography', '/v', 'MachineGuid', '/reg:64'], { encoding: 'utf8', windowsHide: true, timeout: 5000 })
+    return /MachineGuid\s+REG_SZ\s+([0-9a-fA-F-]{36})/.exec(out)?.[1] ?? null
+  } catch { return null }
 }
 const shortId = (m: string): string => m.slice(0, 4) + '-' + m.slice(4, 8) + '-' + m.slice(8, 12)
 
@@ -172,7 +193,7 @@ export const NO_INTERNET = 'No internet connection. Connect to the internet to r
  * A call to the MARS server for the signed-in-by-licence features (PIN reset). Identity is the licence key + this PC's id, which the caller adds.
  * Unlike `post`, a failure to connect is reported as "no internet" and nothing is retried here.
  */
-export async function serverRequest<T>(method: 'GET' | 'POST', path: string, payload: Record<string, string | boolean>): Promise<T> {
+export async function serverRequest<T>(method: 'GET' | 'POST', path: string, payload: Record<string, unknown>): Promise<T> {
   if (!serverUrl) throw new Error('This PC is not set up to reach the MARS server. Contact MARS support.')
   const qs = method === 'GET' ? '?' + new URLSearchParams(Object.entries(payload).map(([k, v]) => [k, String(v)])).toString() : ''
   let res: Response
@@ -190,9 +211,9 @@ export async function serverRequest<T>(method: 'GET' | 'POST', path: string, pay
 }
 
 /** The licence key and PC id that identify this shop to the server. Needs an activated licence. */
-export function licenceIdentity(): { key: string; machine: string } {
+export function licenceIdentity(notActivated = 'This PC is not activated, so the PIN cannot be reset online.'): { key: string; machine: string } {
   const s = saved()
-  if (!s) throw new Error('This PC is not activated, so the PIN cannot be reset online.')
+  if (!s) throw new Error(notActivated)
   return { key: verifyToken(s.token).key, machine: machineId() }
 }
 

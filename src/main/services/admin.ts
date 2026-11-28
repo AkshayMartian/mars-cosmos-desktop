@@ -9,6 +9,7 @@ import { checkMobile } from '@shared/mobile'
 import { shopErrors } from '@shared/shopValidation'
 import { audit } from './auth'
 import { backupFolder, runBackup } from './backup'
+import { lastCloudBackup } from './cloudBackup'
 import { hashPin, isWeakPin } from './pin'
 import { requireRole } from './session'
 import { getSetting } from './settings'
@@ -159,7 +160,7 @@ export function finishSetup(): true {
 export function backupInfo(): BackupInfo {
   owner()
   const rows = getDb().prepare('SELECT file,at,size_bytes AS sizeBytes FROM backups ORDER BY id DESC').all() as BackupInfo['list']
-  return { folder: backupFolder(), isDefault: !getSetting<string>('backup_folder', ''), copies: rows.length, keep: 30, list: rows }
+  return { folder: backupFolder(), isDefault: !getSetting<string>('backup_folder', ''), copies: rows.length, keep: 30, list: rows, cloud: lastCloudBackup() }
 }
 
 export function saveBackupFolder(folder: string): BackupInfo {

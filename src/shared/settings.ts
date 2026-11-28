@@ -25,7 +25,9 @@ export interface StaffSaveInput {
 }
 
 export interface BackupRow { file: string; at: string; sizeBytes: number }
-export interface BackupInfo { folder: string; isDefault: boolean; copies: number; keep: number; list: BackupRow[] }
+/** The last upload of this PC's data to the MARS cloud (MongoDB), if any. */
+export interface CloudBackupInfo { at: string; records: number; tables: number }
+export interface BackupInfo { folder: string; isDefault: boolean; copies: number; keep: number; list: BackupRow[]; cloud: CloudBackupInfo | null }
 
 export const GST_SCHEMES: { id: GstScheme; name: string; text: string }[] = [
   { id: 'regular', name: 'Regular GST', text: 'Tax invoice with CGST and SGST on every bill' },

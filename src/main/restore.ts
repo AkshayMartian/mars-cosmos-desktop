@@ -4,6 +4,8 @@ import { closeDb, getDb, getDbFile, openDb } from './db'
 import { MIGRATIONS } from './db/schema'
 import { audit } from './services/auth'
 import { keepPins, pinSnapshot, runBackup, validateBackup, type PinSnapshot } from './services/backup'
+import { buildFromCloud } from './services/cloudBackup'
+import { dirname } from 'node:path'
 import { enableSerialsEverywhere } from './services/catalogue'
 import { requireRole, setCurrent } from './services/session'
 
@@ -68,4 +70,11 @@ export async function restoreFromFile(): Promise<{ restarting: true } | null> {
   const r = await dialog.showOpenDialog({ title: 'Choose a Mars Cosmos backup', properties: ['openFile'], filters: [{ name: 'Mars Cosmos backup', extensions: ['db'] }] })
   if (r.canceled || !r.filePaths[0]) return null
   return restore(r.filePaths[0])
+}
+
+/** The latest cloud copy of this shop (MongoDB, through the MARS server), restored like a backup file. */
+export async function restoreFromCloud(): Promise<{ restarting: true }> {
+  requireRole('owner')
+  const { file } = await buildFromCloud()
+  try { return await restore(file) } finally { rmSync(dirname(file), { recursive: true, force: true }) }
 }

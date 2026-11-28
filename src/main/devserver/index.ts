@@ -73,12 +73,12 @@ export async function startDevServer(root: string, log: (m: string) => void = co
   async function identify(d: Db, key: string, machine: string) {
     const k = await d.collection('activation_keys').findOne({ key })
     if (!k || k['status'] !== 'activated' || k['machineId'] !== machine) return null
-    const tenantId = k['tenantId'] as string
-    const shop = await d.collection('shops').findOne({ tenantId })
-    const owner = await d.collection('owners').findOne({ tenantId })
-    return shop && owner ? { tenantId, shop, owner } : null
+    const shopId = k['shopId'] as string
+    const shop = await d.collection('shops').findOne({ shopId })
+    const owner = await d.collection('owners').findOne({ shopId })
+    return shop && owner ? { shopId, shop, owner } : null
   }
-  const audit = (d: Db, tenantId: string, action: string, details: Doc = {}) => d.collection('audit_log').insertOne({ tenantId, action, at: new Date(), details })
+  const audit = (d: Db, shopId: string, action: string, details: Doc = {}) => d.collection('audit_log').insertOne({ shopId, action, at: new Date(), details })
   const identity = (src: Doc): { key: string; machine: string } => {
     const key = String(src['key'] ?? '').trim().toUpperCase()
     const machine = String(src['machine'] ?? '').trim()
@@ -102,9 +102,9 @@ export async function startDevServer(root: string, log: (m: string) => void = co
     const now = new Date()
     if (doc['status'] === 'issued' && doc['expiresAt'] && doc['expiresAt'] <= now) throw new HttpError(410, 'This activation key has expired. Ask MARS support for a new one.')
     if (doc['status'] === 'activated' && doc['machineId'] !== machine) throw new HttpError(409, 'This key is already activated on another PC. Contact MARS support to move it.')
-    const tenantId = doc['tenantId'] as string
-    const shop = await d.collection('shops').findOne({ tenantId })
-    const owner = await d.collection('owners').findOne({ tenantId })
+    const shopId = doc['shopId'] as string
+    const shop = await d.collection('shops').findOne({ shopId })
+    const owner = await d.collection('owners').findOne({ shopId })
     if (!shop || !owner) throw new HttpError(500, 'This shop record is incomplete. Contact MARS support.')
     if (shop['status'] === 'suspended') throw new HttpError(403, 'This shop is suspended. Contact MARS support.')
 
@@ -114,10 +114,10 @@ export async function startDevServer(root: string, log: (m: string) => void = co
       const claimed = await keys.findOneAndUpdate({ key, status: 'issued' }, { $set: { status: 'activated', activatedAt: now, machineId: machine, licenceIssued: dates.issued, licenceExpires: dates.expires } })
       if (!claimed) throw new HttpError(409, 'This key was just activated on another PC. Contact MARS support.')
       licenceIssued = dates.issued; licenceExpires = dates.expires
-      await d.collection('shops').updateOne({ tenantId }, { $set: { status: 'active', updatedAt: now } })
-      await audit(d, tenantId, 'licence_activated', { key: key.slice(0, 9) + '••••-••••' })
+      await d.collection('shops').updateOne({ shopId }, { $set: { status: 'active', updatedAt: now } })
+      await audit(d, shopId, 'licence_activated', { key: key.slice(0, 9) + '••••-••••' })
     }
-    await d.collection('devices').updateOne({ tenantId, machineId: machine }, { $set: { key, lastCheckAt: now }, $setOnInsert: { activatedAt: now } }, { upsert: true })
+    await d.collection('devices').updateOne({ shopId, machineId: machine }, { $set: { key, lastCheckAt: now }, $setOnInsert: { activatedAt: now } }, { upsert: true })
     const payload: LicencePayload = {
       v: 1, key, machine, shop: shop['name'], plan: shop['plan'], mode: shop['mode'], counters: shop['counters'] ?? 1, kind: 'full', expires: licenceExpires!, issued: licenceIssued!
     }
@@ -133,16 +133,94 @@ export async function startDevServer(root: string, log: (m: string) => void = co
     if (doc['status'] === 'revoked') throw new HttpError(403, 'This licence has been cancelled. Contact MARS support.')
     if (doc['status'] !== 'activated' || doc['machineId'] !== machine) throw new HttpError(403, 'This licence belongs to another PC. Contact MARS support.')
     if (!doc['licenceIssued'] || !doc['licenceExpires']) throw new HttpError(500, 'This licence record is incomplete. Contact MARS support.')
-    const tenantId = doc['tenantId'] as string
-    const shop = await d.collection('shops').findOne({ tenantId })
+    const shopId = doc['shopId'] as string
+    const shop = await d.collection('shops').findOne({ shopId })
     if (!shop) throw new HttpError(500, 'This shop record is incomplete. Contact MARS support.')
     if (shop['status'] === 'suspended') throw new HttpError(403, 'This shop is suspended. Contact MARS support.')
     const now = new Date()
-    await d.collection('devices').updateOne({ tenantId, machineId: machine }, { $set: { key, lastCheckAt: now }, $setOnInsert: { activatedAt: now } }, { upsert: true })
+    await d.collection('devices').updateOne({ shopId, machineId: machine }, { $set: { key, lastCheckAt: now }, $setOnInsert: { activatedAt: now } }, { upsert: true })
     const payload: LicencePayload = {
       v: 1, key, machine, shop: shop['name'], plan: shop['plan'], mode: shop['mode'], counters: shop['counters'] ?? 1, kind: 'full', expires: doc['licenceExpires'], issued: doc['licenceIssued']
     }
     return { licence: signLicence(payload, cfg!.privatePem), expires: doc['licenceExpires'] }
+  }
+
+  /* ---------- cloud backup: the whole SQLite data into pos_<table>, every record stamped with shopId (same as the portal) ---------- */
+  const TABLE_RE = /^[a-z][a-z0-9_]{0,39}$/
+  async function cloudShop(d: Db, b: Doc): Promise<string> {
+    const { key, machine } = identity(b)
+    const k = await d.collection('activation_keys').findOne({ key })
+    if (!k || k['status'] !== 'activated' || k['machineId'] !== machine) throw new HttpError(403, NOT_ACTIVATED)
+    const shop = await d.collection('shops').findOne({ shopId: k['shopId'] })
+    if (!shop) throw new HttpError(403, NOT_ACTIVATED)
+    if (shop['status'] === 'suspended') throw new HttpError(403, 'This shop is suspended. Contact MARS support.')
+    if (shop['mode'] === 'local') throw new HttpError(403, 'Your plan keeps data on this PC only. Ask MARS to move you to a plan with cloud backup.')
+    return k['shopId'] as string
+  }
+  async function cloudStart(b: Doc): Promise<Doc> {
+    const d = await db()
+    const shopId = await cloudShop(d, b)
+    const tables = (b['tables'] ?? {}) as Record<string, number>
+    if (typeof tables !== 'object' || Object.entries(tables).some(([t, n]) => !TABLE_RE.test(t) || !Number.isInteger(n) || n < 0)) throw new HttpError(400, 'The backup data was not in the expected form.')
+    const backupId = randomBytes(12).toString('hex')
+    const expected = Object.values(tables).reduce((a, n) => a + n, 0)
+    await d.collection('cloud_backups').insertOne({ backupId, shopId, machineId: String(b['machine']), status: 'uploading', tables, schema: Number.isInteger(b['schema']) ? b['schema'] : null, expected, received: 0, startedAt: new Date() })
+    return { backupId }
+  }
+  async function cloudRows(b: Doc): Promise<Doc> {
+    const d = await db()
+    const shopId = await cloudShop(d, b)
+    const table = String(b['table'] ?? '')
+    const rows = b['rows'] as Doc[]
+    if (!TABLE_RE.test(table) || !Array.isArray(rows) || rows.length > 1000) throw new HttpError(400, 'The backup data was not in the expected form.')
+    const run = await d.collection('cloud_backups').findOne({ backupId: String(b['backupId']), shopId, status: 'uploading' })
+    if (!run) throw new HttpError(400, 'This upload is no longer open. Start the cloud backup again.')
+    if (!(table in run['tables'])) throw new HttpError(400, `The table ${table} was not announced at the start.`)
+    if (rows.length) {
+      await d.collection('pos_' + table).insertMany(rows.map((r) => ({ ...r, shopId, backupId: run['backupId'] })))
+      await d.collection('cloud_backups').updateOne({ backupId: run['backupId'] }, { $inc: { received: rows.length } })
+    }
+    return { ok: true, received: rows.length }
+  }
+  async function cloudFinish(b: Doc): Promise<Doc> {
+    const d = await db()
+    const shopId = await cloudShop(d, b)
+    const backupId = String(b['backupId'] ?? '')
+    const run = await d.collection('cloud_backups').findOne({ backupId, shopId, status: 'uploading' })
+    if (!run) throw new HttpError(400, 'This upload is no longer open. Start the cloud backup again.')
+    if (run['received'] !== run['expected']) throw new HttpError(400, `Only ${run['received']} of ${run['expected']} records arrived. Start the cloud backup again.`)
+    const known = (await d.listCollections({}, { nameOnly: true }).toArray()).map((c) => c.name).filter((n) => n.startsWith('pos_'))
+    for (const name of new Set([...known, ...Object.keys(run['tables']).map((t) => 'pos_' + t)])) {
+      await d.collection(name).createIndex({ shopId: 1, backupId: 1 })
+      await d.collection(name).deleteMany({ shopId, backupId: { $ne: backupId } }) // keep one complete copy per shop
+    }
+    const now = new Date()
+    await d.collection('cloud_backups').updateOne({ backupId }, { $set: { status: 'complete', finishedAt: now } })
+    await d.collection('cloud_backups').updateMany({ shopId, backupId: { $ne: backupId }, status: { $in: ['uploading', 'complete'] } }, { $set: { status: 'replaced' } })
+    const tableCount = Object.keys(run['tables']).length
+    await audit(d, shopId, 'cloud_backup', { records: run['expected'], tables: tableCount, machineId: String(b['machine']) })
+    return { ok: true, records: run['expected'], tables: tableCount, at: now.toISOString() }
+  }
+
+  async function cloudLatest(b: Doc): Promise<Doc> {
+    const d = await db()
+    const shopId = await cloudShop(d, b)
+    const run = await d.collection('cloud_backups').findOne({ shopId, status: 'complete' }, { sort: { finishedAt: -1 } })
+    if (!run) return { backup: null }
+    return { backup: { backupId: run['backupId'], at: (run['finishedAt'] as Date).toISOString(), records: run['expected'], tables: run['tables'], schema: run['schema'] ?? null } }
+  }
+  async function cloudDownload(b: Doc): Promise<Doc> {
+    const d = await db()
+    const shopId = await cloudShop(d, b)
+    const backupId = String(b['backupId'] ?? '')
+    const table = String(b['table'] ?? '')
+    const skip = Number(b['skip']), limit = Number(b['limit'])
+    if (!TABLE_RE.test(table) || !Number.isInteger(skip) || skip < 0 || !Number.isInteger(limit) || limit < 1 || limit > 1000) throw new HttpError(400, 'The request was not in the expected form.')
+    const run = await d.collection('cloud_backups').findOne({ backupId, shopId, status: 'complete' })
+    if (!run) throw new HttpError(404, 'That cloud backup is no longer available. Check the latest one and try again.')
+    if (!(table in run['tables'])) throw new HttpError(400, `The table ${table} is not in that cloud backup.`)
+    const rows = await d.collection('pos_' + table).find({ shopId, backupId }, { projection: { _id: 0, shopId: 0, backupId: 0 } }).sort({ _id: 1 }).skip(skip).limit(limit).toArray()
+    return { rows }
   }
 
   /* ---------- owner forgot PIN ---------- */
@@ -152,10 +230,10 @@ export async function startDevServer(root: string, log: (m: string) => void = co
     const who = await identify(d, key, machine)
     if (!who) throw new HttpError(403, NOT_ACTIVATED)
     if (who.shop['status'] === 'suspended') throw new HttpError(403, 'This shop is suspended. Contact MARS support.')
-    const { tenantId } = who
+    const { shopId } = who
     const pins = d.collection('pin_resets')
     const now = new Date()
-    const recent = await d.collection('audit_log').countDocuments({ tenantId, action: 'pin_reset_email_sent', at: { $gt: new Date(now.getTime() - HOUR) } })
+    const recent = await d.collection('audit_log').countDocuments({ shopId, action: 'pin_reset_email_sent', at: { $gt: new Date(now.getTime() - HOUR) } })
     if (recent >= MAX_EMAILS_PER_HOUR) throw new HttpError(429, 'Too many reset emails for this shop. Try again in an hour.')
 
     const token = randomBytes(32).toString('base64url')
@@ -164,15 +242,15 @@ export async function startDevServer(root: string, log: (m: string) => void = co
     const resetId = String(b['resetId'] ?? '')
     let id: string
     if (b['resend'] && /^[0-9a-f]{24}$/.test(resetId)) {
-      const cur = await pins.findOne({ resetId, tenantId, machineId: machine, status: 'pending', expiresAt: { $gt: now } })
+      const cur = await pins.findOne({ resetId, shopId, machineId: machine, status: 'pending', expiresAt: { $gt: now } })
       if (!cur) throw new HttpError(400, 'This reset is no longer open. Start the PIN reset again.')
       if ((cur['sendCount'] ?? 1) >= MAX_SENDS) throw new HttpError(429, 'The email was already sent three times. Check the inbox and the spam folder, or try again later.')
       await pins.updateOne({ resetId }, { $set: { tokenHash, expiresAt, lastSentAt: now }, $inc: { sendCount: 1 } })
       id = resetId
     } else {
-      await pins.updateMany({ tenantId, status: 'pending' }, { $set: { status: 'expired' } }) // an older link stops working
+      await pins.updateMany({ shopId, status: 'pending' }, { $set: { status: 'expired' } }) // an older link stops working
       id = randomBytes(12).toString('hex')
-      await pins.insertOne({ resetId: id, tenantId, tokenHash, machineId: machine, status: 'pending', sendCount: 1, expiresAt, lastSentAt: now, createdAt: now })
+      await pins.insertOne({ resetId: id, shopId, tokenHash, machineId: machine, status: 'pending', sendCount: 1, expiresAt, lastSentAt: now, createdAt: now })
     }
     const email = String(who.owner['email'])
     try {
@@ -182,7 +260,7 @@ export async function startDevServer(root: string, log: (m: string) => void = co
       await pins.updateOne({ resetId: id }, { $set: { status: 'expired' } })
       throw new HttpError(502, 'The email could not be sent. Try again in a moment.')
     }
-    await audit(d, tenantId, 'pin_reset_email_sent', { resend: !!b['resend'] })
+    await audit(d, shopId, 'pin_reset_email_sent', { resend: !!b['resend'] })
     return { resetId: id, emailHint: maskEmail(email), expiresInSec: RESET_MINUTES * 60 }
   }
 
@@ -191,7 +269,7 @@ export async function startDevServer(root: string, log: (m: string) => void = co
     const token = q.get('token') ?? ''
     const doc = token.length >= 20 ? await d.collection('pin_resets').findOne({ tokenHash: hashToken(cfg!.secret, token), status: 'pending', expiresAt: { $gt: new Date() } }) : null
     if (!doc) throw new HttpError(410, DEAD_LINK)
-    const shop = await d.collection('shops').findOne({ tenantId: doc['tenantId'] })
+    const shop = await d.collection('shops').findOne({ shopId: doc['shopId'] })
     return { shop: shop?.['name'] ?? '', minutesLeft: Math.max(1, Math.ceil((doc['expiresAt'].getTime() - Date.now()) / 60_000)) }
   }
 
@@ -207,11 +285,11 @@ export async function startDevServer(root: string, log: (m: string) => void = co
     // single use: the first request to flip pending -> ready wins
     const doc = await d.collection('pin_resets').findOneAndUpdate({ tokenHash: hashToken(cfg!.secret, token), status: 'pending', expiresAt: { $gt: now } }, { $set: { status: 'ready', usedAt: now, newPinHash } })
     if (!doc) throw new HttpError(410, DEAD_LINK)
-    const tenantId = doc['tenantId'] as string
-    await d.collection('owners').updateOne({ tenantId }, { $set: { pinHash: newPinHash, pinUpdatedAt: now, updatedAt: now } })
-    await audit(d, tenantId, 'pin_reset_completed')
-    const owner = await d.collection('owners').findOne({ tenantId })
-    const shop = await d.collection('shops').findOne({ tenantId })
+    const shopId = doc['shopId'] as string
+    await d.collection('owners').updateOne({ shopId }, { $set: { pinHash: newPinHash, pinUpdatedAt: now, updatedAt: now } })
+    await audit(d, shopId, 'pin_reset_completed')
+    const owner = await d.collection('owners').findOne({ shopId })
+    const shop = await d.collection('shops').findOne({ shopId })
     if (owner) await sendMail(String(owner['email']), pinChangedEmail(String(shop?.['name'] ?? 'your shop'))).catch((e: unknown) => log(`[dev server] PIN changed email failed: ${e instanceof Error ? e.message : e}`))
     return { ok: true }
   }
@@ -223,7 +301,7 @@ export async function startDevServer(root: string, log: (m: string) => void = co
     if (!/^[0-9a-f]{24}$/.test(resetId)) throw new HttpError(400, NOT_ACTIVATED)
     const who = await identify(d, key, machine)
     if (!who) throw new HttpError(403, NOT_ACTIVATED)
-    const doc = await d.collection('pin_resets').findOne({ resetId, tenantId: who.tenantId, machineId: machine })
+    const doc = await d.collection('pin_resets').findOne({ resetId, shopId: who.shopId, machineId: machine })
     if (!doc) return { status: 'expired' }
     if (doc['status'] === 'ready') return { status: 'ready', pinHash: doc['newPinHash'] }
     return doc['status'] === 'pending' && doc['expiresAt'] > new Date() ? { status: 'waiting' } : { status: 'expired' }
@@ -235,15 +313,15 @@ export async function startDevServer(root: string, log: (m: string) => void = co
     const resetId = String(b['resetId'] ?? '')
     const who = await identify(d, key, machine)
     if (!who) throw new HttpError(403, NOT_ACTIVATED)
-    const r = await d.collection('pin_resets').updateOne({ resetId, tenantId: who.tenantId, machineId: machine, status: 'ready' }, { $set: { status: 'applied', appliedAt: new Date() }, $unset: { newPinHash: '' } })
-    if (r.matchedCount) await audit(d, who.tenantId, 'pin_reset_applied', { machineId: machine })
+    const r = await d.collection('pin_resets').updateOne({ resetId, shopId: who.shopId, machineId: machine, status: 'ready' }, { $set: { status: 'applied', appliedAt: new Date() }, $unset: { newPinHash: '' } })
+    if (r.matchedCount) await audit(d, who.shopId, 'pin_reset_applied', { machineId: machine })
     return { ok: true }
   }
 
   /* ---------- HTTP ---------- */
   const readJson = (req: IncomingMessage): Promise<Doc> => new Promise((resolve) => {
     let raw = ''
-    req.on('data', (c: Buffer) => { raw += c.toString(); if (raw.length > 100_000) req.destroy() })
+    req.on('data', (c: Buffer) => { raw += c.toString(); if (raw.length > 16_000_000) req.destroy() }) // a cloud backup batch can be a few MB
     req.on('end', () => { try { resolve(raw ? (JSON.parse(raw) as Doc) : {}) } catch { resolve({}) } })
   })
   const send = (res: ServerResponse, code: number, body: unknown, type = 'application/json'): void => {
@@ -258,6 +336,11 @@ export async function startDevServer(root: string, log: (m: string) => void = co
         if (req.method === 'GET' && u.pathname === '/reset-pin') return send(res, 200, RESET_PAGE, 'text/html; charset=utf-8')
         if (req.method === 'POST' && u.pathname === '/v1/activate') return send(res, 200, await activate(await readJson(req)))
         if (req.method === 'POST' && u.pathname === '/v1/refresh') return send(res, 200, await refresh(await readJson(req)))
+        if (req.method === 'POST' && u.pathname === '/v1/backup/cloud/start') return send(res, 200, await cloudStart(await readJson(req)))
+        if (req.method === 'POST' && u.pathname === '/v1/backup/cloud/rows') return send(res, 200, await cloudRows(await readJson(req)))
+        if (req.method === 'POST' && u.pathname === '/v1/backup/cloud/finish') return send(res, 200, await cloudFinish(await readJson(req)))
+        if (req.method === 'POST' && u.pathname === '/v1/backup/cloud/latest') return send(res, 200, await cloudLatest(await readJson(req)))
+        if (req.method === 'POST' && u.pathname === '/v1/backup/cloud/download') return send(res, 200, await cloudDownload(await readJson(req)))
         if (req.method === 'POST' && u.pathname === '/v1/pin-reset/request') return send(res, 200, await pinRequest(await readJson(req)))
         if (req.method === 'GET' && u.pathname === '/v1/pin-reset/validate') return send(res, 200, await pinValidate(u.searchParams))
         if (req.method === 'POST' && u.pathname === '/v1/pin-reset/complete') return send(res, 200, await pinComplete(await readJson(req)))
@@ -267,7 +350,11 @@ export async function startDevServer(root: string, log: (m: string) => void = co
       } catch (e) {
         if (e instanceof HttpError) return send(res, e.status, { error: e.message })
         log(`[dev server] ${u.pathname}: ${e instanceof Error ? e.message : e}`)
-        return send(res, 503, { error: 'The MARS database could not be reached. Check the internet and try again.' })
+        // Atlas answers a PC whose internet address is not on its access list with a TLS alert 80 ("internal error"): say so, it is not the internet
+        const ipBlocked = /alert number 80|tlsv1 alert internal error/i.test(String((e as { message?: string })?.message ?? '') + String((e as { cause?: unknown })?.cause ?? ''))
+        return send(res, 503, { error: ipBlocked
+          ? 'MongoDB Atlas refused this PC (development): its internet address is not on the Atlas access list. In Atlas, open Network Access and add the current IP address of this PC, then try again.'
+          : 'The MARS database could not be reached. Check the internet and try again.' })
       }
     })()
   })

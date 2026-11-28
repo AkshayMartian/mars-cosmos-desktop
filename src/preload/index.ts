@@ -5,7 +5,7 @@ import type { CloseDayResult, DayEndSummary } from '@shared/dayend'
 import type { CelebrationDto, CustomerListRow, CustomerProfile, CustomerSaveInput } from '@shared/customers'
 import type { AltConfig, AltContext, AltJobDto, AltList, DeliverInput, DeliverResult, GarmentChoice, NewAlterationInput, TailorDto, TailorInput } from '@shared/alterations'
 import type { ReportDto, ReportPeriod, ReportTab } from '@shared/reports'
-import type { AllSettings, BackupInfo, CoinSettings, PrinterSettings, ReceiptSettings, ShopSettings, StaffAdminRow, StaffSaveInput } from '@shared/settings'
+import type { AllSettings, BackupInfo, CloudBackupInfo, CoinSettings, PrinterSettings, ReceiptSettings, ShopSettings, StaffAdminRow, StaffSaveInput } from '@shared/settings'
 import type { GstScheme } from '@shared/types'
 import type { StickerContext, StickerItem, StickerPrintResult } from '@shared/stickers'
 import type { PieceHistoryDto } from '@shared/serials'
@@ -116,6 +116,9 @@ const api = {
     finishSetup: () => call<true>('settings:finishSetup'),
     backupNow: () => call<BackupInfo>('settings:backupNow'),
     deleteBackup: (file: string) => call<BackupInfo>('settings:deleteBackup', file),
+    backupCloud: () => call<CloudBackupInfo>('settings:backupCloud'),
+    cloudLatest: () => call<{ backupId: string; at: string; records: number } | null>('settings:cloudLatest'),
+    restoreCloud: () => call<{ restarting: true }>('settings:restoreCloud'),
     restore: (file: string) => call<{ restarting: true }>('settings:restore', file),
     restoreFromFile: () => call<{ restarting: true } | null>('settings:restoreFromFile')
   },

@@ -1,3 +1,4 @@
+import { cloudBackupNow, cloudLatest } from './services/cloudBackup'
 import { ipcMain } from 'electron'
 import { chooseImportFile, saveImportTemplate } from './dialogs'
 import { changePin, listActiveStaff, login, logout } from './services/auth'
@@ -21,7 +22,7 @@ import * as admin from './services/admin'
 import * as reports from './services/reports'
 import { exportExcel, exportPdf } from './reportExport'
 import { listPrinters, printDayEnd, openDrawer, printAlteration, printReceipt, printStickers, testReceipt, testSticker } from './print'
-import { restoreFromFile, restoreListed } from './restore'
+import { restoreFromCloud, restoreFromFile, restoreListed } from './restore'
 import * as stock from './services/stock'
 import { pieceHistory } from './services/serials'
 
@@ -128,6 +129,9 @@ export function registerIpc(): void {
   h('settings:recoveryCode', createRecoveryCode)
   h('settings:backupNow', admin.backupNow)
   h('settings:deleteBackup', admin.deleteBackup)
+  h('settings:backupCloud', cloudBackupNow)
+  h('settings:cloudLatest', cloudLatest)
+  h('settings:restoreCloud', restoreFromCloud)
   h('settings:restore', restoreListed)
   h('settings:restoreFromFile', restoreFromFile)
   h('print:receipt', printReceipt)
