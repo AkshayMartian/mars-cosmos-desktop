@@ -125,7 +125,7 @@ export function LicenceTab({ onChange }: { onChange?: (l: LicenceInfo) => void }
       <div className="tw"><table><tbody>
         <tr><th scope="row">Status</th><td>{chip}{info.kind === 'trial' && <> <span className="chip muted">Free trial</span></>}</td></tr>
         <tr><th scope="row">Shop</th><td>{info.shopName || '—'}</td></tr>
-        <tr><th scope="row">Plan</th><td>{info.plan || '—'}{info.mode ? ` · ${info.mode === 'cloud' ? 'Cloud backup' : 'Local-only'}` : ''}{info.counters ? ` · ${info.counters} counter${info.counters > 1 ? 's' : ''}` : ''}</td></tr>
+        <tr><th scope="row">Plan</th><td>{info.plan || '—'}{info.mode ? ` · ${info.mode === 'cloud' ? 'Online (cloud backup)' : 'Offline (this PC only)'}` : ''}{info.counters ? ` · ${info.counters} counter${info.counters > 1 ? 's' : ''}` : ''}</td></tr>
         <tr><th scope="row">Valid till</th><td>{dmy(info.expires) || '—'}</td></tr>
         <tr><th scope="row">PC ID</th><td className="mono">{info.machine}</td></tr>
       </tbody></table></div>

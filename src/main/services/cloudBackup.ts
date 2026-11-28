@@ -8,7 +8,7 @@ import { getDb } from '../db'
 import { MIGRATIONS } from '../db/schema'
 import { hashPin } from './pin'
 import { audit } from './auth'
-import { licenceIdentity, NO_INTERNET, serverRequest } from './licence'
+import { licenceIdentity, licenceStatus, NO_INTERNET, serverRequest } from './licence'
 import { requireRole } from './session'
 
 /**
@@ -47,6 +47,13 @@ export function collectTables(): Record<string, Row[]> {
   return out
 }
 
+/** Online (cloud) mode, chosen at onboarding and carried in the licence. An offline (local-only) shop, or a PC that is not activated, has no cloud backup. */
+export function cloudEnabled(): boolean {
+  const l = licenceStatus()
+  return l.mode === 'cloud' && !['none', 'invalid', 'expired'].includes(l.state)
+}
+const OFFLINE = 'This shop uses the offline mode: data stays on this PC only. Ask MARS to move you to the online mode for cloud backup.'
+
 export function lastCloudBackup(): CloudBackupInfo | null {
   const r = getDb().prepare("SELECT value FROM settings WHERE key='cloud_backup'").get() as { value: string } | undefined
   try { return r ? (JSON.parse(r.value) as CloudBackupInfo) : null } catch { return null }
@@ -64,6 +71,7 @@ export interface CloudLatest { backupId: string; at: string; records: number; ta
 /** The newest complete cloud copy of this shop, or null when there is none yet. */
 export async function cloudLatest(): Promise<CloudLatest | null> {
   requireRole('owner')
+  if (!cloudEnabled()) throw new Error(OFFLINE)
   return (await cloudCall<{ backup: CloudLatest | null }>('latest', {}, 'restore from the cloud')).backup
 }
 
@@ -129,6 +137,7 @@ export async function buildFromCloud(): Promise<{ file: string; backup: CloudLat
 
 export async function cloudBackupNow(): Promise<CloudBackupInfo> {
   const a = requireRole('owner')
+  if (!cloudEnabled()) throw new Error(OFFLINE)
   const id = licenceIdentity('This PC is not activated with MARS, so it cannot back up to the cloud.')
   const data = collectTables()
   const call = async <T>(step: string, body: Record<string, unknown>): Promise<T> => {

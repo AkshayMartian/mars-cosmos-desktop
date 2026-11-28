@@ -364,6 +364,7 @@ function BackupTab() {
   const [cloudAsk, setCloudAsk] = useState<{ at: string; records: number } | null>(null) // restore from the MARS cloud: the copy that would come back
   const { run, setMsg, node } = useMsg()
   const take = (i: BackupInfo) => { setInfo(i); setFolder(i.folder) }
+  const backupLocal = () => { setBusy(true); void run(() => window.api.settings.backupNow(), 'Backup saved on this PC.').then((i) => { setBusy(false); if (i) take(i) }) }
   useEffect(() => { void run(() => window.api.settings.backups()).then((i) => i && take(i)) }, [run])
   if (!info) return <>{node}<div className="empty">Loading…</div></>
   const last = info.list[0]
@@ -377,8 +378,8 @@ function BackupTab() {
         </div>
         {info.isDefault && <div className="hint">This is the default folder on this PC. A copy on a USB drive or second disk protects you if this PC fails.</div>}
       </div>
-      <div className="tot"><span>Last backup</span><b>{last ? fmtDate(last.at) : 'Never'}</b><span>Copies kept</span><span>{info.copies} of {info.keep}</span><span>Last cloud backup</span><span>{info.cloud ? `${fmtDate(info.cloud.at)} · ${info.cloud.records.toLocaleString('en-IN')} records` : 'Never'}</span></div>
-      <div style={{ display: 'flex', gap: 8 }}><button className="btn p" disabled={busy || busyCloud} onClick={() => setPick(true)}>{busy ? 'Backing up…' : busyCloud ? 'Uploading to cloud…' : 'Back up now'}</button><button className="btn" onClick={() => setAsk({ label: 'a backup file you choose' })}>Restore from backup file…</button><button className="btn" disabled={busyCloud} onClick={() => { setBusyCloud(true); void run(() => window.api.settings.cloudLatest()).then((c) => { setBusyCloud(false); if (c === null) setMsg({ ok: false, text: 'There is no cloud backup for this shop yet. Use "Back up now" → "Save to MARS cloud" first.' }); else if (c) setCloudAsk(c) }) }}>Restore from MARS cloud…</button></div>
+      <div className="tot"><span>Last backup</span><b>{last ? fmtDate(last.at) : 'Never'}</b><span>Copies kept</span><span>{info.copies} of {info.keep}</span>{info.cloudEnabled && <><span>Last cloud backup</span><span>{info.cloud ? `${fmtDate(info.cloud.at)} · ${info.cloud.records.toLocaleString('en-IN')} records` : 'Never'}</span></>}</div>
+      <div style={{ display: 'flex', gap: 8 }}><button className="btn p" disabled={busy || busyCloud} onClick={() => info.cloudEnabled ? setPick(true) : backupLocal()}>{busy ? 'Backing up…' : busyCloud ? 'Uploading to cloud…' : 'Back up now'}</button><button className="btn" onClick={() => setAsk({ label: 'a backup file you choose' })}>Restore from backup file…</button>{info.cloudEnabled && <button className="btn" disabled={busyCloud} onClick={() => { setBusyCloud(true); void run(() => window.api.settings.cloudLatest()).then((c) => { setBusyCloud(false); if (c === null) setMsg({ ok: false, text: 'There is no cloud backup for this shop yet. Use "Back up now" → "Save to MARS cloud" first.' }); else if (c) setCloudAsk(c) }) }}>Restore from MARS cloud…</button>}</div>
       {info.list.length > 0 && (
         <div className="tw"><table>
           <thead><tr><th>Backup file</th><th>When</th><th className="r">Size</th><th /></tr></thead>
@@ -398,7 +399,7 @@ function BackupTab() {
       {pick && (
         <Modal title="Where should the backup go?" onClose={() => setPick(false)}>
           <div style={{ display: 'grid', gap: 10 }}>
-            <button className="radio-card" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => { setPick(false); setBusy(true); void run(() => window.api.settings.backupNow(), 'Backup saved on this PC.').then((i) => { setBusy(false); if (i) take(i) }) }}>
+            <button className="radio-card" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => { setPick(false); backupLocal() }}>
               <span><b>Save on this PC</b><br /><span className="sub">A copy of the database in the backup folder above. Works without internet.</span></span>
             </button>
             <button className="radio-card" style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => {
@@ -411,7 +412,7 @@ function BackupTab() {
                 setMsg({ ok: true, text: `Uploaded to the MARS cloud: ${c.records.toLocaleString('en-IN')} records from ${c.tables} tables.` })
               })
             }}>
-              <span><b>Save to MARS cloud (MongoDB)</b><br /><span className="sub">Uploads all the shop's data, with your shop id on every record. Needs internet. PINs and the licence are never uploaded.</span></span>
+              <span><b>Save to MARS cloud</b><br /><span className="sub">Uploads all the shop's data, with your shop id on every record. Needs internet. PINs and the licence are never uploaded.</span></span>
             </button>
           </div>
           <div className="mfoot"><button className="btn" onClick={() => setPick(false)}>Cancel</button></div>

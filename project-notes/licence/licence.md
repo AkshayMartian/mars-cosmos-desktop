@@ -27,7 +27,7 @@
 
 **Free trial** → `licence:trialOtp` (POST `/v1/trial/otp`) → `licence:trialVerify` (POST `/v1/trial/verify`) → trial licence (kind `trial`).
 
-**Weekly check** → at start and every 6 hours `refreshLicence()`; if the last check is 7+ days old it POSTs `/v1/refresh`; a newer licence in the reply replaces the old one. Failures are silent (billing is never blocked). "Check with MARS now" (Settings → Licence) runs it at once and shows any error. The server (portal, or the dev stand-in on :4150) signs a fresh licence from MongoDB: the key's `licenceExpires` (a renewal) and the shop's current name, plan, mode and counters; a cancelled key, a suspended shop or another PC is refused.
+**Licence check** → at start and every 6 hours `refreshLicence()` POSTs `/v1/refresh` (skipped only if the last check is under a minute old), so a renewal or a change of plan or online/offline mode reaches the PC at its next start; a newer licence in the reply replaces the old one. Failures are silent (billing is never blocked). "Check with MARS now" (Settings → Licence) runs it at once and shows any error. The server (portal, or the dev stand-in on :4150) signs a fresh licence from MongoDB: the key's `licenceExpires` (a renewal) and the shop's current name, plan, mode and counters; a cancelled key, a suspended shop or another PC is refused.
 
 **First-run wizard** → after the owner's first login, while `setup_done` is false: Shop details → GST type → Categories → Printers (test print) → Your PIN (`settings:setPin`) → Staff (add people, PINs, limits, recovery code). Skip or Finish calls `settings:finishSetup`.
 

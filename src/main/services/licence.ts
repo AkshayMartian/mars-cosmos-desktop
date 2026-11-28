@@ -19,6 +19,7 @@ import { getSetting } from './settings'
  */
 
 const DAY = 864e5
+const CHECK_EVERY = 60_000 // only a check made in the last minute is skipped, so every restart picks up changes made by MARS
 let machineOverride: string | null = null
 let serverUrl = ''
 let publicKeys: readonly string[] = LICENCE_PUBLIC_KEYS
@@ -234,11 +235,11 @@ export async function trialVerify(mobile: string, otp: string, shop: string): Pr
   return saveToken(r.licence ?? '', 'online')
 }
 
-/** About once a week while online: pick up renewals and tell the server we are alive. Never blocks billing. */
+/** At every start and every 6 hours while online: pick up renewals and changes made by MARS (plan, online / offline mode), and tell the server we are alive. Never blocks billing. */
 export async function refreshLicence(force = false): Promise<LicenceInfo> {
   const s = saved()
   if (!s || !serverUrl) return licenceStatus()
-  if (!force && s.checkedAt && Date.now() - new Date(s.checkedAt).getTime() < 7 * DAY) return licenceStatus()
+  if (!force && s.checkedAt && Date.now() - new Date(s.checkedAt).getTime() < CHECK_EVERY) return licenceStatus()
   try {
     const key = verifyToken(s.token).key
     const r = await post<{ licence?: string }>('/v1/refresh', { key, machine: machineId() })
